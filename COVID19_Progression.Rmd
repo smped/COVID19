@@ -122,11 +122,19 @@ pops <- tribble(
     "Portugal", 10196709,
     "Qatar", 2866531,
     "Czechia", 10703010,
-    "Greece", 10423054
+    "Greece", 10423054,
+    "Israel", 8615601,
+    "Brazil", 212125368,
+    "Finland", 5538181,
+    "Singapore", 5836728,
+    "Pakistan",  219629013,
+    "Ireland", 4921810
 )
 ```
 
 # Results & Discussion
+
+## Cumulative Incidence Rates
 
 ```{r tabMostInfected}
 confirmed %>%
@@ -143,7 +151,7 @@ confirmed %>%
         rate = 1e6*confirmed / Population
     ) %>%
     arrange(desc(rate)) %>%
-    # dplyr::slice(1:20) %>%
+    dplyr::slice(1:25) %>%
     mutate(
         rate = sprintf("%.1f", rate),
         Population = comma(Population)
@@ -163,6 +171,7 @@ confirmed %>%
 ```{r p}
 minToInclude <- 5
 startingPoint <- 1
+nDays <- 50
 p <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
@@ -188,8 +197,7 @@ p <- confirmed %>%
     days = as.integer(days),
     rate = round(rate, 2)
   ) %>%
-  dplyr::filter(days <= 30) %>%
-  # arrange(desc(rate)) %>%
+  dplyr::filter(days <= nDays) %>%
   arrange(date) %>%
   mutate(Country = fct_inorder(Country)) %>%
   rename_all(str_to_title) %>%
@@ -213,7 +221,7 @@ p <- confirmed %>%
 cp <- paste(
     "*Confirmed cases of COVID-19 for countries where the infection rate has exceeded", 
     minToInclude, "cases/million.",
-    "Data is only shown for the first 30 calendar days since passing",
+    "Data is only shown for the first", nDays, "calendar days since passing",
     startingPoint, "confirmed case/million.",
     "Note that from the day records begin in this dataset, the confirmed infection rate in Hubei was 7.59 confirmed cases/million.",
     "To hide a country, click on the country in the plot legend.",
@@ -250,10 +258,153 @@ Additionally, Australia's spread of the virus appears slower than many other cou
 Turning to other countries beyond Australia: 
 
 - Only South Korea,and China appear to have brought the virus under some level of control. The infection rate currently sits around `r confirmed %>% dplyr::filter(Country == "Korea, South") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for South Korea and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for Hubei Province. This can also be thought of as `r confirmed %>% dplyr::filter(Country == "Korea, South") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` of the total populations respectively. Note that despite these apparently low percentages, the actual numbers of deaths and hospitalisations are extremely non-trivial and the real impacts of these numbers cannot be treated lightly.
-- Japan's early measures also appear to be highly effective.
+- Japan's early measures also appear to be highly effective, however the recent growth in infections within Singapore should serve as a caution
 - Some of the above countries (e.g. Norway, Denmark) appear to be in the early stages of levelling out, indicating that the initial exponential growth phase may be ending in these countries.
 - Other countries such as Italy and the UK are clearly still in an exponential growth phase.
 - US numbers may also be unreliable given the low rates of testing and numerous anecdotal stories of suspected infections
+
+## Currently Active Infections
+
+As an alternative viewpoint, the numbers of recovered and deceased patients have been removed from the above plot to provide an estimate of the **currently active infections**.
+
+```{r recoveredDeaths}
+recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv") %>%
+    read_csv() %>%
+    pivot_longer(
+        cols = ends_with("20"),
+        names_to = "date",
+        values_to = "recovered"
+    )  %>%
+    mutate(
+        date = str_replace_all(
+            date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
+        ) %>%
+            ymd()
+    ) %>%
+    dplyr::rename(
+        Country = `Country/Region`
+    ) %>%
+    dplyr::mutate(
+        Country = case_when(
+            grepl("China", Country) & `Province/State` == "Hubei" ~ "China (Hubei)",
+            grepl("China", Country) & `Province/State` != "Hubei" ~ "China (Other)",
+            !grepl("China", Country) ~ Country
+        )
+    )
+deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv") %>%
+    read_csv() %>%
+    pivot_longer(
+        cols = ends_with("20"),
+        names_to = "date",
+        values_to = "deaths"
+    )  %>%
+    mutate(
+        date = str_replace_all(
+            date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
+        ) %>%
+            ymd()
+    ) %>%
+    dplyr::rename(
+        Country = `Country/Region`
+    ) %>%
+    dplyr::mutate(
+        Country = case_when(
+            grepl("China", Country) & `Province/State` == "Hubei" ~ "China (Hubei)",
+            grepl("China", Country) & `Province/State` != "Hubei" ~ "China (Other)",
+            !grepl("China", Country) ~ Country
+        )
+    )
+```
+
+```{r p2}
+minToInclude <- 5
+startingPoint <- 1
+nDays <- 50
+p2 <- confirmed %>%
+  dplyr::filter(
+    !str_detect(Country, "Other")
+  ) %>%
+  left_join(recovered) %>%
+  left_join(deaths) %>%
+  mutate(
+    active = confirmed - recovered - deaths
+  ) %>%
+  group_by(
+    Country, date
+  ) %>%
+  summarise(
+    active = sum(active),
+    confirmed = sum(confirmed),
+    recovered = sum(recovered),
+    deaths = sum(deaths)
+  ) %>%
+  right_join(pops) %>%
+  mutate(rate = 1e6*active / Population)  %>%
+  dplyr::filter(
+    max(rate) > minToInclude
+  ) %>%
+  ungroup() %>%
+  split(f = .$Country) %>%
+  lapply(function(x, r = startingPoint){
+    std <- min(dplyr::filter(x, rate > r)$date)
+    x %>%
+      dplyr::filter(date >= std) %>%
+      mutate(days = date - std)
+  }) %>%
+  bind_rows() %>%
+  mutate(
+    days = as.integer(days),
+    rate = round(rate, 2)
+  ) %>%
+  dplyr::filter(days <= nDays) %>%
+  arrange(date) %>%
+  mutate(Country = fct_inorder(Country)) %>%
+  rename_all(str_to_title) %>%
+  ggplot(
+    aes(
+      x = Days, y = Rate, colour = Country, 
+      Date = Date, Active = Active,
+      Confirmed = Confirmed, Recovered = Recovered,
+      Deaths = Deaths
+      )
+  ) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10() +
+  xlab(
+    paste(
+      "Days since passing", 
+      startingPoint, 
+      "confirmed active case/million"
+    )
+  ) +
+  ylab("Confirmed Active Infections (cases/million)")
+```
+
+```{r cp2, echo=FALSE}
+cp2 <- paste(
+    "*Confirmed __active__ cases of COVID-19 for countries where the active infection rate has exceeded", 
+    minToInclude, "cases/million.",
+    "Data is only shown for the first", nDays, "calendar days since passing",
+    startingPoint, "confirmed active case/million.",
+    "Due to difficulties introduced by the current __low active infection rate__ outside Hubei province, data from China has been excluded from this plot, with the exception of Hubei.",
+    "To hide a country, click on the country in the plot legend.",
+    "Clicking again on the country in the legend will restore the data within the plot.",
+    "Countries are shown in order of the date at which they passed the 1 confirmed __active__ case/million mark.",
+    "Regions of the plot are also able to be zoomed interactively.",
+    "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth/decay.*"
+)
+```
+
+```{r plotly2, fig.width=9, fig.height=8.5, fig.cap = cp2}
+ggplotly(p2) 
+```
+
+Notable features of this perspective are:
+
+- No deaths from confirmed cases have been reported in Singapore. Despite recent increases in active infections, has "flattening the curve" been successful?
+- Active infection rates in South Korea are currently declining
+- According to these figures, active infections within Hubei province are also significantly declining
 
 # R Session Information
 
