@@ -334,7 +334,7 @@ p2 <- confirmed %>%
     deaths = sum(deaths)
   ) %>%
   right_join(pops) %>%
-  mutate(rate = 1e6*confirmed / Population)  %>%
+  mutate(rate = 1e6*active / Population)  %>%
   dplyr::filter(
     max(rate) > minToInclude
   ) %>%
