@@ -236,7 +236,7 @@ It is simply to view the data through the lens of a country's population size us
 
 In the above plot:
 
-- Only countries are shown where the infection rate has surpassed `r minToInclude` cases/million. This was a completely arbitrary choice, but seemed likely to indicate a level COVID-19 infection which posed noticeable community risk
+- Only countries are shown where the infection rate has surpassed `r minToInclude` cases/million. This was a completely arbitrary choice, but seemed likely to indicate a level of COVID-19 infection which posed noticeable community risk
 - The choice of "`r paste("Days since passing", startingPoint, "case/million")`" was also arbitrary, but seemed to be a useful way of enabling the comparison of COVID-19 progression across countries
 
 Additionally, Australia's spread of the virus appears slower than many other countries.
