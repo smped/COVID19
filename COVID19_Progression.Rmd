@@ -222,13 +222,14 @@ cp <- paste(
     "To hide a country, click on the country in the plot legend.",
     "Clicking again on the country in the legend will restore the data within the plot.",
     "Countries are shown in order of the date at which they passed the 1 confirmed case/million mark.",
+    "Due to the number of countries shown, you may need to scroll through the legend.",
     "Regions of the plot are also able to be zoomed interactively.",
     "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth.", 
     "The flatter the line, the slower the growth and a perfectly horizontal line would indicate zero growth, or no new confirmed cases.*"
 )
 ```
 
-```{r plotly, fig.width=9, fig.height=8.5, fig.cap = cp}
+```{r plotly, fig.width=9, fig.height=7, fig.cap = cp}
 ggplotly(p) 
 ```
 
@@ -386,12 +387,13 @@ cp2 <- paste(
     "To hide a country, click on the country in the plot legend.",
     "Clicking again on the country in the legend will restore the data within the plot.",
     "Countries are shown in order of the date at which they passed the 1 confirmed __active__ case/million mark.",
+    "Due to the number of countries shown, you may need to scroll through the legend.",
     "Regions of the plot are also able to be zoomed interactively.",
     "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth/decay.*"
 )
 ```
 
-```{r plotly2, fig.width=9, fig.height=8.5, fig.cap = cp2}
+```{r plotly2, fig.width=9, fig.height=7, fig.cap = cp2}
 ggplotly(p2) 
 ```
 
