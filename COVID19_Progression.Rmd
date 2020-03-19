@@ -71,7 +71,16 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
     ) %>%
     dplyr::filter(
         !is.na(confirmed)
-    )
+    ) #%>%
+  # bind_rows(
+  #   # Add any live information from 
+  #   # https://covid-19-au.github.io/
+  #   tibble(
+  #     Country = "Australia",
+  #     date = ymd("2020-03-19"),
+  #     confirmed = 641
+  #   )
+  # )
 ```
 
 Population sizes for the most impacted countries were manually obtained from https://www.worldometers.info/ and should not be considered as authoritative.
