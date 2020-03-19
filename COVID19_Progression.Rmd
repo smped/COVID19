@@ -40,6 +40,10 @@ Additionally, the official government figures at [www.health.gov.au]( https://ww
 The official Australian numbers are not used for this analysis, instead relying on those provided by JHU.
 However, JHU are extremely careful and comprehensive in their sourcing of numbers and significant disparity is not expected.
 
+Importantly, all information presented below is effectively the cumulative, confirmed incidence rate.
+Recovered patients and those who have passed away are still included in these numbers.
+Testing rates and results are also not included, and these may be highly informative if able to be sourced accurately.
+
 
 ```{r confirmed}
 confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv") %>%
@@ -78,7 +82,7 @@ This particular population estimate is likely to be low, and as a result confirm
 Confirmed cases of COVID-19 as provided by the Chinese Government have been discussed elsewhere as unusual, and data appears potentially unreliable.
 In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
 
-However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for literally every country.
+However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for most countries.
 Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
 
 ```{r pops}
@@ -151,46 +155,49 @@ confirmed %>%
 minToInclude <- 5
 startingPoint <- 1
 p <- confirmed %>%
-    group_by(Country, date) %>%
-    summarise(confirmed = sum(confirmed)) %>%
-    ungroup() %>%
-    right_join(pops) %>%
-    mutate(
-        rate = 1e6*confirmed / Population
-    ) %>%
-    group_by(Country) %>%
-    dplyr::filter(
-        max(rate) > minToInclude
-    ) %>%
-    ungroup() %>%
-    split(f = .$Country) %>%
-    lapply(function(x, r = startingPoint){
-        std <- min(dplyr::filter(x, rate > r)$date)
-        x %>%
-            dplyr::filter(date >= std) %>%
-            mutate(days = date - std)
-    }) %>%
-    bind_rows() %>%
-    mutate(
-        days = as.integer(days),
-        rate = round(rate, 2)
-        ) %>%
-    dplyr::filter(days <= 30) %>%
-    rename_all(str_to_title) %>%
-    ggplot(
-        aes(Days, Rate, colour = Country, Date = Date, Confirmed = Confirmed)
-    ) +
-    geom_point() +
-    geom_line() +
-    scale_y_log10() +
-    xlab(
-        paste(
-            "Days since passing", 
-            startingPoint, 
-            "confirmed case/million"
-            )
-        ) +
-    ylab("Confirmed Infection Rate (cases/million)")
+  group_by(Country, date) %>%
+  summarise(confirmed = sum(confirmed)) %>%
+  ungroup() %>%
+  right_join(pops) %>%
+  mutate(
+    rate = 1e6*confirmed / Population
+  ) %>%
+  group_by(Country) %>%
+  dplyr::filter(
+    max(rate) > minToInclude
+  ) %>%
+  ungroup() %>%
+  split(f = .$Country) %>%
+  lapply(function(x, r = startingPoint){
+    std <- min(dplyr::filter(x, rate > r)$date)
+    x %>%
+      dplyr::filter(date >= std) %>%
+      mutate(days = date - std)
+  }) %>%
+  bind_rows() %>%
+  mutate(
+    days = as.integer(days),
+    rate = round(rate, 2)
+  ) %>%
+  dplyr::filter(days <= 30) %>%
+  # arrange(desc(rate)) %>%
+  arrange(date) %>%
+  mutate(Country = fct_inorder(Country)) %>%
+  rename_all(str_to_title) %>%
+  ggplot(
+    aes(Days, Rate, colour = Country, Date = Date, Confirmed = Confirmed)
+  ) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10() +
+  xlab(
+    paste(
+      "Days since passing", 
+      startingPoint, 
+      "confirmed case/million"
+    )
+  ) +
+  ylab("Confirmed Infection Rate (cases/million)")
 ```
 
 ```{r cp, echo=FALSE}
@@ -202,14 +209,15 @@ cp <- paste(
     "Note that from the day records begin in this dataset, the confirmed infection rate in Hubei was 7.59 confirmed cases/million.",
     "To hide a country, click on the country in the plot legend.",
     "Clicking again on the country in the legend will restore the data within the plot.",
+    "Countries are shown in order of the date at which they passed the 1 confirmed case/million mark.",
     "Regions of the plot are also able to be zoomed interactively.",
     "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth.", 
     "The flatter the line, the slower the growth and a perfectly horizontal line would indicate zero growth, or no new confirmed cases.*"
 )
 ```
 
-```{r plotly, fig.width=10, fig.height=8, fig.cap = cp}
-ggplotly(p)
+```{r plotly, fig.width=9, fig.height=8.5, fig.cap = cp}
+ggplotly(p) 
 ```
 
 All figures and tables presented here simply aim to show an alternative viewpoint on the data.
@@ -244,3 +252,8 @@ Turning to other countries beyond Australia:
 pander(sessionInfo())
 ```
 
+<footer>
+  <font color="grey">
+  <p>Report prepared by the University of Adelaide, Bioinformatics Hub. https://www.adelaide.edu.au/bioinformatics-hub/</p>
+  </font>
+</footer>
