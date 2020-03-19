@@ -1,0 +1,246 @@
+---
+title: "COVID-19 Progression"
+date: "`r paste('Last Updated:', format(Sys.time(), '%d-%B-%Y %H:%M'), '(UTC+10:30)')`"
+output: 
+  html_document: 
+    toc: yes
+    toc_depth: 2
+    toc_float: true
+    code_folding: hide
+---
+
+# Introduction
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+    echo = TRUE,
+    message = FALSE, warning = FALSE
+)
+```
+
+```{r packages}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(pander)
+library(plotly)
+panderOptions("big.mark", ",")
+panderOptions("table.split.table", Inf)
+panderOptions("table.style", "rmarkdown")
+theme_set(theme_bw())
+```
+
+*Disclaimer: This very simple report was prepared by a bioinformatician with no experience in epidemiology or virology, and as such should be treated simply as an alternate viewpoint on the data, which I was simply unable to find elsewhere. Many other people exist with much greater expertise on this subject. However, I do hope this provides a useful perspective which is able to add constructively to the wider discussion.*
+
+Data was sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided by JHU at https://github.com/CSSEGISandData/COVID-19.
+JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
+As a result Australian numbers may lag local media reports.
+
+Additionally, the official government figures at [www.health.gov.au]( https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers) appear to lag media reports, likely to ensure accuracy of the official numbers.
+The official Australian numbers are not used for this analysis, instead relying on those provided by JHU.
+However, JHU are extremely careful and comprehensive in their sourcing of numbers and significant disparity is not expected.
+
+
+```{r confirmed}
+confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv") %>%
+    read_csv() %>%
+    pivot_longer(
+        cols = ends_with("20"),
+        names_to = "date",
+        values_to = "confirmed"
+    )  %>%
+    mutate(
+        date = str_replace_all(
+            date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
+        ) %>%
+            ymd()
+    ) %>%
+    dplyr::rename(
+        Country = `Country/Region`
+    ) %>%
+    dplyr::mutate(
+        Country = case_when(
+            grepl("China", Country) & `Province/State` == "Hubei" ~ "China (Hubei)",
+            grepl("China", Country) & `Province/State` != "Hubei" ~ "China (Other)",
+            !grepl("China", Country) ~ Country
+        )
+    ) %>%
+    dplyr::filter(
+        !is.na(confirmed)
+    )
+```
+
+Population sizes for the most impacted countries were manually obtained from https://www.worldometers.info/ and should not be considered as authoritative.
+Given the disparity of infection within China, China was broken into Hubei Province and the rest of China.
+As an open acknowledgement of the crudeness of population values, population estimates for Hubei Province were taken from the 2018 estimates given by [Statista.com](https://www.statista.com/statistics/279013/population-in-china-by-region/).
+This particular population estimate is likely to be low, and as a result confirmed case rates for Hubei province may be an *overestimate*, and consequently, confirmed case rates for the rest of China may also be an *underestimate.*
+
+Confirmed cases of COVID-19 as provided by the Chinese Government have been discussed elsewhere as unusual, and data appears potentially unreliable.
+In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
+
+However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for literally every country.
+Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across contries difficult.
+
+```{r pops}
+hb <- 59170000
+pops <- tribble(
+    ~Country, ~Population,
+    "China (Hubei)", hb,
+    "China (Other)", 1408526449 - hb,
+    "Italy", 60486925,
+    "Iran", 83677594,
+    "Spain", 46754778,
+    "Germany", 83783942,
+    "Korea, South", 51269185,
+    "France", 65273511,
+    "US", 331002651,
+    "Switzerland", 8654622,
+    "United Kingdom", 67886011,
+    "Netherlands", 17134872,
+    "Norway", 5408930,
+    "Austria", 9006398,
+    "Belgium", 11575214,
+    "Sweden", 10081035,
+    "Denmark", 5786274,
+    "Japan", 126476461,
+    "Malaysia", 32245488,
+    "Canada", 37742154,
+    "Australia", 25499884,
+    "Portugal", 10196709,
+    "Qatar", 2866531,
+    "Czechia", 10703010,
+    "Greece", 10423054
+)
+```
+
+# Results & Discussion
+
+```{r tabMostInfected}
+confirmed %>%
+    group_by(Country, date) %>%
+    summarise(confirmed = sum(confirmed)) %>%
+    ungroup() %>%
+    group_by(Country) %>%
+    dplyr::filter(
+        date == max(date)
+    ) %>%
+    ungroup() %>%
+    right_join(pops) %>%
+    mutate(
+        rate = 1e6*confirmed / Population
+    ) %>%
+    arrange(desc(rate)) %>%
+    # dplyr::slice(1:20) %>%
+    mutate(
+        rate = sprintf("%.1f", rate),
+        Population = comma(Population)
+    ) %>%
+    rename_at(vars(everything()), str_to_title) %>%
+    rename(`Rate (Cases per Million)` = Rate) %>%
+    pander(
+        justify = "lrrrr",
+        caption = paste(
+            "The", nrow(.), "most impacted populations studied here and shown as a proportion of total population.", 
+            "The final column provides the latest confirmed infection rate as cases per million people."
+        )
+    )
+```
+
+
+```{r p}
+minToInclude <- 5
+startingPoint <- 1
+p <- confirmed %>%
+    group_by(Country, date) %>%
+    summarise(confirmed = sum(confirmed)) %>%
+    ungroup() %>%
+    right_join(pops) %>%
+    mutate(
+        rate = 1e6*confirmed / Population
+    ) %>%
+    group_by(Country) %>%
+    dplyr::filter(
+        max(rate) > minToInclude
+    ) %>%
+    ungroup() %>%
+    split(f = .$Country) %>%
+    lapply(function(x, r = startingPoint){
+        std <- min(dplyr::filter(x, rate > r)$date)
+        x %>%
+            dplyr::filter(date >= std) %>%
+            mutate(days = date - std)
+    }) %>%
+    bind_rows() %>%
+    mutate(
+        days = as.integer(days),
+        rate = round(rate, 2)
+        ) %>%
+    dplyr::filter(days <= 30) %>%
+    rename_all(str_to_title) %>%
+    ggplot(
+        aes(Days, Rate, colour = Country, Date = Date, Confirmed = Confirmed)
+    ) +
+    geom_point() +
+    geom_line() +
+    scale_y_log10() +
+    xlab(
+        paste(
+            "Days since passing", 
+            startingPoint, 
+            "confirmed case/million"
+            )
+        ) +
+    ylab("Confirmed Infection Rate (cases/million)")
+```
+
+```{r cp, echo=FALSE}
+cp <- paste(
+    "*Confirmed cases of COVID-19 for countries where the infection rate has exceeded", 
+    minToInclude, "cases/million.",
+    "Data is only shown for the first 30 calendar days since passing",
+    startingPoint, "confirmed case/million.",
+    "Note that from the day records begin in this dataset, the confirmed infection rate in Hubei was 7.59 confirmed cases/million.",
+    "To hide a country, click on the country in the plot legend.",
+    "Clicking again on the country in the legend will restore the data within the plot.",
+    "Regions of the plot are also able to be zoomed interactively.",
+    "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth.", 
+    "The flatter the line, the slower the growth and a prefectly horizontal line would indicate zero growth, or no new confirmed cases.*"
+)
+```
+
+```{r plotly, fig.width=10, fig.height=8, fig.cap = cp}
+ggplotly(p)
+```
+
+All figures and tables presented here simply aim to show an alternative viewpoint on the data.
+Every way to view COVID-19 data will mask important features, and the values shown here do not take into account vital factors such as population density, variability of infection across regions within countries, social culture and demographics.
+Many countries may not be directly comparable for a combination of the above factors.
+It is simply to view the data through the lens of a country's population size using a value which should be easily interpretable.
+
+In the above plot:
+
+- Only countries are shown where the infection rate has surpassed `r minToInclude` cases/million. This was a completely arbitrary choice, but seemed likely to indicate a level COVID-19 infection which posed noticeable community risk
+- The choice of "`r paste("Days since passing", startingPoint, "case/million")`" was also arbitrary, but seemed to be a useful way of enabling the comparison of COVID-19 progression across countries
+
+Additionally, Australia's spread of the virus appears slower than many other countries.
+
+- This may be a reflection of Australian geography or our tendency to have large personal space requirements
+- This may also be a reflection of the pre-emptive strategies already being taken by the population and government
+- Overall, the Australian infection rate brings mild relief that we are doing a little better than many other countries. However testing rates are far lower than in countries like South Korea and many genuine cases are likely to be undetected
+- Despite the above, Australia is **still clearly in the exponential growth phase** with no sign of the growth levelling out
+- The total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]`. The estimate of Australia's population used for this calculation is `r comma(dplyr::filter(pops, Country == "Australia")$Population)`, and whilst reasonably accurate, may not be authoritative.
+    
+Turning to other countries beyond Australia: 
+
+- Only South Korea,and China appear to have brought the virus under some level of control. The infection rate currently sits around `r confirmed %>% dplyr::filter(Country == "Korea, South") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for South Korea and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for Hubei Province. This can also be thought of as `r confirmed %>% dplyr::filter(Country == "Korea, South") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` of the total populations respectively. Note that despite these apparently low percentages, the actual numbers of deaths and hospitalisations are extremely non-trivial and the real impacts of these numbers cannot be treated lightly.
+- Japan's early measures also appear to be highly effective.
+- Some of the above countries (e.g. Norway, Denmark) appear to be in the early stages of levelling out, indicating that the initial exponential growth phase may be ending in these countries.
+- Other countries such as Italy and the UK are clearly still in an exponential growth phase.
+- US numbers may also be unreliable given the low rates of testing and numerous anecdotal stories of suspected infections
+
+# R Session Information
+
+```{r sessionInfo, echo=FALSE}
+pander(sessionInfo())
+```
+
