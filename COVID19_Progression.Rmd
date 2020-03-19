@@ -79,7 +79,7 @@ Confirmed cases of COVID-19 as provided by the Chinese Government have been disc
 In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
 
 However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for literally every country.
-Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across contries difficult.
+Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
 
 ```{r pops}
 hb <- 59170000
@@ -204,7 +204,7 @@ cp <- paste(
     "Clicking again on the country in the legend will restore the data within the plot.",
     "Regions of the plot are also able to be zoomed interactively.",
     "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth.", 
-    "The flatter the line, the slower the growth and a prefectly horizontal line would indicate zero growth, or no new confirmed cases.*"
+    "The flatter the line, the slower the growth and a perfectly horizontal line would indicate zero growth, or no new confirmed cases.*"
 )
 ```
 
