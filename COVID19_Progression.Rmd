@@ -461,7 +461,8 @@ pca <- confirmed %>%
   column_to_rownames("Country") %>%
   as.matrix() %>%
   .[!rowAnyNAs(.),] %>%
-  prcomp(scale = TRUE, center = TRUE) 
+  log() %>%
+  prcomp() 
 ```
 
 ```{r cp3, echo=FALSE}
@@ -481,8 +482,8 @@ cp3 <- paste(
   "Separation along the y-axis is less significant, but also worthy of note, as this represents",
   percent(pcPercent[["PC2"]], accuracy = 0.1),
   "of variability within the data.",
-  "At this early point, Australia's cumulative, confirmed infection rate is most similar to the countries which have responded well.",
-  "However, viral control regimes introduced in Japan and Singapore may not be replicated in Australia, and as such, this may not be predictive of future outcomes beyond this specific time point.*"
+  "At this early point, Australia's cumulative, confirmed infection rate is diverging from countries which have responded well and is more similar to Israel.",
+  "This is strongly suggestive the early measures instituted in Australia have been inadequate.*"
 )
 ```
 
