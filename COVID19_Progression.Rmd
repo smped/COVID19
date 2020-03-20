@@ -409,8 +409,23 @@ In order to summarise which countries are the most similar to each other, a Prin
 This enables the multi-dimensional data of the above plots to summarised in two dimensions.
 As missing data cannot be included in this analysis, several countries which are at earlier comparative time-points than Australia were omitted from this analysis.
 
+```{r}
+nDays <- confirmed %>% 
+  dplyr::filter(Country == "Australia") %>% 
+  group_by(Country, date) %>%
+  summarise(confirmed = sum(confirmed)) %>%
+  ungroup() %>%
+  left_join(pops) %>%
+  mutate(
+    rate = 1e6*confirmed / Population
+  ) %>% 
+  dplyr::filter(rate > startingPoint) %>% 
+  nrow() %>%
+  magrittr::subtract(1)
+```
+
+
 ```{r pca}
-nDays <- 17
 pca <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
@@ -455,8 +470,11 @@ cp3 <- paste(
   "*Dimensional reduction showing which countries are most similar to each other at the",
   nDays,
   "day mark.",
+  "The value", nDays, 
+  "days was chosen as this marks how long Australia has been passed",
+  startingPoint, "case/million.",
   "Countries which have not progressed beyond",
-  startingPoint, "case/million for", nDays, "days are not shown.",
+  startingPoint, "case/million for", nDays, "days or more are not shown.",
   "Principal Component 1, on the x-axis, corresponds to the greatest source of variability within the data",
   paste0("(", percent(pcPercent[["PC1"]], accuracy = 0.1), "),"),
   "and countries which appear near each other along this axis can be assumed to be showing similar growth in confirmed infection rates at this time point.",
