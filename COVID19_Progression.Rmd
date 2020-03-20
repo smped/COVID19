@@ -162,11 +162,26 @@ confirmed %>%
     )
 ```
 
-
-```{r p}
+```{r nDays}
 minToInclude <- 5
 startingPoint <- 1
-nDays <- 50
+nDays <- confirmed %>%
+  dplyr::filter(Country == "Singapore") %>% 
+  group_by(Country, date) %>%
+  summarise(confirmed = sum(confirmed)) %>%
+  ungroup() %>%
+  left_join(pops) %>%
+  mutate(
+    rate = 1e6*confirmed / Population
+  ) %>% 
+  dplyr::filter(rate > startingPoint) %>% 
+  nrow() %>%
+  magrittr::subtract(1)
+```
+
+
+
+```{r p}
 p <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
@@ -313,9 +328,6 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
 ```
 
 ```{r p2}
-minToInclude <- 5
-startingPoint <- 1
-nDays <- 50
 p2 <- confirmed %>%
   dplyr::filter(
     !str_detect(Country, "Other")
