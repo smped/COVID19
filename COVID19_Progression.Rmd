@@ -132,6 +132,7 @@ pops <- tribble(
     "Sweden", 10081035,
     "Switzerland", 8654622,
     "Taiwan*", 23804524,
+    "United Arab Emirates", 9856053, 
     "United Kingdom", 67886011,
     "US", 331002651
 )
