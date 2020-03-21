@@ -143,7 +143,7 @@ pops <- tribble(
 
 ## Table of Most Impacted Countries
 
-All information presented in the section below is effectively the cumulative, confirmed incidence rate.
+All information presented in this section is effectively the cumulative, confirmed incidence rate.
 Recovered patients and those who have passed away are still included in these numbers.
 Testing rates and results are also not included, and these may be highly informative if able to be sourced accurately.
 
@@ -316,6 +316,7 @@ Additionally, Australia's spread of the virus appears marginally slower than man
 - Overall, the Australian infection rate brings mild relief that we are doing a little better than many other countries. However testing rates are far lower than in countries like South Korea and many genuine cases are likely to be undetected
 - Despite the above, Australia is **still clearly in the exponential growth phase** with no sign of the growth levelling out.
 Infections are currently doubling in slightly less than 4 days, meaning __Australian infections are expected to exceed `r comma(2*sum(dplyr::filter(confirmed, Country == "Australia", date == max(date))$confirmed))` by `r dplyr::filter(confirmed, Country == "Australia", date == max(date))$date %>% unique() %>% add(4) %>% format("%A %d %B, %Y")`__. 
+If this case rate is not observed, it may be an early sign that distancing measures are beginning to be effective
 - Using an estimated population size of `r comma(dplyr::filter(pops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`. 
 
 Turning to other countries beyond Australia: 
@@ -576,7 +577,7 @@ ggplotly(p4)
 ```
 
 
-## Comparison of Countries
+## Dimensional Reduction
 
 In order to summarise which countries are the most similar to each other, a Principal Component Analysis was performed.
 This enables the multi-dimensional data of the above plots to summarised in two dimensions.
@@ -706,10 +707,10 @@ pca$x %>%
 
 # States Within Australia {.tabset}
 
-## Comparison of Confirmed Infection Rates
-
 Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
 The difference with previous estimates used above was within 0.04%, and as such no adjustments were made.
+
+## Comparison of Confirmed Infection Rates
 
 ```{r ausPops}
 ausPops <- tribble(
