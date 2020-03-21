@@ -37,17 +37,16 @@ panderOptions("table.style", "rmarkdown")
 theme_set(theme_bw())
 ```
 
-*Disclaimer: This very simple report was prepared by a bioinformatician with no experience in epidemiology or virology, and as such should be treated simply as an alternate viewpoint on the data, which I was simply unable to find elsewhere. Many other people exist with much greater expertise on this subject. However, I do hope this provides a useful perspective which is able to add constructively to the wider discussion.*
+*Disclaimer: This very simple report was prepared by a bioinformatician with no experience in epidemiology or virology, and as such should be treated simply as an alternate viewpoint on the data, which I was simply unable to find elsewhere. Many other people exist with much greater expertise on this subject. However, I do hope this provides a useful perspective which is able to add constructively to the wider discussion. In addition, it should be noted that this is very much focussed on Australian data.*
 
 Data was sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided by JHU at https://github.com/CSSEGISandData/COVID-19.
 JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
-As a result Australian numbers may lag local media reports.
 
-Additionally, the official government figures at [www.health.gov.au]( https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers) appear to lag media reports, likely to ensure accuracy of the official numbers.
-The official Australian numbers are not used for this analysis, instead relying on those provided by JHU.
-However, JHU are extremely careful and comprehensive in their sourcing of numbers and significant disparity is not expected.
+The official government figures at [www.health.gov.au]( https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers) appear to lag media reports, likely to ensure accuracy of the official numbers.
+The official Australian numbers are not used for this analysis, instead relying on those provided by JHU, given that JHU are extremely careful and comprehensive in their sourcing of numbers.
+A significant disparity is not expected.
 Live updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
-Australian values are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/.
+Additionally, Australian values are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/.
 
 
 ```{r confirmed}
@@ -77,14 +76,7 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
     ) %>%
     dplyr::filter(
         !is.na(confirmed)
-    ) # %>%
-  # bind_rows(
-  #   tibble(
-  #     Country = "Australia",
-  #     date = ymd("2020-03-20"),
-  #     confirmed = 876
-  #   )
-  # )
+    ) 
 ```
 
 ```{r latestAU}
@@ -107,7 +99,8 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
   dplyr::select(
     any_of(colnames(confirmed)), deaths, tested
   )
-# Update the AU figures if there are any updates
+# Update the AU records if there are any timepoints
+# on days beyond the last value provided by JHU
 updateAU <- max(latestAU$date) >
   max(
     dplyr::filter(confirmed, Country == "Australia")$date
@@ -183,7 +176,7 @@ pops <- tribble(
 )
 ```
 
-# Results & Discussion {.tabset}
+# International Data {.tabset}
 
 ## Table of Most Impacted Countries
 
@@ -568,96 +561,6 @@ Notable features of this perspective are:
 - Active infection rates in South Korea are currently declining
 - According to these figures, active infections within Hubei province are also significantly declining
 
-## Fatality, Recovery and Active Infection Rates
-
-Summarising all available data from all countries:
-
-- __The current fatality rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(f = sum(deaths)/sum(confirmed)) %>% .[["f"]] %>% percent(accuracy = 0.1)`.__
-This may be a function of under-reporting of true cases and is likely to be an overestimate.
-- __The current recovery rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = sum(recovered)/sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)`.__
-Given the level of under-reporting this may also be highly inaccurate.
-- At this point, __`r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = (sum(confirmed) - sum(recovered) - sum(deaths)) / sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)` of all confirmed infections are considered as 'active'.__
-
-
-```{r p4}
-p4 <- confirmed %>%
-  group_by(Country) %>%
-  dplyr::filter(date == max(date)) %>%
-  summarise(
-    confirmed = sum(confirmed)
-  ) %>%
-  dplyr::filter(
-    confirmed > 100,
-    Country != "Cruise Ship"
-  ) %>%   
-  left_join(
-    recovered %>%
-      group_by(Country) %>%
-      dplyr::filter(date == max(date)) %>%
-      summarise(
-        recovered = sum(recovered)
-      )
-  ) %>%
-  left_join(
-    deaths %>%
-      group_by(Country) %>%
-      dplyr::filter(date == max(date)) %>%
-      summarise(
-        deaths = sum(deaths)
-      )
-  ) %>%
-  mutate(
-    active = confirmed - recovered - deaths
-  ) %>%
-  mutate(
-    active = 100*active / confirmed,
-    recovered = 100*recovered / confirmed,
-    fatalities = 100*deaths / confirmed
-  ) %>%
-  dplyr::filter(active < 100) %>%
-  arrange(desc(confirmed)) %>%
-  mutate(Country = fct_inorder(Country)) %>%
-  pivot_longer(
-    cols = c(active, recovered, fatalities),
-    names_to = "Status",
-    values_to = "Percentage"
-  ) %>%
-  mutate(
-    Status = str_to_title(Status),
-    Status = factor(
-      Status, 
-      levels = c("Active", "Recovered", "Fatalities")
-    ),
-    Percentage = round(Percentage, 2)
-  ) %>%
-  mutate(confirmed = comma(confirmed)) %>%
-  rename(Confirmed = confirmed) %>%
-  ggplot(
-    aes(
-      Country, Percentage,
-      fill = Status, cases = Confirmed
-    )
-  ) +
-  geom_col() +
-  scale_fill_manual(
-    values = c(
-      Active = "blue",
-      Recovered = "green",
-      Fatalities = "red"
-      )
-  ) +
-  scale_y_continuous(expand = expand_scale(0, 0)) +
-  coord_flip() +
-  theme(
-    legend.position = "none"
-  )
-```
-
-```{r plotP4, fig.height=10, fig.cap = "*Fatality, Recovery and Active Infection rates for countries which have exceeded 100 confirmed cases. Countries are shown in order of the number of confirmed cases.*"}
-ggplotly(p4)
-```
-
-
 ## Dimensional Reduction
 
 In order to summarise which countries are the most similar to each other, a Principal Component Analysis was performed.
@@ -786,12 +689,186 @@ pca$x %>%
   )
 ```
 
-# States Within Australia {.tabset}
+
+## Fatality, Recovery and Active Infection Rates
+
+Summarising all available data from all countries:
+
+- __The current fatality rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(f = sum(deaths)/sum(confirmed)) %>% .[["f"]] %>% percent(accuracy = 0.1)`.__
+This may be a function of under-reporting of true cases and is likely to be an overestimate.
+- __The current recovery rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = sum(recovered)/sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)`.__
+Given the level of under-reporting this may also be highly inaccurate.
+- At this point, __`r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = (sum(confirmed) - sum(recovered) - sum(deaths)) / sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)` of all confirmed infections are considered as 'active'.__
+
+
+```{r p4}
+p4 <- confirmed %>%
+  group_by(Country) %>%
+  dplyr::filter(date == max(date)) %>%
+  summarise(
+    confirmed = sum(confirmed)
+  ) %>%
+  dplyr::filter(
+    confirmed > 100,
+    Country != "Cruise Ship"
+  ) %>%   
+  left_join(
+    recovered %>%
+      group_by(Country) %>%
+      dplyr::filter(date == max(date)) %>%
+      summarise(
+        recovered = sum(recovered)
+      )
+  ) %>%
+  left_join(
+    deaths %>%
+      group_by(Country) %>%
+      dplyr::filter(date == max(date)) %>%
+      summarise(
+        deaths = sum(deaths)
+      )
+  ) %>%
+  mutate(
+    active = confirmed - recovered - deaths
+  ) %>%
+  mutate(
+    active = 100*active / confirmed,
+    recovered = 100*recovered / confirmed,
+    fatalities = 100*deaths / confirmed
+  ) %>%
+  dplyr::filter(active < 100) %>%
+  arrange(desc(confirmed)) %>%
+  mutate(Country = fct_inorder(Country)) %>%
+  pivot_longer(
+    cols = c(active, recovered, fatalities),
+    names_to = "Status",
+    values_to = "Percentage"
+  ) %>%
+  mutate(
+    Status = str_to_title(Status),
+    Status = factor(
+      Status, 
+      levels = c("Active", "Recovered", "Fatalities")
+    ),
+    Percentage = round(Percentage, 2)
+  ) %>%
+  mutate(confirmed = comma(confirmed)) %>%
+  rename(Confirmed = confirmed) %>%
+  ggplot(
+    aes(
+      Country, Percentage,
+      fill = Status, cases = Confirmed
+    )
+  ) +
+  geom_col() +
+  scale_fill_manual(
+    values = c(
+      Active = "blue",
+      Recovered = "green",
+      Fatalities = "red"
+      )
+  ) +
+  scale_y_continuous(expand = expand_scale(0, 0)) +
+  coord_flip() +
+  theme(
+    legend.position = "none"
+  )
+```
+
+```{r plotP4, fig.height=10, fig.cap = "*Fatality, Recovery and Active Infection rates for countries which have exceeded 100 confirmed cases. Countries are shown in order of the number of confirmed cases.*"}
+ggplotly(p4)
+```
+
+## Fatality Rate Vs Time
+
+```{r plotFr}
+fr <- confirmed %>%
+  inner_join(deaths) %>%
+  group_by(Country) %>%
+  dplyr::filter(date == max(date)) %>%
+  ungroup() %>%
+  summarise(fr = sum(deaths) / sum(confirmed)) %>%
+  .[["fr"]]
+minDays <- 10
+plotFr <- confirmed %>%
+  inner_join(deaths) %>%
+  group_by(Country, date) %>%
+  summarise_at(
+    vars(confirmed, deaths),
+    sum
+  ) %>%
+  dplyr::filter(
+    confirmed >= 100,
+    max(deaths) > 0,
+    Country != "Cruise Ship"
+  ) %>%
+  mutate(
+    Days = date - min(date),
+    n = n()
+  ) %>%
+  ungroup() %>%
+  dplyr::filter(n > minDays) %>%
+  arrange(desc(n)) %>%
+  mutate(
+    Country = fct_inorder(Country),
+    Rate = deaths / confirmed,
+    Days = as.integer(Days),
+    `Fatality Rate` = percent(Rate, accuracy = 0.1)
+  ) %>%
+  rename_all(str_to_title) %>%
+  ggplot(
+    aes(
+      x = Days, y = Rate, 
+      colour = Country,
+      conf = Confirmed,
+      deaths = Deaths,
+      label = `Fatality Rate`,
+      dt = Date
+      )
+    ) +
+  geom_line() +
+  geom_hline(
+    yintercept = fr,
+    linetype = 2,
+    colour = "grey50"
+  ) +
+  labs(
+    x = "Days Since 100th Case",
+    y = "Fatality Rate"
+  ) +
+  scale_y_continuous(labels = percent)
+```
+
+```{r cpFr}
+cpFr <- glue(
+  "*Fatality Rate for confirmed cases shown as a function of time since the 100^th^ confirmed case.
+  Only countries with {minDays} days of data beyond this time-point are shown.
+  Countries with recorded fatalities have also been excluded. 
+  The overall Fatality Rate for confirmed cases ({percent(fr, accuracy = 0.1)}) is shown as the horizontal grey line.*"
+)
+```
+
+
+```{r plotlyFr, fig.cap=cpFr}
+ggplotly(
+  plotFr,
+  tooltip = c(
+    "Country", "Date", "Days", "Confirmed", "Deaths", 
+    "Fatality Rate"
+    )
+  )
+```
+
+
+
+# Australian Specific Data {.tabset}
 
 Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
 The difference with previous estimates used above was within 0.04%, and as such no adjustments were made.
 
-## Comparison of Confirmed Infection Rates
+A series of complimentary charts regarding the spread of COVID-19 are available from [the ABC website](https://www.abc.net.au/news/2020-03-17/coronavirus-cases-data-reveals-how-covid-19-spreads-in-australia/12060704).
+
+## State-wise Comparison of Confirmed Infection Rates
 
 ```{r ausPops}
 ausPops <- tribble(
@@ -877,7 +954,7 @@ Due to the low population sizes in the ACT and NT, these territories were omitte
 p5
 ```
 
-## Statistical Analysis
+## Statistical Analysis of State-wise Infection Rates
 
 In order to test whether the infection rates are different between states, a linear regression model was fit.
 $\log_{10}$(Cumulative Confirmed Infection Rate) was assigned as the response variable with predictor variables being the State and Date.
@@ -1037,11 +1114,11 @@ coef(lm) %>%
   )
 ```
 
-## Testing
+## Assessment of Testing Within Each State
 
-Testing numbers were manually sourced from https://covid-19-au.github.io/, then updated with any changes indicated at https://api.infotorch.org/api/covid19/totals/.
+Testing numbers were originally sourced from https://covid-19-au.github.io/, then were automatically updated should any changes indicated at https://api.infotorch.org/api/covid19/totals/.
 The number of tested individuals in each state was then assessed as a function of State population size.
-All results are valid at the time of report generation, however these numbers are dependent on media releases and may lag actual testing numbers by 24-48 hours.
+All results are valid at the time of report generation, however these numbers are initially dependent on media releases and may lag actual testing numbers by 24-48 hours.
 
 ```{r propTest}
 tribble(
@@ -1075,21 +1152,21 @@ tribble(
   ) %>%
   left_join(ausPops) %>%
   mutate(
-    `Population Proportion` = Tested / Population,
-    `Proportion Positive` = confirmed / Tested,
-    `Proportion Negative` = 1 - `Proportion Positive`
+    `Percent Tested` = Tested / Population,
+    Positive = confirmed / Tested,
+    Negative = 1 - Positive
   ) %>%
   dplyr::select(
-    State, Tested, contains("Prop")
+    State, Population, `Total Tested` = Tested, contains("Percent"), ends_with("ive")
   ) %>%
-  arrange(desc(`Population Proportion`)) %>%
+  arrange(desc(`Percent Tested`)) %>%
   mutate_at(
-    vars(contains("Prop")),
+    vars(contains("Percent"), ends_with("ive")),
     percent,
     accuracy = 0.01
   ) %>%
   pander(
-    justify = "lrrrr",
+    justify = "lrrrrr",
     caption = paste(
       "*COVID-19 testing scaled by State population size.",
       "Confirmed cases are assumed to be the tests",
