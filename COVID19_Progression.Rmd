@@ -127,6 +127,7 @@ pops <- tribble(
     "Pakistan",  219629013,
     "Portugal", 10196709,
     "Qatar", 2866531,
+    "Russia", 145917069,
     "Singapore", 5836728,
     "Spain", 46754778,
     "Sweden", 10081035,
@@ -173,7 +174,7 @@ confirmed %>%
         caption = paste(
             "The", nrow(.), "most impacted populations studied here and shown as a proportion of total population.", 
             "The final column provides the latest confirmed infection rate as cases per million people.",
-            "Whilst the virus spreads with no regard to population size, the rate as shown here indicates the degree of stress which each country's health-care system is likely to be experiencing.",
+            "Whilst the virus spreads with no regard to population size, the rate as shown here indicates the __degree of stress which each country's health-care system is likely to be experiencing__.",
             "Several countries shown here have not attracted much media attention due lower case numbers than China and Italy, but are likely to be experiencing significant duress."
         )
     )
@@ -236,7 +237,7 @@ p <- confirmed %>%
     data = tibble(
       x = 0,
       y = 1,
-      xmax = c(20.5, 41, nDays),
+      xmax = c(20.5, 41, nDays - 2),
       ymax = 2^(xmax/ c(2, 4, 8))
     ),
     inherit.aes = FALSE,
@@ -246,10 +247,10 @@ p <- confirmed %>%
   geom_text(
         aes(xmax, ymax, label = label),
     data = tibble(
-      xmax = c(20.5, 41, nDays),
+      xmax = c(20.5, 41, nDays - 2),
       rate = c(2, 4, 8),
       ymax = 2^(xmax/ rate),
-      label = glue::glue("Doubling in\n {rate} days")
+      label = glue("Doubling in\n {rate} days")
     ),
     colour = "grey70",
     inherit.aes = FALSE
@@ -273,21 +274,18 @@ p <- confirmed %>%
 ```
 
 ```{r cp, echo=FALSE}
-cp <- paste(
-    "*Confirmed cases of COVID-19 for countries where the infection rate has exceeded", 
-    minToInclude, "cases/million.",
-    "Data is only shown for the first", nDays, "calendar days since passing",
-    startingPoint, "confirmed case/million.",
-    "Note that from the day records begin in this dataset, the confirmed infection rate in Hubei was 7.59 confirmed cases/million.",
-    "Diagonal grey lines indicate a doubling in the",
-    "infection rate every 2, 4, or 8 days.",
-    "To hide a country, click on the country in the plot legend.",
-    "Clicking again on the country in the legend will restore the data within the plot.",
-    "Countries are shown in order of the date at which they passed the 1 confirmed case/million mark.",
-    "Due to the number of countries shown, you may need to scroll through the legend.",
-    "Regions of the plot are also able to be zoomed interactively.",
-    "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth.", 
-    "The flatter the line, the slower the growth and a perfectly horizontal line would indicate zero growth, or no new confirmed cases.*"
+cp <- glue(
+    "*Confirmed cases of COVID-19 for countries where the infection rate has exceeded {minToInclude} cases/million.
+    Data is only shown for the first {nDays} calendar days since passing {startingPoint} confirmed case/million.
+    Note that from the day records begin in this dataset, the confirmed infection rate in Hubei was 7.59 confirmed cases/million.
+    Diagonal grey lines indicate a doubling in the infection rate every 2, 4, or 8 days.
+    To hide a country, click on the country in the plot legend.
+    Clicking again on the country in the legend will restore the data within the plot.
+    Countries are shown in order of the date at which they passed the {startingPoint} confirmed case/million mark.
+    Due to the large number of countries shown, you may need to scroll through the legend.
+    Regions of the plot are also able to be zoomed interactively.
+    Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth.
+    The flatter the line, the slower the growth and a perfectly horizontal line would indicate zero growth, or no new confirmed cases.*"
 )
 ```
 
@@ -315,7 +313,7 @@ Additionally, Australia's spread of the virus appears marginally slower than man
 - This may also be a reflection of the pre-emptive strategies already being taken by the population and government
 - Overall, the Australian infection rate brings mild relief that we are doing a little better than many other countries. However testing rates are far lower than in countries like South Korea and many genuine cases are likely to be undetected
 - Despite the above, Australia is **still clearly in the exponential growth phase** with no sign of the growth levelling out.
-Infections are currently doubling in slightly less than 4 days, meaning Australian infections are expected to exceed `r comma(2*sum(dplyr::filter(confirmed, Country == "Australia", date == max(date))$confirmed))` by `r dplyr::filter(confirmed, Country == "Australia", date == max(date))$date %>% unique() %>% add(4) %>% format("%A %d %B, %Y")`. 
+Infections are currently doubling in slightly less than 4 days, meaning __Australian infections are expected to exceed `r comma(2*sum(dplyr::filter(confirmed, Country == "Australia", date == max(date))$confirmed))` by `r dplyr::filter(confirmed, Country == "Australia", date == max(date))$date %>% unique() %>% add(4) %>% format("%A %d %B, %Y")`__. 
 - Using an estimated population size of `r comma(dplyr::filter(pops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`. 
 
 Turning to other countries beyond Australia: 
@@ -448,7 +446,7 @@ p2 <- confirmed %>%
       xmax = c(20.5, 41, nDays),
       rate = c(2, 4, 8),
       ymax = 2^(xmax/ rate),
-      label = glue::glue("Double in\n {rate} days")
+      label = glue("Double in\n {rate} days")
     ),
     colour = "grey70",
     inherit.aes = FALSE
@@ -478,7 +476,8 @@ cp2 <- paste(
     "Countries are shown in order of the date at which they passed the 1 confirmed __active__ case/million mark.",
     "Due to the number of countries shown, you may need to scroll through the legend.",
     "Regions of the plot are also able to be zoomed interactively.",
-    "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth/decay.*"
+    "Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth/decay.",
+    "Given the different starting point to the previous plot, data will generally be shown for fewer time-points.*"
 )
 ```
 
@@ -496,11 +495,11 @@ Notable features of this perspective are:
 
 Summarising all available data from all countries:
 
-- The current fatality rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(f = sum(deaths)/sum(confirmed)) %>% .[["f"]] %>% percent(accuracy = 0.1)`.
-This may be a function of under-reporting of true cases and may be an overestimate
-- The current recovery rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = sum(recovered)/sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)`.
+- __The current fatality rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(f = sum(deaths)/sum(confirmed)) %>% .[["f"]] %>% percent(accuracy = 0.1)`.__
+This may be a function of under-reporting of true cases and is likely to be an overestimate.
+- __The current recovery rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = sum(recovered)/sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)`.__
 Given the level of under-reporting this may also be highly inaccurate.
-- At this point, `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = (sum(confirmed) - sum(recovered) - sum(deaths)) / sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)` of all confirmed infections are considered as 'active'.
+- At this point, __`r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = (sum(confirmed) - sum(recovered) - sum(deaths)) / sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)` of all confirmed infections are considered as 'active'.__
 
 
 ```{r p4}
@@ -639,34 +638,51 @@ pca <- confirmed %>%
 
 ```{r cp3, echo=FALSE}
 pcPercent <- summary(pca)$importance["Proportion of Variance",]
+k <- 3
 cp3 <- paste(
   "*Dimensional reduction showing which countries are most similar to each other at the",
   nDays,
-  "day mark.",
+  "day mark since passing", startingPoint, "case/million.",
   "The value", nDays, 
-  "days was chosen as this marks how long Australia has been passed",
-  startingPoint, "case/million.",
+  "days was chosen as this marks how long Australia has been passed this point.",
   "Countries which have not progressed beyond",
-  startingPoint, "case/million for", nDays, "days or more are not shown.",
+  startingPoint, "case/million for", nDays, "days or more are not shown as dimensional reduction via PCA requires no missing values.",
+  "Clusters were generated using k-means, manually specifying k = ", paste0(k, ","),
+  "and are not definitive.",
   "Principal Component 1, on the x-axis, corresponds to the greatest source of variability within the data",
   paste0("(", percent(pcPercent[["PC1"]], accuracy = 0.1), "),"),
   "and countries which appear near each other along this axis can be assumed to be showing similar growth in confirmed infection rates at this time point.",
   "Separation along the y-axis is less significant, but also worthy of note, as this represents",
   percent(pcPercent[["PC2"]], accuracy = 0.1),
   "of variability within the data.",
-  "At this early point, Australia's cumulative, confirmed infection rate is diverging from countries which have responded well and is more similar to Israel.",
-  "This is strongly suggestive the early measures instituted in Australia have been inadequate.*"
+  "At this early point, Australia's cumulative, confirmed infection rate is diverging from the cluster of countries which have responded well and is becoming more similar to Israel and other poor responding countries.",
+  "This is suggestive that the early measures instituted in Australia may have been inadequate.*"
 )
 ```
 
 
 ```{r plotPCA, fig.cap = cp3, fig.width=6, fig.height=5}
+set.seed(101)
 pca$x %>%
   as.data.frame() %>%
   rownames_to_column("Country") %>%
-  ggplot(aes(PC1, PC2, label = Country)) +
+  mutate(
+    Cluster = cbind(PC1, PC2) %>%
+      kmeans(k) %>%
+      .[["cluster"]] %>%
+      as.factor()
+  ) %>%
+  ggplot(aes(PC1, PC2, label = Country, colour = Cluster)) +
   geom_point() +
-  geom_text_repel() +
+  geom_text_repel(
+    show.legend = FALSE
+  ) +
+  stat_ellipse(
+    aes(fill = Cluster),
+    colour = NA,
+    geom = "polygon",
+    alpha = 0.1
+    ) +
   xlab(
     paste0(
       "PC1 (", 
@@ -680,6 +696,9 @@ pca$x %>%
       percent(summary(pca)$importance["Proportion of Variance","PC2"], accuracy = 0.1), 
       ")"
       )
+  ) +
+  theme(
+    legend.position = "none"
   )
 ```
 
@@ -705,7 +724,7 @@ ausPops <- tribble(
 ```
 
 ```{r p5}
-minRate <- 3
+minRate <- 4
 p5 <- confirmed %>%
   dplyr::filter(
     Country == "Australia"
@@ -759,9 +778,9 @@ p5$x$data[regIndex] <- lapply(
 ```
 
 ```{r cp5, echo=FALSE}
-cp5 <- glue::glue(
+cp5 <- glue(
 "*Infection rates for each state with data beginning for each state once {minRate} confirmed cases /million was exceeded.
-Linear regression lines are shown for each state as the solid lines, with NSW perhaps showing a slightly increased rate of infection within the population.
+Linear regression lines are shown for each state as  solid lines, with NSW perhaps showing a slightly increased rate of infection within the population.
 Once again, the y-axis is on a logarithmic scale indicating exponential growth is occurring.
 States are shown in order of the initial date they passed {minRate} cases/million.
 Due to the low population sizes in the ACT and NT, these territories were omitted.*
@@ -782,7 +801,7 @@ Each State was assigned it's own intercept and slope by use of an interaction te
 Given the potentially larger slope in NSW, this state was set as the baseline, with each other slope (i.e. interaction term) being presented as the difference in slope between each state and NSW. 
 In this way comparisons against NSW were performed, but no comparisons between other states were performed.
 
-Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial cumulative confirmed infection rate exceeded `r minRate` cases / million.
+Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial time at which cumulative confirmed infection rate exceeded `r minRate` cases / million.
 Differences between State-level slopes and NSW however, are of great interest, and as such only the slopes are shown.
 For NSW (`Term = date`) this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
 Only differences in slope with an FDR-adjusted p-value < 0.05 are of particular interest.
@@ -832,9 +851,10 @@ lm %>%
     p = p.value
   ) %>%
   dplyr::filter(
-    str_detect(Term, "date")
+    str_detect(Term, ":date")
   ) %>%
   mutate(
+    Term = str_remove(Term, ":date"),
     Estimate = sprintf("%.4f", Estimate),
     SE = sprintf("%.3f", SE),
     `T` = sprintf("%.2f", `T`),
@@ -859,29 +879,20 @@ lm %>%
       "scaled for population size in each state.",
       "Intercept terms are not shown.",
       "All states are shown in comparison to NSW", 
-      "with Queensland and Victoria appearing to show", 
-      "infection rates increasing __faster__ than in NSW,",
-      "whilst SA appears to be progressing at a __slower",
-      "rate than NSW__.",
-      "No difference was evident between WA and NSW or TAS and NSW.", 
-      "These results are less conclusive than they may",
-      "initially appear as the multiple days at the", 
-      "same count for SA and TAS may have lead to",
-      "violations of model assumptions.", 
-      "Whilst diagnostic plots visually appeared",  
+      "with no states appearing to show an", 
+      "infection rate which is increasing at a different than in NSW.",
+      "However, the TAS confirmed infection rate appears to be increasing at a slower rate than the rest of the country.",
+      "Diagnostic plots visually appeared",  
       "to be within acceptable bounds for real data,",
-      "the fitted model failed the Shapiro-Wilk Test",
+      "the fitted model passed the Shapiro-Wilk Test",
       "for normality", 
       paste0(
         "(p = ", 
         sprintf(
           "%.4f", shapiro.test(resid(lm))$p.value
         ),
-        ")."
-      ),
-      "Assuming these results hold, it can be inferred",
-      "that the increase in infection rate for SA", 
-      "is also lower than in QLD and VIC.*"
+        ")*."
+      )
     )
   )
 ```
@@ -946,7 +957,7 @@ coef(lm) %>%
 ## Testing
 
 Taking the testing numbers manually from https://covid-19-au.github.io/, the number of tested individuals in each state was assessed as a function of State population size.
-All results are valid at the time of report generation.
+All results are valid at the time of report generation, however these numbers may lag actual testing numbers by 24-48 hours.
 
 ```{r propTest}
 tribble(
