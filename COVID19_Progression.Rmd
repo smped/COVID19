@@ -692,13 +692,31 @@ pca$x %>%
 
 ## Fatality, Recovery and Active Infection Rates
 
+```{r fr}
+fr <- confirmed %>%
+  inner_join(deaths) %>%
+  group_by(Country) %>%
+  dplyr::filter(date == max(date)) %>%
+  ungroup() %>%
+  summarise(fr = sum(deaths) / sum(confirmed)) %>%
+  .[["fr"]]
+rr <- confirmed %>%
+  inner_join(recovered) %>%
+  group_by(Country) %>%
+  dplyr::filter(date == max(date)) %>%
+  ungroup() %>%
+  summarise(rr = sum(recovered) / sum(confirmed)) %>%
+  .[["rr"]]
+```
+
+
 Summarising all available data from all countries:
 
-- __The current fatality rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(f = sum(deaths)/sum(confirmed)) %>% .[["f"]] %>% percent(accuracy = 0.1)`.__
+- __The current fatality rate is `r percent(fr, accuracy = 0.1)`.__
 This may be a function of under-reporting of true cases and is likely to be an overestimate.
-- __The current recovery rate is `r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = sum(recovered)/sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)`.__
+- __The current recovery rate is `r percent(rr,accuracy = 0.1)`.__
 Given the level of under-reporting this may also be highly inaccurate.
-- At this point, __`r confirmed %>% left_join(recovered) %>% left_join(deaths) %>% group_by(Country, date) %>% summarise_at(vars(confirmed, recovered, deaths), sum) %>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise(r = (sum(confirmed) - sum(recovered) - sum(deaths)) / sum(confirmed)) %>% .[["r"]] %>% percent(accuracy = 0.1)` of all confirmed infections are considered as 'active'.__
+- At this point, __`r percent(1 - fr - rr, accuracy = 0.1)` of all confirmed infections are considered as 'active'.__
 
 
 ```{r p4}
@@ -781,14 +799,65 @@ ggplotly(p4)
 
 ## Fatality Rate Vs Time
 
-```{r plotFr}
-fr <- confirmed %>%
+```{r}
+minDays <- 10
+frHeat <- confirmed %>%
   inner_join(deaths) %>%
-  group_by(Country) %>%
-  dplyr::filter(date == max(date)) %>%
+  group_by(Country, date) %>%
+  summarise_at(
+    vars(confirmed, deaths),
+    sum
+  ) %>%
+  dplyr::filter(
+    confirmed >= 100,
+    max(deaths) > 0,
+    Country != "Cruise Ship"
+  ) %>%
+  mutate(
+    Days = date - min(date),
+    n = n()
+  ) %>%
   ungroup() %>%
-  summarise(fr = sum(deaths) / sum(confirmed)) %>%
-  .[["fr"]]
+  dplyr::filter(n > minDays) %>%
+  arrange(desc(n)) %>%
+  mutate(
+    Country = fct_inorder(Country),
+    Rate = round(deaths / confirmed, 2),
+    Days = as.integer(Days),
+    `Fatality Rate` = percent(Rate, accuracy = 0.1)
+  ) %>%
+  rename_all(str_to_title) %>%
+  ggplot(
+    aes(
+      x = Days, y = Country, fill = Rate,
+      conf = Confirmed, d = Deaths,
+      dt = Date
+      )
+  ) +
+  geom_raster() +
+  scale_fill_viridis_c(
+    option = "plasma", 
+    breaks = seq(0, 0.15, length.out = 4) %>%
+      c(fr) %>%
+      sort() %>%
+      round(2)
+  ) +
+  scale_x_continuous(expand = expand_scale(0, 0)) +
+  scale_y_discrete(expand = expand_scale(0, 0)) +
+  theme(
+    panel.grid = element_blank()
+  )
+```
+
+```{r}
+cpFrHeat <- glue(
+  
+)
+```
+
+
+
+```{r plotFr}
 minDays <- 10
 plotFr <- confirmed %>%
   inner_join(deaths) %>%
@@ -859,6 +928,90 @@ ggplotly(
   )
 ```
 
+## Recoveries Vs Fatalities Vs Time
+
+```{r p6}
+p6 <- confirmed %>%
+  inner_join(deaths) %>%
+  inner_join(recovered) %>%
+  group_by(Country, date) %>%
+  summarise_at(
+    vars(confirmed, recovered, deaths),
+    sum
+  ) %>%
+  dplyr::filter(
+    confirmed > 100,
+    Country != "Cruise Ship"
+  ) %>%
+  mutate(
+    active = confirmed - deaths - recovered,
+    Days = date - min(date)
+  ) %>%
+  ungroup() %>%
+  dplyr::filter(deaths > 0, recovered > 0) %>%
+  mutate(ratio = log2(recovered / deaths)) %>%
+  arrange(date) %>%
+  mutate(Country = fct_inorder(Country)) %>%
+  group_by(Days) %>%
+  mutate(n = n()) %>%
+  dplyr::filter(n > 2) %>%
+  ungroup() %>%
+  droplevels() %>%
+  mutate(
+    Days = as.integer(Days),
+    ratio = round(ratio, 2)
+  ) %>%
+  rename_all(str_to_title) %>%
+  ggplot(
+    aes(
+      x = Days, y = Country, fill = Ratio,
+      conf = Confirmed, rec = Recovered, d = Deaths,
+      dt = Date
+      )
+  ) +
+  geom_raster() +
+  scale_fill_gradient2(
+    low = "red", high = "green", na.value = "grey80"
+  ) +
+  scale_x_continuous(
+    expand = expand_scale(0, 0)
+  ) +
+  scale_y_discrete(
+    expand = expand_scale(0, 0)
+  ) +
+  labs(
+    x = "Days since 100 confirmed cases",
+    y = c()
+  ) +
+  theme(
+    panel.grid = element_blank()
+  )
+```
+
+```{r cp6}
+cp6 <- glue(
+  "*Comparison of recoveries and fatalities as a time course, beginning at the day confirmed cases exceed 100.
+  The ratio of recoveries to fatalities is shown on the log~2~ scale, such that when fatalities outnumber recoveries, the colour become more red.
+  Conversely if the recoveries outnumber the fatalities the colour will become more green.
+  If these two numbers are approximately equal, the colour will be white.
+  As the numbers are on the log~2~ scale, a ratio of 2, would indicate 2^2^ = 4 times the number of __recoveries to fatalities__.
+  Similarly a ratio of -2 would indicate that fatalities outnumber recoveries by a factor of 2^2^ = 4.
+  Ratios are only plotted once there is one or more confirmed recoveries in addition to one or more confirmed fatalities.
+  The time course is only plotted up to the point where there is data from a minimum of 3 countries.*"
+)
+```
+
+
+A time-course of the relationship between recoveries and fatalities is shown.
+Series of days which extend deeply into the red may possibly indicate where medical facilities are overloaded.
+However, it is possible that during these times more attention is focussed on keeping critically ill patients alive than confirming a recovery.
+It should be noted that many of the countries which are deep into the red at the current time are **affluent Western countries**.
+It is also worth noting that despite the high death toll in Italy, recoveries outnumber fatalities for the majority of this time-course.
+
+
+```{r plotlyP6, fig.cap=cp6, fig.height=7}
+ggplotly(p6)
+```
 
 
 # Australian Specific Data {.tabset}
