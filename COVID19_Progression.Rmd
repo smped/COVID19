@@ -139,9 +139,9 @@ pops <- tribble(
 )
 ```
 
-# Results & Discussion
+# Results & Discussion {.tabset}
 
-## Cumulative Incidence Rates
+## Table of Most Impacted Countries
 
 All information presented in the section below is effectively the cumulative, confirmed incidence rate.
 Recovered patients and those who have passed away are still included in these numbers.
@@ -179,6 +179,8 @@ confirmed %>%
         )
     )
 ```
+
+## Cumulative Incidence Rates
 
 ```{r nDays}
 minToInclude <- 5
@@ -702,7 +704,7 @@ pca$x %>%
   )
 ```
 
-# States Within Australia
+# States Within Australia {.tabset}
 
 ## Comparison of Confirmed Infection Rates
 
@@ -797,7 +799,7 @@ p5
 
 In order to test whether the infection rates are different between states, a linear regression model was fit.
 $\log_{10}$(Cumulative Confirmed Infection Rate) was assigned as the response variable with predictor variables being the State and Date.
-Each State was assigned it's own intercept and slope by use of an interaction term (i.e. State:date).
+Each State was assigned its own intercept and slope by use of an interaction term (i.e. State:date).
 Given the potentially larger slope in NSW, this state was set as the baseline, with each other slope (i.e. interaction term) being presented as the difference in slope between each state and NSW. 
 In this way comparisons against NSW were performed, but no comparisons between other states were performed.
 
