@@ -980,6 +980,47 @@ It is also worth noting that despite the high death toll in Italy, recoveries ou
 ggplotly(p6)
 ```
 
+## Unscaled Fatality Rate
+
+```{r deathPlot}
+minDeaths <- 10
+minDays <- 3
+deathPlot <- deaths %>%
+  group_by(Country, date) %>%
+  summarise(deaths = sum(deaths)) %>%
+  ungroup() %>%
+  dplyr::filter(deaths >= minDeaths) %>%
+  group_by(Country) %>%
+  mutate(Days = as.integer(date - min(date))) %>%
+  dplyr::filter(
+    max(Days) > minDays
+  ) %>%
+  ungroup() %>%
+  ggplot(
+    aes(Days, deaths, colour = Country)
+    ) +
+  geom_point() +
+  geom_line() +
+  scale_y_log10() +
+  labs(
+    x = glue("Days Since Passing {minDeaths} Deaths"),
+    y = "Cumulative Fatalities"
+  )
+```
+
+```{r cpDeath, echo=FALSE}
+cpDeath <- glue(
+  "*As with the spread of the virus, fatalities also grow at an exponential rate.
+  Any slowing in the growth of fatalities is an accurate marker for when the spread of the virus has definitively slowed, despite being a significantly lagging marker.
+  Cumulative fatalities are only shown for countries which have seen {minDeaths} or more fatalities for a period beyond {minDays} days.*"
+)
+```
+
+
+```{r, fig.cap=cpDeath}
+ggplotly(deathPlot)
+```
+
 
 # Australian Specific Data {.tabset}
 
