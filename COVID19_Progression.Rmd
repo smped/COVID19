@@ -449,7 +449,7 @@ Turning to other countries beyond Australia:
 - Other countries such as Italy, Switzerland, the Unites States and the UK are clearly still in an exponential growth phase.
 - US numbers may also be unreliable given the low rates of testing and numerous anecdotal stories of suspected infections
 
-## Currently Active Infections Rates
+## Currently Active Infection Rates
 
 As an alternative viewpoint, the numbers of recovered and deceased patients have been removed from the above plot to provide an estimate of the **currently active infections**.
 
