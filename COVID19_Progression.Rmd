@@ -202,6 +202,7 @@ Similarly, reporting in many countries may have features that cause concerns reg
 
 ```{r pops}
 hb <- 59170000
+hk <- 7479307
 pops <- tribble(
     ~Country, ~Population, ~Region,
     "Australia", 25499884, "Oceania",
@@ -211,7 +212,7 @@ pops <- tribble(
     "Canada", 37742154, "North America",
     "Chile", 19068026, "South America",
     "China (Hubei)", hb, "Asia",
-    "China (Other)", 1408526449 - hb, "Asia",
+    "China (Other)", 1408526449 - hb - hk, "Asia",
     "Czechia", 10703010, "Europe",
     "Denmark", 5786274, "Europe",
     "Ecuador", 17564089, "South America",
@@ -219,7 +220,7 @@ pops <- tribble(
     "France", 65273511, "Europe",
     "Germany", 83783942, "Europe",
     "Greece", 10423054, "Europe",
-    "Hong Kong", 7479307, "Asia",
+    "Hong Kong", hk, "Asia",
     "Iceland", 364260, "Europe",
     "Indonesia", 272702678, "Asia",
     "Italy", 60486925, "Europe",
