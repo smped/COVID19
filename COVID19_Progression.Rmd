@@ -985,9 +985,13 @@ ggplotly(p6)
 ```{r deathPlot}
 minDeaths <- 10
 minDays <- 3
-deathPlot <- deaths %>%
+deathPlot <- confirmed %>%
+  left_join(deaths) %>%
   group_by(Country, date) %>%
-  summarise(deaths = sum(deaths)) %>%
+  summarise_at(
+    vars(confirmed, deaths),
+    sum
+  ) %>%
   ungroup() %>%
   dplyr::filter(deaths >= minDeaths) %>%
   group_by(Country) %>%
@@ -996,8 +1000,11 @@ deathPlot <- deaths %>%
     max(Days) > minDays
   ) %>%
   ungroup() %>%
+  rename_all(str_to_title) %>%
   ggplot(
-    aes(Days, deaths, colour = Country)
+    aes(
+      x = Days, y = Deaths, colour = Country,
+      label = Date, conf = Confirmed)
     ) +
   geom_point() +
   geom_line() +
