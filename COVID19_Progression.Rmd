@@ -27,6 +27,7 @@ library(ggrepel)
 library(broom)
 library(glue)
 library(jsonlite)
+library(rvest)
 library(pander)
 library(plotly)
 panderOptions("big.mark", ",")
@@ -69,6 +70,41 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
     ) 
 ```
 
+```{r govData}
+govUrl <- "https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers"
+govLines <- govUrl %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all("//div[contains(@class, 'health-table')]") %>% 
+  html_text() 
+govTable <- c(
+  "Queensland",
+  "Australian Capital Territory",
+  "New South Wales",
+  "Victoria",
+  "Tasmania",
+  "South Australia",
+  "Western Australia",
+  "Northern Territory"
+  ) %>%
+  vapply(function(x){
+    str_replace_all(govLines, "(\\\n)+", "_") %>%
+      str_extract(paste(x, "[0-9]+", sep = "_")) %>%
+      str_remove(".+_")
+  },
+  character(1)) %>%
+  enframe(
+    name = "Province/State", value = "confirmed"
+  ) %>%
+  mutate(confirmed = as.integer(confirmed)) %>%
+  dplyr::filter(!is.na(confirmed)) %>%
+  mutate(
+    date = ymd(Sys.Date()),
+    Country = "Australia"
+  )
+```
+
+
 ```{r latestAU}
 latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
   as_tibble() %>%
@@ -87,10 +123,23 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
     !str_detect(`Province/State`, "Total")
   ) %>%
   dplyr::select(
-    any_of(colnames(confirmed)), deaths, tested
+    `Province/State`, Country, date, 
+    confirmed, deaths, tested
   ) %>%
   mutate(
     date = max(date)
+  ) %>%
+  bind_rows(govTable) %>% 
+  group_by(`Province/State`) %>% 
+  summarise(
+    Country = unique(Country),
+    date = min(date),
+    confirmed = max(confirmed), 
+    deaths = max(deaths, na.rm = TRUE),
+    tested = max(tested, na.rm = TRUE)
+  ) %>% 
+  mutate(
+    tested = ifelse(is.finite(tested), tested, NA)
   )
 # Update the AU records if there are any timepoints
 # on days beyond the last value provided by JHU
@@ -178,16 +227,15 @@ if (updateAU){
 ```
 
 
-Data was sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided by JHU at https://github.com/CSSEGISandData/COVID-19.
+
+Data was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
 JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
 
-The official government figures at [www.health.gov.au]( https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers) appear to lag media reports, likely to ensure accuracy of the official numbers.
-The official Australian numbers are not used for this analysis, instead relying on those provided by JHU, given that JHU are extremely careful and comprehensive in their sourcing of numbers.
-A significant disparity is not expected.
-Live updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
-The current Australian numbers used in all plots below **`r ifelse(updateAU, "do", "do not")` contain** any cases reported since the JHU dataset was updated.
-As such, the latest values for infection rate *`r ifelse(updateAU, "may be __incomplete for today__ as all states may not yet have reported", "may lag official figures by a few hours")`*.
-`r ifelse(updateAU, glue("{n} states/territories have currently reported updated figures since the overnight JHU release."), "")`
+Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
+Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/ and those at [www.health.gov.au](`r govUrl`).
+The Australian numbers used below **`r ifelse(updateAU, "do contain**", "do not contain** any")` confirmed cases reported since the JHU dataset was updated.
+`r ifelse(updateAU, glue("At the time of report generation, {n} of 7 states/territories have released updated COVID-19 figures since the overnight JHU release."), "")`
+The current Australia total is `r comma(sum(dplyr::filter(confirmed, date == max(date), Country == "Australia")$confirmed))` using these data sources, and any corrections to these will be made as soon as is possible. 
 
 Population sizes for the most impacted countries were manually obtained from https://www.worldometers.info/ and should not be considered as authoritative.
 Given the disparity of infection within China, China was broken into Hubei Province, Hong Kong and the rest of China.
@@ -254,7 +302,7 @@ pops <- tribble(
 
 # International Data {.tabset}
 
-```{r}
+```{r setThreshols}
 startingPoint <- 4
 minPop <- 4e6
 ```
@@ -630,11 +678,11 @@ pca <- confirmed %>%
 ```{r cp3, echo=FALSE}
 pcPercent <- summary(pca)$importance["Proportion of Variance",] %>%
   percent(accuracy = 0.1)
-k <- 2
+k <- 3
 cp3 <- glue(
   "*Dimensional reduction showing which countries infection rates are the most similar to each other at the {nDays} day mark since passing {startingPoint} confirmed cases/million.
   This may or may not be indicative of future spread within the population.
-  The value {nDays} days was simply chosen as this marks how long since Australia passed this threshold
+  The value {nDays} days was simply chosen as this marks how long since Australia passed this threshold.
   Countries which have not progressed beyond {startingPoint} confirmed cases/million for {nDays} days or more are not shown.
   Countries with populations < {comma(minPop)} are also excluded.
   Clusters were generated using k-means, manually specifying k = {k} and are not definitive.
@@ -1309,20 +1357,22 @@ coef(lm) %>%
 
 ## Assessment of Testing Within Each State
 
-Testing numbers were originally sourced from https://covid-19-au.github.io/, then were automatically updated should any later figures be provided at https://api.infotorch.org/api/covid19/totals/.
+Testing numbers were manually sourced on 23^rd^ March, 202 from individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
+No testing figures have yet been released by the NT government.
+Any updates on testing numbers beyond the manual update were automatically updated should any figures be provided at https://api.infotorch.org/api/covid19/totals/.
 The number of tested individuals in each state was then assessed as a function of State population size.
-All results are valid at the time of report generation, however these numbers are initially dependent on media releases and may lag actual testing numbers by 24-48 hours.
+All results are valid at the time of report generation.
 
 ```{r propTest}
 tribble(
   ~State, ~Tested, 
-  "New South Wales", 40651, 
-  "Queensland", 29579,
-  "Victoria", 19337,
-  "Western Australia", 8603,
-  "South Australia", 13000,
+  "New South Wales", 56941, 
+  "Queensland", 32394,
+  "Victoria", 23700,
+  "Western Australia", 140 + 9948,
+  "South Australia", 17100,
   "Tasmania", 807,
-  "Australian Capital Territory", 2062
+  "Australian Capital Territory", 32 + 2576
 ) %>%
   left_join(
     latestAU, 
