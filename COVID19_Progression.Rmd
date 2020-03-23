@@ -270,6 +270,7 @@ pops <- tribble(
     "Greece", 10423054, "Europe",
     "Hong Kong", hk, "Asia",
     "Iceland", 364260, "Europe",
+    "India", 1376270475, "Asia",
     "Indonesia", 272702678, "Asia",
     "Italy", 60486925, "Europe",
     "Iran", 83677594, "Middle East",
@@ -287,12 +288,16 @@ pops <- tribble(
     "Poland", 37858096, "Europe",
     "Portugal", 10196709, "Europe",
     "Qatar", 2866531, "Middle East",
+    "Romania", 19271798, "Europe",
     "Russia", 145917069, "Europe",
+    "Saudi Arabia", 34661353 , "Middle East",
     "Singapore", 5836728, "Asia",
+    "Slovenia", 2078860, "Europe",
     "Spain", 46754778, "Europe",
     "Sweden", 10081035, "Europe",
     "Switzerland", 8654622, "Europe",
     "Taiwan*", 23804524, "Asia",
+    "Thailand", 69752040, "Asia",
     "Turkey", 84081383, "Europe",
     "United Arab Emirates", 9856053, "Middle East", 
     "United Kingdom", 67886011, "Europe",
@@ -766,7 +771,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 
 
 ```{r p4}
-p4 <-confirmed %>%
+p4 <- confirmed %>%
   group_by(Country) %>%
   dplyr::filter(date == max(date)) %>%
   summarise(
