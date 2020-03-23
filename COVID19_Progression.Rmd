@@ -186,7 +186,7 @@ The official Australian numbers are not used for this analysis, instead relying 
 A significant disparity is not expected.
 Live updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 The current Australian numbers used in all plots below **`r ifelse(updateAU, "do", "do not")` contain** any cases reported since the JHU dataset was updated.
-As such, the latest values for infection rate *`r ifelse(updateAU, "may be incomplete for today as all states may not yet have reported", "may lag official figures by a few hours")`*.
+As such, the latest values for infection rate *`r ifelse(updateAU, "may be __incomplete for today__ as all states may not yet have reported", "may lag official figures by a few hours")`*.
 `r ifelse(updateAU, glue("{n} states/territories have currently reported updated figures since the overnight JHU release."), "")`
 
 Population sizes for the most impacted countries were manually obtained from https://www.worldometers.info/ and should not be considered as authoritative.
