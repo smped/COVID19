@@ -1229,7 +1229,7 @@ confirmed %>%
     justify = "lrrr",
     caption = glue(
       "Confirmed cases reported by each state at time of preparation.
-      States which not reported since publication of overnight JHU data are shown in italics."),
+      States which not reported any change since publication of overnight JHU data are shown in italics."),
     emphasize.italics.rows = which(.$Increase == 0)
     )
 ```
