@@ -236,28 +236,6 @@ if (updateAU){
 }
 ```
 
-
-Data for confirmed cases and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
-JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
-Data for recoveries was sourced from https://github.com/ulklc/covid19-timeseries as JHU no longer support this statistic, given concerns regarding reliable figures.
-
-Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
-Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/ and those at [www.health.gov.au](`r govUrl`).
-The Australian numbers used below **`r ifelse(updateAU, "do contain**", "do not contain** any")` confirmed cases reported since the JHU dataset was updated.
-`r ifelse(updateAU, glue("As of {format(Sys.time(), '%H:%M')}, {n} of 7 states/territories have released updated COVID-19 figures since the overnight JHU release."), "")`
-The current Australia total is `r comma(sum(dplyr::filter(confirmed, date == max(date), Country == "Australia")$confirmed))` using these data sources, and any corrections to these will be made as soon as is possible. 
-
-Population sizes for the most impacted countries were manually obtained from https://www.worldometers.info/ and should not be considered as authoritative.
-Given the disparity of infection within China, China was broken into Hubei Province, Hong Kong and the rest of China.
-As an open acknowledgement of the crudeness of population values, population estimates for Hubei Province were taken from the 2018 estimates given by [Statista.com](https://www.statista.com/statistics/279013/population-in-china-by-region/).
-This particular population estimate is likely to be low, and as a result confirmed case rates for Hubei province may be an *overestimate*, and consequently, confirmed case rates for the rest of China may also be an *underestimate.*
-
-Confirmed cases of COVID-19 as provided by the Chinese Government have been discussed elsewhere as unusual, and data appears potentially unreliable.
-In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
-
-However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for most countries.
-Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
-
 ```{r pops}
 hb <- 59170000
 hk <- 7479307
@@ -315,6 +293,30 @@ pops <- tribble(
 )
 ```
 
+
+Data for confirmed cases and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
+JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
+
+Data for recoveries was sourced from https://github.com/ulklc/covid19-timeseries as JHU no longer support this statistic, given concerns regarding reliable figures.
+This data is not provided by State/Province and any information using these figures cannot be broken down by region, which is of particular note for China and Hubei Province.
+
+Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
+Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/ and those at [www.health.gov.au](`r govUrl`).
+The Australian numbers used below **`r ifelse(updateAU, "do contain**", "do not contain** any")` confirmed cases reported since the JHU dataset was updated.
+`r ifelse(updateAU, glue("As of {format(Sys.time(), '%H:%M')}, {n} of 7 states/territories have released updated COVID-19 figures since the overnight JHU release."), "")`
+The current Australia total is `r comma(sum(dplyr::filter(confirmed, date == max(date), Country == "Australia")$confirmed))` using these data sources, and any corrections to these will be made as soon as is possible. 
+
+Population sizes for the most impacted countries were manually obtained from https://www.worldometers.info/ and should not be considered as authoritative.
+Given the disparity of infection within China, China was broken into Hubei Province, Hong Kong and the rest of China, with the exception of recovered cases, for reasons given above.
+As an open acknowledgement of the crudeness of population values, population estimates for Hubei Province were taken from the 2018 estimates given by [Statista.com](https://www.statista.com/statistics/279013/population-in-china-by-region/).
+This particular population estimate is likely to be low, and as a result confirmed case rates for Hubei province may be an *overestimate*, and consequently, confirmed case rates for the rest of China may also be an *underestimate.*
+
+Confirmed cases of COVID-19 as provided by the Chinese Government have been discussed elsewhere as unusual, and data appears potentially unreliable.
+In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
+
+However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for most countries.
+Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
+
 # International Data {.tabset}
 
 ```{r setThreshols}
@@ -324,7 +326,7 @@ minPop <- 4e6
 
 
 For this section, all data is presented *relative to population size*.
-Data is only shown for coutries with a population larger than `r comma(minPop)`.
+Data is only shown for countries with a population larger than `r comma(minPop)`.
 In addition, growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
 This equates to about `r round(startingPoint*dplyr::filter(pops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
 
@@ -1241,7 +1243,7 @@ In this way comparisons against NSW were performed, but no comparisons between o
 Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial time at which cumulative confirmed infection rate exceeded `r minRate` cases / million.
 Differences between State-level slopes and NSW however, are of great interest, and as such only the slopes are shown.
 For NSW (`Term = date`) this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
-Only differences in slope with an FDR-adjusted p-value < 0.05 are of particular interest.
+Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
 For those States which appear to be of interest, a negative value indicates an infection rate increasing more slowly than NSW, whilst a positive value indicates the opposite..
 
 ```{r lm}
@@ -1277,7 +1279,7 @@ lm <- confirmed %>%
 lm %>%
   tidy() %>%
   mutate(
-    FDR = p.adjust(p.value, method = "fdr"),
+    adjP = p.adjust(p.value, method = "bonf"),
     term = str_remove_all(term, "State")
   ) %>%
   rename(
@@ -1299,15 +1301,18 @@ lm %>%
       p < 1e-4 ~ sprintf("%.2e", p),
       p >= 1e-4 ~ sprintf("%.4f", p)
     ),
-    FDR = case_when(
-      FDR < 1e-4 ~ sprintf("%.2e", FDR),
-      FDR >= 1e-4 ~ sprintf("%.4f", FDR)
+    adjP = case_when(
+      adjP < 1e-4 ~ sprintf("%.2e", adjP),
+      adjP >= 1e-4 ~ sprintf("%.4f", adjP)
     )
+  ) %>%
+  rename(
+    `p~bonf~` = adjP
   ) %>%
   pander(
     justify = "lrrrrr",
     emphasize.strong.rows = which(
-      as.numeric(.$FDR) < 0.05 & .$Term != "date"
+      as.numeric(.$`p~bonf~`) < 0.05 & .$Term != "date"
       ),
     caption = paste(
       "*Results of linear regression analysis", 
@@ -1403,11 +1408,11 @@ tribble(
   "New South Wales", 61848, 
   "Queensland", 37334,
   "Victoria", 25000,
+  "Australian Capital Territory", 39 + 2780,
   # None below updated on 24/3
   "Western Australia", 140 + 9948,
   "South Australia", 17100,
-  "Tasmania", 807,
-  "Australian Capital Territory", 32 + 2576
+  "Tasmania", 807
 ) %>%
   left_join(
     latestAU, 
