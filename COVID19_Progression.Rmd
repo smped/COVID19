@@ -40,6 +40,8 @@ theme_set(theme_bw())
 
 # Data Sources
 
+**JHU Data on 23rd March is inaccurate and contains no internationally updated values. All numbers below are impacted, and any apparent plateauing of numbers on this date is due to this disruption in the supply of data.**
+
 ```{r confirmed}
 confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv") %>%
     read_csv() %>%
@@ -234,7 +236,7 @@ JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 1
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/ and those at [www.health.gov.au](`r govUrl`).
 The Australian numbers used below **`r ifelse(updateAU, "do contain**", "do not contain** any")` confirmed cases reported since the JHU dataset was updated.
-`r ifelse(updateAU, glue("At the time of report generation, {n} of 7 states/territories have released updated COVID-19 figures since the overnight JHU release."), "")`
+`r ifelse(updateAU, glue("As of {format(Sys.time(), '%H:%M')}, {n} of 7 states/territories have released updated COVID-19 figures since the overnight JHU release."), "")`
 The current Australia total is `r comma(sum(dplyr::filter(confirmed, date == max(date), Country == "Australia")$confirmed))` using these data sources, and any corrections to these will be made as soon as is possible. 
 
 Population sizes for the most impacted countries were manually obtained from https://www.worldometers.info/ and should not be considered as authoritative.
@@ -683,7 +685,7 @@ pca <- confirmed %>%
 ```{r cp3, echo=FALSE}
 pcPercent <- summary(pca)$importance["Proportion of Variance",] %>%
   percent(accuracy = 0.1)
-k <- 3
+k <- 4
 cp3 <- glue(
   "*Dimensional reduction showing which countries infection rates are the most similar to each other at the {nDays} day mark since passing {startingPoint} confirmed cases/million.
   This may or may not be indicative of future spread within the population.
