@@ -62,6 +62,7 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
             `Province/State` == "Hubei" ~ "China (Hubei)",
             `Province/State` == "Hong Kong" ~ "Hong Kong",
             grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
+            Country == "Korea, South" ~ "South Korea",
             !grepl("China", Country) ~ Country
         )
     ) %>%
@@ -166,20 +167,25 @@ recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/mas
     Country = countryName
   ) %>%
   mutate(
-    Country = str_replace_all(
-      # Set South Korea to match the previous format
-      Country, "South Korea", "Korea, South"
-    ),
     Country = str_replace_all(Country, "United States", "US")
   ) %>%
   dplyr::select(
     Country, Lat = lat, Long = lon, date,
     recovered = cured
   )
+if (updateAU){
+  recovered %<>%
+    bind_rows(
+      latestAU %>% 
+        distinct(Country, date)
+    ) %>%
+    arrange(Country, date) %>%
+    mutate(recovered = zoo::na.locf(recovered)) 
+}
 ```
 
 
-```{r deaths}
+```{r oldRecovered, echo=FALSE, eval=FALSE}
 # recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv") %>%
 #   read_csv() %>%
 #   pivot_longer(
@@ -204,6 +210,10 @@ recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/mas
 #       !grepl("China", Country) ~ Country
 #     )
 #   )
+```
+
+
+```{r deaths}
 deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv") %>%
   read_csv() %>%
   pivot_longer(
@@ -225,6 +235,7 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
       `Province/State` == "Hubei" ~ "China (Hubei)",
       `Province/State` == "Hong Kong" ~ "Hong Kong",
       grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
+      Country == "Korea, South" ~ "South Korea",
       !grepl("China", Country) ~ Country
     )
   )
@@ -266,7 +277,6 @@ pops <- tribble(
     "Israel", 8615601, 
     "Japan", 126476461, 
     "Jordan", 10174146, 
-    "Korea, South", 51269185, 
     "Luxembourg", 613894, 
     "Malaysia", 32245488, 
     "Netherlands", 17134872, 
@@ -281,6 +291,7 @@ pops <- tribble(
     "Saudi Arabia", 34661353 , 
     "Singapore", 5836728, 
     "Slovenia", 2078860, 
+    "South Korea", 51269185, 
     "Spain", 46754778, 
     "Sweden", 10081035, 
     "Switzerland", 8654622, 
@@ -444,7 +455,7 @@ p <- confirmed %>%
     linetype = 2
   ) +
   geom_text(
-        aes(xmax, ymax, label = label),
+    aes(xmax, ymax, label = label),
     data = tibble(
       xmax = c(16, 32, nDays - 2),
       ymax = startingPoint*2^(xmax / refRate),
@@ -452,6 +463,24 @@ p <- confirmed %>%
     ),
     colour = "grey70",
     inherit.aes = FALSE
+  ) +
+  geom_vline(
+    aes(xintercept = Days),
+    data = . %>%
+      dplyr::filter(Country == "Australia") %>%
+      dplyr::filter(Days == max(Days)),
+    linetype = 3,
+    colour = "blue",
+    size = 1/3
+  ) +
+  geom_hline(
+    aes(yintercept = Rate),
+    data = . %>%
+      dplyr::filter(Country == "Australia") %>%
+      dplyr::filter(Days == max(Days)),
+    linetype = 3,
+    colour = "blue",
+    size = 1/3
   ) +
   geom_point() +
   geom_line() +
@@ -476,6 +505,7 @@ cp <- glue(
     "*COVID-19 Confirmed Cumulative Infection Rate  for countries which have exceeded {startingPoint} confirmed cases/million for {minDays} or more days, and with populations greater than {comma(minPop)}.
     Data is only shown for the first {nDays} calendar days since passing {startingPoint} confirmed cases/million.
     Note that from the day records begin in this dataset ({p$data$Date[1]}), the confirmed infection rate in Hubei was {p$data$Rate[1]} confirmed cases/million.
+    The blue dashed line indicates Australia's current position on this figure.
     Diagonal grey lines indicate a doubling in the infection rate every 2, 4, or 8 days.
     To hide a country, click on the country in the plot legend.
     Clicking again on the country in the legend will restore the data within the plot.
@@ -504,7 +534,7 @@ In the above plot:
 
 - Only countries are shown where the infection rate has surpassed `r startingPoint` cases/million for more than `r minDays` days.
 This choice seemed to be a useful way of enabling the comparison of COVID-19 progression across countries after scaling for population size
-- Only South Korea,and China appear to have brought the virus under some level of control. The infection rate currently sits around `r confirmed %>% dplyr::filter(Country == "Korea, South") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for South Korea and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for Hubei Province. This can also be thought of as `r confirmed %>% dplyr::filter(Country == "Korea, South") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` of the total populations respectively. Note that despite these apparently low percentages, the actual numbers of deaths and hospitalisations are extremely non-trivial and the real impacts of these numbers cannot be treated lightly.
+- Only South Korea,and China appear to have brought the virus under some level of control. The infection rate currently sits around `r confirmed %>% dplyr::filter(Country == "South Korea") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for South Korea and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for Hubei Province. This can also be thought of as `r confirmed %>% dplyr::filter(Country == "South Korea") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` of the total populations respectively. Note that despite these apparently low percentages, the actual numbers of deaths and hospitalisations are extremely non-trivial and the real impacts of these numbers cannot be treated lightly.
 - Japan and UAE's early measures also appear to be highly effective, however the recent growth in infections within Singapore and Hong Kong should serve as a caution
 - Some of the above countries (e.g. Iran) appear to be in the early stages of levelling out, indicating that either the initial exponential growth phase may be ending in these countries, or under-reporting has become rife
 - Other countries such as Italy, Switzerland, the Unites States and the UK are clearly still in an exponential growth phase.
@@ -528,7 +558,8 @@ p2 <- confirmed %>%
         Country = str_replace_all(Country, "China.+", "China")
       ) %>%
       group_by(Country) %>%
-      summarise_at(vars(Population), sum)
+      summarise_at(vars(Population), sum) %>%
+      dplyr::filter(Population > minPop)
   ) %>%
   group_by(Country, date, Population) %>%
   summarise_at(vars(confirmed, deaths), sum) %>%
@@ -588,6 +619,24 @@ p2 <- confirmed %>%
     colour = "grey70",
     inherit.aes = FALSE
   ) +
+  geom_vline(
+    aes(xintercept = Days),
+    data = . %>%
+      dplyr::filter(Country == "Australia") %>%
+      dplyr::filter(Days == max(Days)),
+    linetype = 3,
+    colour = "blue",
+    size = 1/3
+  ) +
+  geom_hline(
+    aes(yintercept = Rate),
+    data = . %>%
+      dplyr::filter(Country == "Australia") %>%
+      dplyr::filter(Days == max(Days)),
+    linetype = 3,
+    colour = "blue",
+    size = 1/3
+  ) +
   geom_point() +
   geom_line() +
   scale_x_continuous(
@@ -611,6 +660,7 @@ cp2 <- glue(
     "*Confirmed __active__ cases of COVID-19 for countries where the confirmed infection rate has exceeded {startingPoint} confirmed active cases/million for more than {nDays} calendar days.
     Only countries with a population greater than {comma(minPop)} are shown for better visualisation.
     Due to difficulties introduced by the currently reported __low active infection rate__ outside Hubei province, data from China has been excluded from this plot, with the exception of Hubei and Hong Kong.
+    The blue dashed lines indicates Australia's current position on this figure.
     To hide a country, click on the country in the plot legend.
     Clicking again on the country in the legend will restore the data within the plot.
     Countries are shown in order of the date at which they passed the {startingPoint} confirmed __active__ case/million mark.
@@ -814,7 +864,7 @@ p4 <-confirmed %>%
         Country = str_replace_all(Country, "China.+", "China")
       ) %>%
       group_by(Country) %>%
-      summarise_at(vars(Population), sum)
+      summarise_at(vars(Population), sum) 
     ) %>%
   dplyr::filter(
     1e6*confirmed / Population > startingPoint,
@@ -937,6 +987,15 @@ plotFr <- mutate(
       )
   ) +
   geom_raster() +
+  geom_vline(
+    aes(xintercept = Days + 0.5),
+    data = . %>%
+      dplyr::filter(Country == "Australia") %>%
+      dplyr::filter(Date == max(Date)),
+    linetype = 3,
+    size = 1/3,
+    colour = "grey70"
+  ) +
   scale_fill_viridis_c(
     option = "magma",
     breaks = seq(0, 0.08, by = 0.02)
@@ -963,6 +1022,7 @@ cpFr <- glue(
   "*Fatality Rate for confirmed cases after passing {startingPoint} confirmed cases / million.
   Only countries with {minDays} days of data beyond this time-point are shown, and are shown after clustering based on the most recent values.
   Countries with no recorded fatalities have been excluded. 
+  The dashed grey line indicates the time-point Australia is currently at.
   A clear trend of an increasing fatality rate with time is evident in many countries (e.g. Spain, France, Italy, UK), however, for some countries (e.g. Singapore) this rate appears relatively stable throughout the majority of days.
   The overall Fatality Rate for confirmed cases is currently ({percent(fr, accuracy = 0.1)}).*"
 )
@@ -1144,6 +1204,35 @@ Infections are currently doubling in slightly less than 4 days.
 - Using an estimated population size of `r comma(dplyr::filter(pops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(pops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
 - However, projecting forward using a 7 day lag as representative of the delay between contracting the virus and manifestation of symptoms, the number of people within Australia who are currently infected may be near `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% comma()`, which corresponds to `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(pops, Country == "Australia")$Population) %>% percent(accuracy = 0.001)` of the population, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(pops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`
 - Assuming a hospitalisation rate of 12% (based on US figures found [here](https://www.livescience.com/new-coronavirus-compare-with-flu.html)), it can be expected that within a week, `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(.48) %>% round(0)` will be hospitalised around Australia with severe symptoms.
+
+```{r latestAUTable}
+confirmed %>% 
+  dplyr::filter(
+    Country == "Australia", 
+    date >= max(date) - 1
+    ) %>% 
+  group_by(`Province/State`) %>% 
+  mutate(d = diff(confirmed)) %>% 
+  pivot_wider(
+    id_cols = "Province/State", 
+    names_from = date, 
+    values_from = c(confirmed, d)
+    ) %>% 
+  set_names(
+    str_remove(names(.), "confirmed_")
+    ) %>% 
+  dplyr::select(seq_len(ncol(.) - 1)) %>%
+  set_names(
+    str_replace(names(.), "d_.+", "Increase")
+    ) %>%
+  pander(
+    justify = "lrrr",
+    caption = glue(
+      "Confirmed cases reported by each state at time of preparation.
+      States which not reported since publication of overnight JHU data are shown in italics."),
+    emphasize.italics.rows = which(.$Increase == 0)
+    )
+```
 
 
 ## State-wise Comparison of Confirmed Infection Rates
@@ -1409,10 +1498,10 @@ tribble(
   "Queensland", 37334,
   "Victoria", 25000,
   "Australian Capital Territory", 39 + 2780,
+  "Western Australia", 175 + 10353,
+  "Tasmania", 1139,
   # None below updated on 24/3
-  "Western Australia", 140 + 9948,
-  "South Australia", 17100,
-  "Tasmania", 807
+  "South Australia", 17100
 ) %>%
   left_join(
     latestAU, 
@@ -1450,14 +1539,10 @@ tribble(
   ) %>%
   pander(
     justify = "lrrrrr",
-    caption = paste(
-      "*COVID-19 testing scaled by State population size.",
-      "Confirmed cases are assumed to be the tests",
-      "returning a positive result.",
-      "The current numbers available for SA are a", 
-      "lower limit, so in reality, the proportion of",
-      "the population tested is higher, as is the",
-      "proportion of tests returning a negative result.*"
+    caption = glue(
+      "*COVID-19 testing scaled by State population size.
+      Confirmed cases are assumed to be the tests returning a positive result.
+      The current numbers available for some stats are a lower limit, so in reality, the proportion of the population tested is higher, as is the proportion of tests returning a negative result.*"
     )
   )
 ```
