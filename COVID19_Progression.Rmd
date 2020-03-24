@@ -40,8 +40,6 @@ theme_set(theme_bw())
 
 # Data Sources
 
-**JHU Data on 23rd March is inaccurate and contains no internationally updated values. All numbers below are impacted, and any apparent plateauing of numbers on this date is due to this disruption in the supply of data.**
-
 ```{r confirmed}
 confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv") %>%
     read_csv() %>%
@@ -1393,7 +1391,7 @@ coef(lm) %>%
 
 ## Assessment of Testing Within Each State
 
-Testing numbers were manually sourced on 24^th^ March, 202 from individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
+Testing numbers were manually sourced on 24^th^ March, 2020 from individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
 No testing figures have yet been released by the NT government.
 Any updates on testing numbers beyond the manual update were automatically updated should any figures be provided at https://api.infotorch.org/api/covid19/totals/.
 The number of tested individuals in each state was then assessed as a function of State population size.
