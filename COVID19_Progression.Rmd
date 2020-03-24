@@ -43,7 +43,7 @@ theme_set(theme_bw())
 **JHU Data on 23rd March is inaccurate and contains no internationally updated values. All numbers below are impacted, and any apparent plateauing of numbers on this date is due to this disruption in the supply of data.**
 
 ```{r confirmed}
-confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Confirmed.csv") %>%
+confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv") %>%
     read_csv() %>%
     pivot_longer(
         cols = ends_with("20"),
@@ -160,32 +160,53 @@ if (updateAU) {
 }
 ```
 
-```{r recoveredDeaths}
-recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv") %>%
+```{r recovered}
+recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/master/report/raw/rawReport.csv") %>%
   read_csv() %>%
-  pivot_longer(
-    cols = ends_with("20"),
-    names_to = "date",
-    values_to = "recovered"
-  )  %>%
+  rename(
+    date = day,
+    Country = countryName
+  ) %>%
   mutate(
-    date = str_replace_all(
-      date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
-    ) %>%
-      ymd()
+    Country = str_replace_all(
+      # Set South Korea to match the previous format
+      Country, "South Korea", "Korea, South"
+    ),
+    Country = str_replace_all(Country, "United States", "US")
   ) %>%
-  dplyr::rename(
-    Country = `Country/Region`
-  ) %>%
-  dplyr::mutate(
-    Country = case_when(
-      `Province/State` == "Hubei" ~ "China (Hubei)",
-      `Province/State` == "Hong Kong" ~ "Hong Kong",
-      grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
-      !grepl("China", Country) ~ Country
-    )
+  dplyr::select(
+    Country, Lat = lat, Long = lon, date,
+    recovered = cured
   )
-deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Deaths.csv") %>%
+```
+
+
+```{r deaths}
+# recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv") %>%
+#   read_csv() %>%
+#   pivot_longer(
+#     cols = ends_with("20"),
+#     names_to = "date",
+#     values_to = "recovered"
+#   )  %>%
+#   mutate(
+#     date = str_replace_all(
+#       date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
+#     ) %>%
+#       ymd()
+#   ) %>%
+#   dplyr::rename(
+#     Country = `Country/Region`
+#   ) %>%
+#   dplyr::mutate(
+#     Country = case_when(
+#       `Province/State` == "Hubei" ~ "China (Hubei)",
+#       `Province/State` == "Hong Kong" ~ "Hong Kong",
+#       grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
+#       !grepl("China", Country) ~ Country
+#     )
+#   )
+deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv") %>%
   read_csv() %>%
   pivot_longer(
     cols = ends_with("20"),
@@ -209,29 +230,18 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
       !grepl("China", Country) ~ Country
     )
   )
-```
-
-```{r updateRecDeaths_AU}
-# No recoveries are reported in the latestAU data
-# Assume values are identical
 if (updateAU){
   deaths %<>%
     bind_rows(
       dplyr::select(latestAU, any_of(colnames(.)))
     )
-  recovered %<>%
-    bind_rows(
-      dplyr::select(latestAU, any_of(colnames(.)))
-      ) %>% 
-    arrange(`Province/State`, Country, date) %>%
-    mutate(recovered = zoo::na.locf(recovered))
 }
 ```
 
 
-
-Data was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
+Data for confirmed cases and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
 JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
+Data for recoveries was sourced from https://github.com/ulklc/covid19-timeseries as JHU no longer support this statistic, given concerns regarding reliable figures.
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/ and those at [www.health.gov.au](`r govUrl`).
@@ -254,56 +264,56 @@ Similarly, reporting in many countries may have features that cause concerns reg
 hb <- 59170000
 hk <- 7479307
 pops <- tribble(
-    ~Country, ~Population, ~Region,
-    "Australia", 25499884, "Oceania",
-    "Austria", 9006398, "Europe",
-    "Belgium", 11575214, "Europe",
-    "Brazil", 212129490, "South America",
-    "Canada", 37742154, "North America",
-    "Chile", 19068026, "South America",
-    "China (Hubei)", hb, "Asia",
-    "China (Other)", 1408526449 - hb - hk, "Asia",
-    "Czechia", 10703010, "Europe",
-    "Denmark", 5786274, "Europe",
-    "Ecuador", 17564089, "South America",
-    "Finland", 5538181, "Europe",
-    "France", 65273511, "Europe",
-    "Germany", 83783942, "Europe",
-    "Greece", 10423054, "Europe",
-    "Hong Kong", hk, "Asia",
-    "Iceland", 364260, "Europe",
-    "India", 1376270475, "Asia",
-    "Indonesia", 272702678, "Asia",
-    "Italy", 60486925, "Europe",
-    "Iran", 83677594, "Middle East",
-    "Ireland", 4921810, "Europe",
-    "Israel", 8615601, "Middle East",
-    "Japan", 126476461, "Asia",
-    "Jordan", 10174146, "Middle East",
-    "Korea, South", 51269185, "Asia",
-    "Luxembourg", 613894, "Europe",
-    "Malaysia", 32245488, "Asia",
-    "Netherlands", 17134872, "Europe",
-    "New Zealand", 4811065, "Oceania",
-    "Norway", 5408930, "Europe",
-    "Pakistan",  219629013, "Asia",
-    "Poland", 37858096, "Europe",
-    "Portugal", 10196709, "Europe",
-    "Qatar", 2866531, "Middle East",
-    "Romania", 19271798, "Europe",
-    "Russia", 145917069, "Europe",
-    "Saudi Arabia", 34661353 , "Middle East",
-    "Singapore", 5836728, "Asia",
-    "Slovenia", 2078860, "Europe",
-    "Spain", 46754778, "Europe",
-    "Sweden", 10081035, "Europe",
-    "Switzerland", 8654622, "Europe",
-    "Taiwan*", 23804524, "Asia",
-    "Thailand", 69752040, "Asia",
-    "Turkey", 84081383, "Europe",
-    "United Arab Emirates", 9856053, "Middle East", 
-    "United Kingdom", 67886011, "Europe",
-    "US", 331002651, "North America"
+    ~Country, ~Population, 
+    "Australia", 25499884,
+    "Austria", 9006398, 
+    "Belgium", 11575214, 
+    "Brazil", 212129490, 
+    "Canada", 37742154, 
+    "Chile", 19068026, 
+    "China (Hubei)", hb, 
+    "China (Other)", 1408526449 - hb, 
+    "Czechia", 10703010, 
+    "Denmark", 5786274, 
+    "Ecuador", 17564089, 
+    "Finland", 5538181, 
+    "France", 65273511, 
+    "Germany", 83783942, 
+    "Greece", 10423054, 
+    "Hong Kong", hk, 
+    "Iceland", 364260, 
+    "India", 1376270475, 
+    "Indonesia", 272702678, 
+    "Italy", 60486925, 
+    "Iran", 83677594, 
+    "Ireland", 4921810, 
+    "Israel", 8615601, 
+    "Japan", 126476461, 
+    "Jordan", 10174146, 
+    "Korea, South", 51269185, 
+    "Luxembourg", 613894, 
+    "Malaysia", 32245488, 
+    "Netherlands", 17134872, 
+    "New Zealand", 4811065, 
+    "Norway", 5408930, 
+    "Pakistan",  219629013, 
+    "Poland", 37858096, 
+    "Portugal", 10196709, 
+    "Qatar", 2866531, 
+    "Romania", 19271798, 
+    "Russia", 145917069, 
+    "Saudi Arabia", 34661353 , 
+    "Singapore", 5836728, 
+    "Slovenia", 2078860, 
+    "Spain", 46754778, 
+    "Sweden", 10081035, 
+    "Switzerland", 8654622, 
+    "Taiwan*", 23804524, 
+    "Thailand", 69752040, 
+    "Turkey", 84081383, 
+    "United Arab Emirates", 9856053,  
+    "United Kingdom", 67886011, 
+    "US", 331002651
 )
 ```
 
@@ -503,37 +513,37 @@ This choice seemed to be a useful way of enabling the comparison of COVID-19 pro
 ## Currently Active Infection Rates
 
 As an alternative viewpoint, the numbers of recovered and deceased patients have been removed from the above plot to provide an estimate of the **currently active infections**.
+Given the changes made to JHU data for recovered cases (made on 23-03-2020), data for China is no longer able to be separated into Hubei Province and the remainder of China, and is presented as one set of data for this plot.
 
 
 ```{r p2}
 p2 <- confirmed %>%
-  dplyr::filter(
-    !str_detect(Country, "Other")
-  ) %>%
-  left_join(recovered) %>%
   left_join(deaths) %>%
-    right_join(
-      dplyr::filter(pops, Population > minPop)
+  mutate(
+    Country = str_replace_all(Country, "China.+", "China")
     ) %>%
+  right_join(
+    pops %>%
+      mutate(
+        Country = str_replace_all(Country, "China.+", "China")
+      ) %>%
+      group_by(Country) %>%
+      summarise_at(vars(Population), sum)
+  ) %>%
+  group_by(Country, date, Population) %>%
+  summarise_at(vars(confirmed, deaths), sum) %>%
+  left_join(recovered ) %>% 
   mutate(
     active = confirmed - recovered - deaths
   ) %>%
   dplyr::filter(
     !is.na(active), confirmed > 0
   ) %>%
-  group_by(
-    Country, Population, date
-  ) %>%
-  summarise(
-    active = sum(active),
-    confirmed = sum(confirmed),
-    recovered = sum(recovered),
-    deaths = sum(deaths)
-  ) %>%
   mutate(rate = 1e6 * active / Population) %>%
   dplyr::filter(
     rate > startingPoint
   ) %>%
+  group_by(Country) %>%
   mutate(
     days = date - min(date)
   ) %>%
@@ -618,7 +628,6 @@ ggplotly(p2)
 Notable features of this perspective are:
 
 - Active infection rates in South Korea are currently either declining or stable
-- According to these figures, active infections within Hubei province are also significantly declining
 - Despite strict control measures, active infection rates are exponentially increasing in both Hong Kong and Singapore
 
 ## Dimensional Reduction
@@ -709,7 +718,7 @@ pca$x %>%
   rownames_to_column("Country") %>%
   mutate(
     Cluster = cbind(PC1, PC2) %>%
-      kmeans(k) %>%
+      kmeans(centers = k, nstart = 10) %>%
       .[["cluster"]] %>%
       as.factor()
   ) %>%
@@ -754,7 +763,25 @@ fr <- confirmed %>%
   summarise(fr = sum(deaths) / sum(confirmed)) %>%
   .[["fr"]]
 rr <- confirmed %>%
-  inner_join(recovered) %>%
+  mutate(
+    Country = str_replace_all(
+      Country, "China.+", "China"
+    )
+  ) %>%
+  right_join(
+    pops %>%
+      mutate(
+        Country = str_replace_all(
+          Country, "China.+", "China"
+        )
+      ) %>%
+      group_by(Country) %>%
+      summarise_at(vars(Population), sum)
+  ) %>%
+  group_by(Country, Population, date) %>%
+  summarise_at(vars(confirmed), sum) %>%
+  left_join(recovered) %>%
+  dplyr::filter(!is.na(recovered)) %>%
   group_by(Country) %>%
   dplyr::filter(date == max(date)) %>%
   ungroup() %>%
@@ -773,33 +800,27 @@ Given the level of under-reporting this may also be highly inaccurate.
 
 
 ```{r p4}
-p4 <- confirmed %>%
-  group_by(Country) %>%
-  dplyr::filter(date == max(date)) %>%
-  summarise(
-    confirmed = sum(confirmed)
+p4 <-confirmed %>%
+  left_join(deaths) %>%
+  mutate(
+    Country = str_replace_all(Country, "China.+", "China")
   ) %>%
-  right_join(pops) %>%
+  group_by(Country, date) %>%
+  summarise_at(vars(confirmed, deaths), sum) %>%
+  dplyr::filter(date == max(date)) %>%
+  right_join(
+    pops %>%
+      mutate(
+        Country = str_replace_all(Country, "China.+", "China")
+      ) %>%
+      group_by(Country) %>%
+      summarise_at(vars(Population), sum)
+    ) %>%
   dplyr::filter(
     1e6*confirmed / Population > startingPoint,
-    Country != "Cruise Ship"
   ) %>%   
-  left_join(
-    recovered %>%
-      group_by(Country) %>%
-      dplyr::filter(date == max(date)) %>%
-      summarise(
-        recovered = sum(recovered)
-      )
-  ) %>%
-  left_join(
-    deaths %>%
-      group_by(Country) %>%
-      dplyr::filter(date == max(date)) %>%
-      summarise(
-        deaths = sum(deaths)
-      )
-  ) %>%
+  ungroup() %>%
+  left_join(recovered) %>%
   mutate(
     active = confirmed - recovered - deaths
   ) %>%
@@ -947,7 +968,6 @@ cpFr <- glue(
 )
 ```
 
-
 ```{r plotlyFr, fig.cap=cpFr, fig.height=6}
 ggplotly(
   plotFr,
@@ -962,24 +982,33 @@ ggplotly(
 
 ```{r p6}
 minDays <- 9
-p6 <- confirmed %>%
-  inner_join(deaths) %>%
-  inner_join(recovered) %>%
+p6 <-confirmed %>%
+  left_join(deaths) %>%
+  mutate(
+    Country = str_replace_all(Country, "China.+", "China")
+  ) %>%
+  group_by(Country, date) %>%
+  summarise_at(vars(confirmed, deaths), sum) %>%
+  left_join(recovered) %>%
   group_by(Country, date) %>%
   summarise_at(
     vars(confirmed, recovered, deaths),
     sum
   ) %>%
   ungroup() %>%
-  right_join(pops) %>%
+  right_join(
+    pops %>%
+      mutate(
+        Country = str_replace_all(Country, "China.+", "China")
+      ) %>%
+      group_by(Country) %>%
+      summarise_at(vars(Population), sum)
+  ) %>%
   mutate(
     active = confirmed - deaths - recovered,
     `Infection Rate` = 1e6 * confirmed / Population
   ) %>%
-  dplyr::filter(
-    `Infection Rate` > startingPoint,
-    Country != "Cruise Ship"
-  ) %>%
+  dplyr::filter(`Infection Rate` > startingPoint) %>%
   group_by(Country) %>%
   mutate(
     Days = date - min(date),
@@ -1364,7 +1393,7 @@ coef(lm) %>%
 
 ## Assessment of Testing Within Each State
 
-Testing numbers were manually sourced on 23^rd^ March, 202 from individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
+Testing numbers were manually sourced on 24^th^ March, 202 from individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
 No testing figures have yet been released by the NT government.
 Any updates on testing numbers beyond the manual update were automatically updated should any figures be provided at https://api.infotorch.org/api/covid19/totals/.
 The number of tested individuals in each state was then assessed as a function of State population size.
@@ -1373,9 +1402,10 @@ All results are valid at the time of report generation.
 ```{r propTest}
 tribble(
   ~State, ~Tested, 
-  "New South Wales", 56941, 
-  "Queensland", 32394,
-  "Victoria", 23700,
+  "New South Wales", 61848, 
+  "Queensland", 37334,
+  "Victoria", 25000,
+  # None below updated on 24/3
   "Western Australia", 140 + 9948,
   "South Australia", 17100,
   "Tasmania", 807,
