@@ -709,7 +709,7 @@ pca$x %>%
   rownames_to_column("Country") %>%
   mutate(
     Cluster = cbind(PC1, PC2) %>%
-      kmeans(k) %>%
+      kmeans(k, nstart = 10) %>%
       .[["cluster"]] %>%
       as.factor()
   ) %>%
