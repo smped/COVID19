@@ -160,7 +160,7 @@ if (updateAU) {
 ```
 
 ```{r recovered}
-recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/master/report/raw/rawReport.csv") %>%
+recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/master/countryReport/raw/rawReport.csv") %>%
   read_csv() %>%
   rename(
     date = day,
@@ -171,7 +171,7 @@ recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/mas
   ) %>%
   dplyr::select(
     Country, Lat = lat, Long = lon, date,
-    recovered = cured
+    recovered 
   )
 if (updateAU){
   recovered %<>%
@@ -1230,7 +1230,7 @@ confirmed %>%
     caption = glue(
       "Confirmed cases reported by each state at time of preparation.
       States which not reported any change since publication of overnight JHU data are shown in italics."),
-    emphasize.italics.rows = which(.$Increase == 0)
+    emphasize.italics.rows = which(.$Increase <= 0)
     )
 ```
 
@@ -1494,14 +1494,14 @@ All results are valid at the time of report generation.
 ```{r propTest}
 tribble(
   ~State, ~Tested, 
-  "New South Wales", 61848, 
-  "Queensland", 37334,
-  "Victoria", 25000,
-  "Australian Capital Territory", 39 + 2780,
-  "Western Australia", 175 + 10353,
-  "Tasmania", 1139,
+  "New South Wales", 68177, 
+  "Queensland", 38860,
+  "South Australia", 18000,
+  "Australian Capital Territory", 44 + 2964,
+  "Victoria", 25500,
   # None below updated on 24/3
-  "South Australia", 17100
+  "Western Australia", 175 + 10353,
+  "Tasmania", 1139
 ) %>%
   left_join(
     latestAU, 
