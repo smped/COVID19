@@ -91,7 +91,8 @@ govTable <- c(
   ) %>%
   vapply(function(x){
     str_replace_all(govLines, "(\\\n)+", "_") %>%
-      str_extract(paste(x, "[0-9]+", sep = "_")) %>%
+      str_extract(paste(x, "[0-9,]+", sep = "_")) %>%
+      str_remove(",") %>%
       str_remove(".+_")
   },
   character(1)) %>%
@@ -108,6 +109,10 @@ govTable <- c(
 
 
 ```{r latestAU}
+prevDateAU <- confirmed %>%
+  dplyr::filter(Country == "Australia") %>%
+  summarise_at(vars(date), max) %>%
+  .[["date"]]
 latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
   as_tibble() %>%
   rename(
@@ -128,27 +133,23 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
     `Province/State`, Country, date, 
     confirmed, deaths, tested
   ) %>%
-  mutate(
-    date = max(date)
-  ) %>%
   bind_rows(govTable) %>% 
+  dplyr::filter(date > prevDateAU) %>%
   group_by(`Province/State`) %>% 
   summarise(
     Country = unique(Country),
-    date = min(date),
+    date = max(date),
     confirmed = max(confirmed), 
     deaths = max(deaths, na.rm = TRUE),
     tested = max(tested, na.rm = TRUE)
   ) %>% 
   mutate(
-    tested = ifelse(is.finite(tested), tested, NA)
+    tested = ifelse(is.finite(tested), tested, NA),
+    deaths = ifelse(is.finite(deaths), deaths, NA)
   )
 # Update the AU records if there are any timepoints
 # on days beyond the last value provided by JHU
-updateAU <- max(latestAU$date) >
-  max(
-    dplyr::filter(confirmed, Country == "Australia")$date
-    )
+updateAU <- max(latestAU$date) > prevDateAU
 if (updateAU) {
   confirmed %<>%
     bind_rows(
@@ -244,7 +245,8 @@ if (updateAU){
   deaths %<>%
     bind_rows(
       dplyr::select(latestAU, any_of(colnames(.)))
-    )
+    ) %>%
+    mutate(deaths = zoo::na.locf(deaths))
 }
 ```
 
@@ -950,8 +952,8 @@ df <- confirmed %>%
   ) %>%
   dplyr::filter(
     n > minDays,
-    max(deaths) > 0
-    ) %>%
+    max(deaths, na.rm = TRUE) > 0
+  ) %>%
   mutate(
     Rate = deaths / confirmed,
     `Fatality Rate` = percent(Rate, accuracy = 0.1),
@@ -1033,7 +1035,7 @@ cpFr <- glue(
 ggplotly(
   plotFr,
   tooltip = c(
-    "Country", "Date", "Days", "Confirmed", "Deaths", 
+    "Country", "Date", "Days", "Confirmed", "Deaths",
     "Fatality Rate"
     )
   )
@@ -1250,8 +1252,7 @@ confirmed %>%
     caption = glue(
       "*Confirmed cases reported by each state at time of preparation.
       States which have not reported any change since publication of overnight JHU data are shown in italics.
-      Negative numbers in the change column indicate issues with the automated data sources, such as health.gov.au.
-      On 25th March, the health.gov.au numbers for the NT are out of step with those reported directly by https://coronavirus.nt.gov.au/*"),
+      Any negative numbers in the change column may indicate issues with the automated data sources, such as health.gov.au, or JHU.*"),
     emphasize.italics.rows = which(.$Increase <= 0)
     )
 ```
@@ -1287,7 +1288,7 @@ p5 <- confirmed %>%
   ) %>%
   dplyr::filter(
     !is.na(Population),
-    !str_detect(State, "Territory"),
+    !str_detect(State, "Northern"),
     Rate > minRate
   ) %>%
   arrange(date) %>%
@@ -1333,7 +1334,7 @@ cp5 <- glue(
 Linear regression lines are shown for each state as  solid lines, with NSW perhaps showing a slightly increased rate of infection within the population.
 Once again, the y-axis is on a logarithmic scale indicating exponential growth is occurring.
 States are shown in order of the initial date they passed {minRate} cases/million.
-Due to the low population sizes in the ACT and NT, these territories were omitted.*
+Due to the low population size in the NT, these cases were omitted.*
 "
 )
 ```
@@ -1370,7 +1371,7 @@ lm <- confirmed %>%
   ) %>%
   dplyr::filter(
     !is.na(Population),
-    !str_detect(State, "Territory"),
+    !str_detect(State, "Northern"),
     Rate > minRate
   ) %>%
   arrange(desc(confirmed)) %>%
@@ -1524,10 +1525,12 @@ if (url.exists(nswUrl)){
     read_html() %>%
     html_nodes("body") %>%
     xml_find_all("//td[contains(@class, 'moh-rteTableFooterOddCol-6')]") %>% 
-    html_text() %>%
-  .[[1]] %>%
-    str_remove_all(",") %>%
-    as.numeric()
+    html_text() 
+  if (length(nswTests)) {
+    nswTests <- nswTests[[1]] %>%
+      str_remove_all(",") %>%
+      as.numeric()
+  }
 }
 ```
 
@@ -1615,13 +1618,15 @@ if (url.exists(saUrl)) {
     html_nodes("body") %>%
     xml_find_all("//div[contains(@class, 'wysiwyg')]") %>%
     html_text() %>%
-    str_split("\n") %>%
-    .[[1]] %>%
-    str_trim() %>%
-    str_subset("more than.+tests") %>%
-    str_replace_all(".+ ([0-9,]+) tests.", "\\1") %>%
-    str_remove_all(",") %>%
-    as.numeric()
+    str_split("\n") 
+  if (length(saTests)) {
+    saTests <- saTests[[1]] %>%
+      str_trim() %>%
+      str_subset("more than.+tests") %>%
+      str_replace_all(".+ ([0-9,]+) tests.", "\\1") %>%
+      str_remove_all(",") %>%
+      as.numeric()
+  }
 }
 
 ```
@@ -1685,6 +1690,8 @@ tested <- c(
   enframe(
     name = "State", value = "Tested"
   ) %>%
+  mutate(Tested = as.numeric(Tested)) %>%
+  dplyr::filter(!is.na(Tested)) %>%
   bind_rows(tested) %>%
   group_by(State) %>%
   summarise(Tested = max(Tested, na.rm = TRUE))
@@ -1697,10 +1704,10 @@ tested %>%
 ```
 
 
-Testing numbers were manually sourced on 24^th^ March, 2020 from individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
+Testing numbers were initially sourced on 24^th^ March, 2020 from manual inspection of individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
 No testing figures have yet been released by the NT government.
 
-Any updates on testing numbers beyond the initial values were automatically updated using the above code which probes each state's official releases for the latest values.
+Updates on testing numbers beyond the initial values were performed automatically using the above code which probes each state's official releases for the latest values, and updates where found.
 The number of tested individuals in each state was then assessed as a function of State population size.
 All results are valid at the time of report generation.
 
@@ -1732,7 +1739,11 @@ tested %>%
     Negative = 1 - Positive
   ) %>%
   dplyr::select(
-    State, Population, `Total Tested` = Tested, contains("Percent"), ends_with("ive")
+    State, Population,
+    Confirmed = confirmed,
+    `Total Tested` = Tested, 
+    contains("Percent"), 
+    ends_with("ive")
   ) %>%
   arrange(desc(`Percent Tested`)) %>%
   mutate_at(
@@ -1741,7 +1752,7 @@ tested %>%
     accuracy = 0.01
   ) %>%
   pander(
-    justify = "lrrrrr",
+    justify = "lrrrrrr",
     caption = glue(
       "*COVID-19 testing scaled by state population size.
       Confirmed cases are assumed to be the tests returning a positive result.
