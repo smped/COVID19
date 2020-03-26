@@ -1249,11 +1249,11 @@ confirmed %>%
     ) %>%
   pander(
     justify = "lrrr",
-    caption = glue(
-      "*Confirmed cases reported by each state at time of preparation.
-      States which have not reported any change since publication of overnight JHU data are shown in italics.
-      Any negative numbers in the change column may indicate issues with the automated data sources, such as health.gov.au, or JHU.*"),
-    emphasize.italics.rows = which(.$Increase <= 0)
+    caption = paste(
+      "*Confirmed cases reported by each state at time of preparation.",
+      # "States which have not reported any change since publication of overnight JHU data are shown in italics.",
+      "Any negative numbers in the change column may indicate issues with the automated data sources, such as health.gov.au, or JHU.*")
+    # emphasize.italics.rows = which(.$Increase <= 0)
     )
 ```
 
