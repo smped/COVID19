@@ -1234,7 +1234,9 @@ confirmed %>%
     date >= max(date) - 1
     ) %>% 
   group_by(`Province/State`) %>% 
-  mutate(d = diff(confirmed)) %>% 
+  mutate(
+    d = diff(confirmed) / min(confirmed)
+  ) %>% 
   pivot_wider(
     id_cols = "Province/State", 
     names_from = date, 
@@ -1245,16 +1247,16 @@ confirmed %>%
     ) %>% 
   dplyr::select(seq_len(ncol(.) - 1)) %>%
   set_names(
-    str_replace(names(.), "d_.+", "Increase")
-    ) %>%
+    str_replace(names(.), "d_.+", "%Increase")
+  ) %>%
+  arrange(desc(`%Increase`)) %>%
   pander(
     justify = "lrrr",
     caption = paste(
       "*Confirmed cases reported by each state at time of preparation.",
-      # "States which have not reported any change since publication of overnight JHU data are shown in italics.",
-      "Any negative numbers in the change column may indicate issues with the automated data sources, such as health.gov.au, or JHU.*")
-    # emphasize.italics.rows = which(.$Increase <= 0)
+      "Any states with unchanged values may indicate issues with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
     )
+  )
 ```
 
 
@@ -1516,7 +1518,7 @@ tested <- list.files("tested", pattern = "tsv", full.names = TRUE) %>%
 ```
 
 ```{r nswTests}
-nswTests <- NA
+nswTests <- NA_real_
 nswUrl <- glue(
   "https://www.health.nsw.gov.au/news/Pages/{str_remove_all(Sys.Date(), '-')}_00.aspx"
 )
@@ -1535,7 +1537,7 @@ if (url.exists(nswUrl)){
 ```
 
 ```{r qldTests}
-qldTests <- NA
+qldTests <- NA_real_
 qldUrl <- glue(
   "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing"
 )
@@ -1555,7 +1557,7 @@ if (url.exists(qldUrl)){
 ```
 
 ```{r vicTests}
-vicTests <- NA
+vicTests <- NA_real_
 vicUrl <- glue(
   "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(Sys.Date(), '%d-%B-%Y')}"
 ) %>%
@@ -1579,7 +1581,7 @@ if (url.exists(vicUrl)){
 ```
 
 ```{r waTests}
-waTests <- NA
+waTests <- NA_real_
 waUrl <- glue(
   "https://ww2.health.wa.gov.au/Media-releases/2020/COVID19-update-{format(Sys.Date(), '%d-%B-%Y')}"
 )
@@ -1607,9 +1609,9 @@ if (url.exists(waUrl)){
 ```
 
 ```{r saTests}
-saTests <- NA
+saTests <- NA_real_
 saUrl <- glue(
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{format(Sys.Date(), '%d+%B+%Y')}"
+  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{format(Sys.Date(), '%d+%B++%Y')}"
   ) %>%
   str_to_lower()
 if (url.exists(saUrl)) {
@@ -1632,7 +1634,7 @@ if (url.exists(saUrl)) {
 ```
 
 ```{r actTests}
-actTests <- NA
+actTests <- NA_real_
 actUrl <- "https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19"
 if (url.exists(actUrl)){
   actTests <- actUrl %>%
@@ -1654,7 +1656,7 @@ if (url.exists(actUrl)){
 ```
 
 ```{r tasTests}
-tasTests <- NA
+tasTests <- NA_real_
 tasUrl <- glue(
   "https://www.dhhs.tas.gov.au/news/2020/coronavirus_update_{format(Sys.Date(), '%d_%B_%Y')}"
 ) %>%
