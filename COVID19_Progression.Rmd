@@ -75,6 +75,20 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
 
 ```{r govTable}
 govUrl <- "https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers"
+govDate <- govUrl %>%
+   read_html() %>%
+   html_nodes("body") %>%
+   xml_find_all("//p[contains(@class, 'au-callout')]") %>%
+  html_text() %>%
+  .[[1]] %>% 
+  str_split("\n") %>%
+  .[[1]] %>% 
+  str_trim() %>% 
+  .[. != ""] %>% 
+  str_replace_all(".+ ([0-9]+) (March|April) (2020).+", "\\3-\\2-\\1") %>% 
+  str_replace_all("March", "03") %>%
+  str_replace_all("April", "04") %>%
+  ymd()
 govLines <- govUrl %>%
   read_html() %>%
   html_nodes("body") %>%
@@ -107,7 +121,7 @@ govTable <- govLines %>%
   ) %>%
   mutate(
     confirmed = str_remove_all(confirmed, ",") %>% as.numeric(),
-    date = ymd(Sys.Date()),
+    date = govDate,
     Country = "Australia"
   )
 ```
@@ -136,7 +150,7 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
   ) %>%
   dplyr::select(
     `Province/State`, Country, date, 
-    confirmed, deaths, tested
+    confirmed, deaths
   ) %>%
   bind_rows(govTable) %>% 
   # dplyr::filter(date > prevDateAU) %>%
@@ -145,11 +159,9 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
     Country = unique(Country),
     date = max(date),
     confirmed = max(confirmed), 
-    deaths = max(deaths, na.rm = TRUE),
-    tested = max(tested, na.rm = TRUE)
+    deaths = max(deaths, na.rm = TRUE)
   ) %>% 
   mutate(
-    tested = ifelse(is.finite(tested), tested, NA),
     deaths = ifelse(is.finite(deaths), deaths, NA)
   )
 # Update the AU records if there are any timepoints
@@ -170,57 +182,67 @@ if (updateAU) {
 }
 ```
 
-```{r recovered}
-recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/master/countryReport/raw/rawReport.csv") %>%
+```{r recovered, echo=FALSE, eval=FALSE}
+# recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/master/countryReport/raw/rawReport.csv") %>%
+#   read_csv() %>%
+#   rename(
+#     date = day,
+#     Country = countryName
+#   ) %>%
+#   mutate(
+#     Country = str_replace_all(Country, "United States", "US")
+#   ) %>%
+#   dplyr::select(
+#     Country, Lat = lat, Long = lon, date,
+#     recovered 
+#   )
+# if (updateAU){
+#   recovered %<>%
+#     bind_rows(
+#       latestAU %>% 
+#         distinct(Country, date)
+#     ) %>%
+#     arrange(Country, date) %>%
+#     mutate(recovered = zoo::na.locf(recovered)) 
+# }
+```
+
+
+```{r jhuRecovered}
+recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv") %>%
   read_csv() %>%
-  rename(
-    date = day,
-    Country = countryName
-  ) %>%
+  pivot_longer(
+    cols = ends_with("20"),
+    names_to = "date",
+    values_to = "recovered"
+  )  %>%
   mutate(
-    Country = str_replace_all(Country, "United States", "US")
+    date = str_replace_all(
+      date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
+    ) %>%
+      ymd()
   ) %>%
-  dplyr::select(
-    Country, Lat = lat, Long = lon, date,
-    recovered 
+  dplyr::rename(
+    Country = `Country/Region`
+  ) %>%
+  dplyr::mutate(
+    Country = case_when(
+      `Province/State` == "Hubei" ~ "China (Hubei)",
+      `Province/State` == "Hong Kong" ~ "Hong Kong",
+      grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
+      grepl("Korea, South", Country) ~ "South Korea",
+      !grepl("China", Country) ~ Country
+    )
   )
 if (updateAU){
   recovered %<>%
     bind_rows(
-      latestAU %>% 
-        distinct(Country, date)
+      latestAU %>%
+        dplyr::select(any_of(colnames(recovered)))
     ) %>%
-    arrange(Country, date) %>%
-    mutate(recovered = zoo::na.locf(recovered)) 
+    arrange(`Province/State`, date) %>%
+    mutate(recovered = zoo::na.locf(recovered))
 }
-```
-
-
-```{r oldRecovered, echo=FALSE, eval=FALSE}
-# recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_19-covid-Recovered.csv") %>%
-#   read_csv() %>%
-#   pivot_longer(
-#     cols = ends_with("20"),
-#     names_to = "date",
-#     values_to = "recovered"
-#   )  %>%
-#   mutate(
-#     date = str_replace_all(
-#       date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
-#     ) %>%
-#       ymd()
-#   ) %>%
-#   dplyr::rename(
-#     Country = `Country/Region`
-#   ) %>%
-#   dplyr::mutate(
-#     Country = case_when(
-#       `Province/State` == "Hubei" ~ "China (Hubei)",
-#       `Province/State` == "Hong Kong" ~ "Hong Kong",
-#       grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
-#       !grepl("China", Country) ~ Country
-#     )
-#   )
 ```
 
 
@@ -317,11 +339,8 @@ pops <- tribble(
 ```
 
 
-Data for confirmed cases and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
+Data for confirmed cases, recoveries and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
 JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
-
-Data for recoveries was sourced from https://github.com/ulklc/covid19-timeseries as JHU no longer support this statistic, given concerns regarding reliable figures.
-This data is not provided by State/Province and any information using these figures cannot be broken down by region, which is of particular note for China and Hubei Province.
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/ and those at [www.health.gov.au](`r govUrl`).
@@ -349,9 +368,7 @@ minPop <- 5e6
 
 
 For this section, all data is presented *relative to population size*.
-Data is only shown for countries with a population larger than `r comma(minPop)`.
-This excludes countries such as `r pander(dplyr::filter(pops, Population < minPop)$Country)`.
-In addition, growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
+Growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
 This equates to about `r round(startingPoint*dplyr::filter(pops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
 
 ## Table of Most Impacted Countries
@@ -389,7 +406,7 @@ confirmed %>%
         NULL, NULL, NULL,
         list(
           search = glue(
-            '{as.integer(minPop)} ... {max(pops$Population)}'
+            '{as.integer(minPop) + 1L} ... {max(pops$Population)}'
           )
         ),
         NULL
@@ -400,7 +417,7 @@ confirmed %>%
     rownames = FALSE,
     caption = paste(
       "The most impacted countries studied here and shown as a proportion of total population.",
-      "The intial filter is set so that only countries with a population greater than", comma(minPop), "are shown.",
+      "The initial filter is set so that only countries with a population greater than", comma(minPop), "are shown.",
       "The final column provides the latest confirmed infection rate as cumulative cases per million people.",
       "No adjustment has been made for patients who have recovered or passed away.",
       "Whilst the virus spreads with no regard to population size, the rate as shown here indicates the degree of stress which each country's health-care system is likely to be experiencing.",
@@ -575,46 +592,41 @@ In the above plot:
 - Only countries are shown where the infection rate has surpassed `r startingPoint` cases/million for more than `r minDays` days.
 This choice seemed to be a useful way of enabling the comparison of COVID-19 progression across countries after scaling for population size
 - Only South Korea,and China appear to have brought the virus under some level of control. The infection rate currently sits around `r confirmed %>% dplyr::filter(Country == "South Korea") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for South Korea and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for Hubei Province. This can also be thought of as `r confirmed %>% dplyr::filter(Country == "South Korea") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% left_join(pops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` of the total populations respectively. Note that despite these apparently low percentages, the actual numbers of deaths and hospitalisations are extremely non-trivial and the real impacts of these numbers cannot be treated lightly.
-- Japan and UAE's early measures also appear to be highly effective, however the recent growth in infections within Singapore and Hong Kong should serve as a caution
-- Some of the above countries (e.g. Iran) appear to be in the early stages of levelling out, indicating that either the initial exponential growth phase may be ending in these countries, or under-reporting has become rife
-- Other countries such as Italy, Switzerland, the Unites States and the UK are clearly still in an exponential growth phase.
+- Japan's early measures also appear to be highly effective, however the recent growth in infections within Singapore and Hong Kong should serve as a caution
 - US numbers may also be unreliable given the low rates of testing and numerous anecdotal stories of suspected infections
 
 ## Currently Active Infection Rates
 
-As an alternative viewpoint, the numbers of recovered and deceased patients have been removed from the above plot to provide an estimate of the **currently active infections**.
-Given the changes made to JHU data for recovered cases (made on 23-03-2020), data for China is no longer able to be separated into Hubei Province and the remainder of China, and is presented as one set of data for this plot.
+As an alternative viewpoint, the numbers of recovered and deceased patients have been removed from the numbers of confirmed infections plot to provide an estimate of the **currently active infections**.
 
 
 ```{r p2}
 p2 <- confirmed %>%
+  dplyr::filter(
+    confirmed > 0,
+    Country != "China (Other)"
+  ) %>%
   left_join(deaths) %>%
+  group_by(Country, date) %>%
+  summarise_at(
+    vars(confirmed, deaths), sum
+  ) %>%
+  left_join(
+    recovered %>%
+      group_by(Country, date) %>%
+      summarise_at(vars(recovered), sum)
+  ) %>%
   mutate(
-    Country = str_replace_all(Country, "China.+", "China")
-    ) %>%
+    active = confirmed - deaths - recovered
+  ) %>%
+  dplyr::filter(!is.na(active)) %>%
   right_join(
     pops %>%
-      mutate(
-        Country = str_replace_all(Country, "China.+", "China")
-      ) %>%
-      group_by(Country) %>%
-      summarise_at(vars(Population), sum) %>%
       dplyr::filter(Population > minPop)
   ) %>%
-  group_by(Country, date, Population) %>%
-  summarise_at(vars(confirmed, deaths), sum) %>%
-  left_join(recovered ) %>% 
-  mutate(
-    active = confirmed - recovered - deaths
-  ) %>%
-  dplyr::filter(
-    !is.na(active), confirmed > 0
-  ) %>%
   mutate(rate = 1e6 * active / Population) %>%
-  dplyr::filter(
-    rate > startingPoint
-  ) %>%
-  group_by(Country) %>%
+  dplyr::filter(rate > startingPoint) %>%
+    group_by(Country) %>%
   mutate(
     days = date - min(date)
   ) %>%
@@ -641,7 +653,7 @@ p2 <- confirmed %>%
     data = tibble(
       x = 0,
       y = startingPoint,
-      xmax = c(20.5, 41, nDays),
+      xmax = c(21, 42, nDays),
       ymax = startingPoint + 2^(xmax/ c(2, 4, 8))
     ),
     inherit.aes = FALSE,
@@ -651,7 +663,7 @@ p2 <- confirmed %>%
   geom_text(
         aes(xmax, ymax, label = label),
     data = tibble(
-      xmax = c(20.5, 41, nDays),
+      xmax = c(21, 42, nDays),
       rate = c(2, 4, 8),
       ymax = 2^(xmax/ rate),
       label = glue("Double in\n {rate} days")
@@ -801,7 +813,7 @@ cp3 <- glue(
 ```
 
 
-```{r plotPCA, fig.cap = cp3, fig.width=6, fig.height=5}
+```{r plotPCA, fig.cap = cp3, fig.width=6, fig.height=6}
 set.seed(101)
 pca$x %>%
   as.data.frame() %>%
@@ -855,27 +867,14 @@ fr <- confirmed %>%
   ungroup() %>%
   summarise(fr = sum(deaths) / sum(confirmed)) %>%
   .[["fr"]]
-rr <- confirmed %>%
-  mutate(
-    Country = str_replace_all(
-      Country, "China.+", "China"
-    )
-  ) %>%
-  right_join(
-    pops %>%
-      mutate(
-        Country = str_replace_all(
-          Country, "China.+", "China"
-        )
-      ) %>%
-      group_by(Country) %>%
-      summarise_at(vars(Population), sum)
-  ) %>%
-  group_by(Country, Population, date) %>%
+rr <-confirmed %>%
+  group_by(Country, date) %>%
   summarise_at(vars(confirmed), sum) %>%
-  left_join(recovered) %>%
-  dplyr::filter(!is.na(recovered)) %>%
-  group_by(Country) %>%
+  left_join(
+    recovered %>% 
+      group_by(Country, date) %>%
+      summarise_at(vars(recovered), sum)
+  ) %>%
   dplyr::filter(date == max(date)) %>%
   ungroup() %>%
   summarise(rr = sum(recovered) / sum(confirmed)) %>%
@@ -894,26 +893,25 @@ Given the level of under-reporting this may also be highly inaccurate.
 
 ```{r p4}
 p4 <- confirmed %>%
-  left_join(deaths) %>%
-  mutate(
-    Country = str_replace_all(Country, "China.+", "China")
+  dplyr::filter(
+    confirmed > 0
   ) %>%
+  left_join(deaths) %>%
   group_by(Country, date) %>%
   summarise_at(vars(confirmed, deaths), sum) %>%
-  dplyr::filter(date == max(date)) %>%
-  right_join(
-    pops %>%
-      mutate(
-        Country = str_replace_all(Country, "China.+", "China")
-      ) %>%
-      group_by(Country) %>%
-      summarise_at(vars(Population), sum) 
-    ) %>%
-  dplyr::filter(
-    1e6*confirmed / Population > startingPoint,
-  ) %>%   
+  left_join(
+    recovered %>%
+      group_by(Country, date) %>%
+      summarise_at(vars(recovered), sum)
+  ) %>%
   ungroup() %>%
-  left_join(recovered) %>%
+  right_join(pops) %>% 
+  mutate(rate = 1e6 * confirmed / Population) %>%
+  dplyr::filter(rate > startingPoint) %>% 
+  arrange(date)%>% 
+  mutate(Country = fct_inorder(Country)) %>%
+  group_by(Country) %>%
+  dplyr::filter(date == max(date)) %>%
   mutate(
     active = confirmed - recovered - deaths
   ) %>%
@@ -923,8 +921,6 @@ p4 <- confirmed %>%
     fatalities = 100*deaths / confirmed
   ) %>%
   dplyr::filter(active < 100) %>%
-  arrange(desc(confirmed)) %>%
-  mutate(Country = fct_inorder(Country)) %>%
   pivot_longer(
     cols = c(active, recovered, fatalities),
     names_to = "Status",
@@ -962,7 +958,7 @@ p4 <- confirmed %>%
   )
 ```
 
-```{r plotP4, fig.height=7, fig.cap = glue("*Fatality, Recovery and Active Infection rates for countries which have exceeded {startingPoint} confirmed cases / million. Countries are shown in order of the number of confirmed cases.*")}
+```{r plotP4, fig.height=7, fig.cap = glue("*Fatality, Recovery and Active Infection rates for countries which have exceeded {startingPoint} confirmed cases / million. Countries are shown in order of the date they passed {startingPoint} confirmed cases / million*")}
 ggplotly(p4)
 ```
 
@@ -1092,7 +1088,11 @@ df <- confirmed %>%
   ) %>%
   group_by(Country, date) %>%
   summarise_at(vars(confirmed, deaths), sum) %>%
-  left_join(recovered) %>%
+  left_join(
+    recovered %>%
+      group_by(Country, date) %>%
+      summarise_at(vars(recovered), sum)
+  ) %>%
   group_by(Country, date) %>%
   summarise_at(
     vars(confirmed, recovered, deaths),
@@ -1247,7 +1247,7 @@ cpDeath <- glue(
 ```
 
 
-```{r plotDeath, fig.cap=cpDeath}
+```{r plotDeath, fig.cap=cpDeath, fig.width=9, fig.height=7}
 ggplotly(deathPlot)
 ```
 
@@ -1773,16 +1773,6 @@ All results are valid at the time of report generation.
 ```{r propTest}
 tested %>%
   left_join(
-    latestAU, 
-    by = c("State"  = "Province/State")
-    ) %>% 
-  rowwise() %>% 
-  mutate(
-    Tested = max(Tested, tested, na.rm = TRUE)
-    ) %>% 
-  ungroup() %>% 
-  dplyr::select(State, Tested) %>%
-  left_join(
     confirmed %>%
       dplyr::filter(
         date == max(date)
@@ -1805,19 +1795,33 @@ tested %>%
     ends_with("ive")
   ) %>%
   arrange(desc(`Percent Tested`)) %>%
+  bind_rows(
+    tibble(
+      State = "Total",
+      Population = sum(.$Population),
+      Confirmed = sum(.$Confirmed),
+      `Total Tested` = sum(.$`Total Tested`)
+    ) %>%
+      mutate(
+        `Percent Tested` = `Total Tested` / Population,
+        Positive = Confirmed / `Total Tested`,
+        Negative = 1 - Positive
+      )
+  ) %>%
   datatable(
     class = "stripe",
     rownames = FALSE,
     options = list(
       dom = "t",
-      pageLength = 7, 
+      pageLength = nrow(.), 
       autoWidth = TRUE,
       lengthChange = FALSE
     ),
     caption = glue(
       "COVID-19 testing scaled by state population size.
       Confirmed cases are assumed to be the tests returning a positive result.
-      The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result."
+      The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result.
+      As no testing results have yet been released by the NT Health department, figures for this Territory have been excluded."
     )
   ) %>%
   formatCurrency(
