@@ -337,7 +337,7 @@ Similarly, reporting in many countries may have features that cause concerns reg
 
 # International Data {.tabset}
 
-```{r setThreshols}
+```{r setThresholds}
 startingPoint <- 4
 minPop <- 5e6
 ```
@@ -1309,6 +1309,7 @@ p5 <- confirmed %>%
   dplyr::rename(
     Confirmed = confirmed
   ) %>%
+  distinct(State, Confirmed, .keep_all = TRUE) %>%
   ggplot(
     aes(
       x = date, y = Rate, colour = State, 
@@ -1392,6 +1393,8 @@ lm <- confirmed %>%
   dplyr::rename(
     Confirmed = confirmed
   ) %>%
+  arrange(State, Date) %>%
+  distinct(State, Confirmed, .keep_all = TRUE) %>%
   with(
     lm(log10(Rate) ~ (State + date)^2)
   ) 
