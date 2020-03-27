@@ -3,10 +3,10 @@ title: "COVID-19 Progression"
 date: "`r paste('Last Updated:', format(Sys.time(), '%d-%B-%Y %H:%M'), '(UTC+10:30)')`"
 output: 
   html_document: 
+    code_folding: hide
     toc: yes
     toc_depth: 2
-    toc_float: true
-    code_folding: hide
+    toc_float: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -30,6 +30,7 @@ library(jsonlite)
 library(rvest)
 library(RCurl)
 library(pander)
+library(DT)
 library(plotly)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
@@ -79,29 +80,33 @@ govLines <- govUrl %>%
   html_nodes("body") %>%
   xml_find_all("//div[contains(@class, 'health-table')]") %>% 
   html_text() 
-govTable <- c(
-  "Queensland",
-  "Australian Capital Territory",
-  "New South Wales",
-  "Victoria",
-  "Tasmania",
-  "South Australia",
-  "Western Australia",
-  "Northern Territory"
+govTable <- govLines %>% 
+  str_split("\n") %>% 
+  .[[1]] %>% 
+  str_trim() %>% 
+  .[. != ""] %>% 
+  matrix(ncol = 2, byrow = TRUE) %>%
+  set_colnames(.[1,]) %>% 
+  .[-1,] %>% 
+  as_tibble() %>%
+  dplyr::filter(
+    Location %in% c(
+      "Queensland",
+      "Australian Capital Territory",
+      "New South Wales",
+      "Victoria",
+      "Tasmania",
+      "South Australia",
+      "Western Australia",
+      "Northern Territory"
+    )
+  ) %>% 
+  rename(
+    `Province/State` = Location, 
+    confirmed = `Confirmed cases*`
   ) %>%
-  vapply(function(x){
-    str_replace_all(govLines, "(\\\n)+", "_") %>%
-      str_extract(paste(x, "[0-9,]+", sep = "_")) %>%
-      str_remove(",") %>%
-      str_remove(".+_")
-  },
-  character(1)) %>%
-  enframe(
-    name = "Province/State", value = "confirmed"
-  ) %>%
-  mutate(confirmed = as.integer(confirmed)) %>%
-  dplyr::filter(!is.na(confirmed)) %>%
   mutate(
+    confirmed = str_remove_all(confirmed, ",") %>% as.numeric(),
     date = ymd(Sys.Date()),
     Country = "Australia"
   )
@@ -365,40 +370,67 @@ confirmed %>%
   ) %>%
   ungroup() %>%
   right_join(pops) %>%
-  dplyr::filter(
-    Population > minPop
-  ) %>%
   mutate(
-    rate = 1e6*confirmed / Population
+    rate = 1e6*confirmed / Population,
+    rate = round(rate, 1),
+    Population = round(Population, -3) %>% as.integer()
   ) %>%
   arrange(desc(rate)) %>%
-  dplyr::slice(1:25) %>%
-  mutate(
-    rate = sprintf("%.1f", rate),
-    Population = comma(Population)
-  ) %>%
   rename_at(vars(everything()), str_to_title) %>%
   dplyr::select(
     Country, Date, Confirmed, Population, Rate
   ) %>%
   rename(`Rate (Cases per Million)` = Rate) %>%
-  pander(
-    justify = "lrrrr",
+  datatable(
+    options = list(
+      pageLength = 25, 
+      autoWidth = TRUE,
+      searchCols = list(
+        NULL, NULL, NULL,
+        list(
+          search = glue(
+            '{as.integer(minPop)} ... {max(pops$Population)}'
+          )
+        ),
+        NULL
+      )
+    ),
+    filter = 'top',
+    class = "stripe",
+    rownames = FALSE,
     caption = paste(
-      "The", nrow(.), "most impacted countries studied here and shown as a proportion of total population.",
-      "Only countries with a population greater than",
-      comma(minPop), "are shown.",
-      "The final column provides the latest confirmed infection rate as cases per million people.",
-      "Whilst the virus spreads with no regard to population size, the rate as shown here indicates the __degree of stress which each country's health-care system is likely to be experiencing__.",
+      "The most impacted countries studied here and shown as a proportion of total population.",
+      "The intial filter is set so that only countries with a population greater than", comma(minPop), "are shown.",
+      "The final column provides the latest confirmed infection rate as cumulative cases per million people.",
+      "No adjustment has been made for patients who have recovered or passed away.",
+      "Whilst the virus spreads with no regard to population size, the rate as shown here indicates the degree of stress which each country's health-care system is likely to be experiencing.",
       "Several countries shown here have not attracted much media attention due lower case numbers than China and Italy, but are likely to be experiencing significant duress."
     )
+  ) %>%
+  formatCurrency(
+    columns = c("Confirmed", "Population"),
+    currency = "", 
+    digits = 0,
+    mark = ","
+  ) %>%
+  formatRound(
+    columns = "Rate (Cases per Million)",
+    digits = 1
   )
 ```
 
 ## Cumulative Incidence Rates
 
 ```{r nDays}
-minDays <- 5
+ausDays <- confirmed %>% 
+  dplyr::filter(Country == "Australia") %>%
+  group_by(Country, date) %>%
+  summarise_at(vars(confirmed), sum) %>%
+  left_join(pops) %>%
+  mutate(rate = 1e6 * confirmed / Population) %>%
+  dplyr::filter(rate > startingPoint) %>%
+  nrow()
+minDays <- ausDays - 5
 # Use Singapore as that has the longest dataset besides Hubei
 nDays <- confirmed %>%
   dplyr::filter(Country == "Singapore") %>% 
@@ -861,7 +893,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 
 
 ```{r p4}
-p4 <-confirmed %>%
+p4 <- confirmed %>%
   left_join(deaths) %>%
   mutate(
     Country = str_replace_all(Country, "China.+", "China")
@@ -1052,7 +1084,7 @@ ggplotly(
 ## Recoveries Vs Fatalities Vs Time
 
 ```{r p6}
-minDays <- 9
+minDays <- ausDays - 5
 df <- confirmed %>%
   left_join(deaths) %>%
   mutate(
@@ -1190,6 +1222,8 @@ deathPlot <- confirmed %>%
   ) %>%
   ungroup() %>%
   rename_all(str_to_title) %>%
+  arrange(desc(Days)) %>%
+  mutate(Country = fct_inorder(Country)) %>%
   ggplot(
     aes(
       x = Days, y = Deaths, colour = Country,
@@ -1220,6 +1254,20 @@ ggplotly(deathPlot)
 
 # Australian Specific Data {.tabset}
 
+```{r ausPops}
+ausPops <- tribble(
+  ~State, ~Population,
+  "New South Wales", 	8117976,
+  "Victoria", 6629870,
+   "Queensland", 5115451,
+  "South Australia", 1756494,
+  "Western Australia", 2630557,
+  "Tasmania", 535500,
+  "Northern Territory", 245562,
+  "Australian Capital Territory", 428060
+)
+```
+
 Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
 The difference with previous estimates used above was within 0.04%, and as such no adjustments were made.
 
@@ -1240,11 +1288,16 @@ confirmed %>%
   dplyr::filter(
     Country == "Australia", 
     date >= max(date) - 1
-    ) %>% 
+  ) %>% 
+  bind_rows(
+    group_by(., date) %>%
+      summarise_at(vars(confirmed), sum) %>%
+      mutate(`Province/State` = "Total")
+  ) %>% 
   group_by(`Province/State`) %>% 
   mutate(
     d = diff(confirmed) / min(confirmed)
-  ) %>% 
+  ) %>%
   pivot_wider(
     id_cols = "Province/State", 
     names_from = date, 
@@ -1258,32 +1311,24 @@ confirmed %>%
     str_replace(names(.), "d_.+", "%Increase")
   ) %>%
   arrange(desc(`%Increase`)) %>%
+  ungroup() %>%
+  mutate(tot = grepl("Total", `Province/State`)) %>%
+  arrange(tot, desc(`%Increase`)) %>%
+  dplyr::select(-tot) %>%
   mutate(`%Increase` = percent(`%Increase` + 1)) %>%
   pander(
     justify = "lrrr",
     caption = paste(
       "*Confirmed cases reported by each state at time of preparation.",
       "Any states with unchanged, or decreasing values may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
-    )
+    ),
+    emphasize.strong.rows = nrow(.)
   )
 ```
 
 
 ## State-wise Comparison of Confirmed Infection Rates
 
-```{r ausPops}
-ausPops <- tribble(
-  ~State, ~Population,
-  "New South Wales", 	8117976,
-  "Victoria", 6629870,
-   "Queensland", 5115451,
-  "South Australia", 1756494,
-  "Western Australia", 2630557,
-  "Tasmania", 535500,
-  "Northern Territory", 245562,
-  "Australian Capital Territory", 428060
-)
-```
 
 ```{r p5}
 minRate <- 4
@@ -1760,18 +1805,30 @@ tested %>%
     ends_with("ive")
   ) %>%
   arrange(desc(`Percent Tested`)) %>%
-  mutate_at(
-    vars(contains("Percent"), ends_with("ive")),
-    percent,
-    accuracy = 0.01
-  ) %>%
-  pander(
-    justify = "lrrrrrr",
+  datatable(
+    class = "stripe",
+    rownames = FALSE,
+    options = list(
+      dom = "t",
+      pageLength = 7, 
+      autoWidth = TRUE,
+      lengthChange = FALSE
+    ),
     caption = glue(
-      "*COVID-19 testing scaled by state population size.
+      "COVID-19 testing scaled by state population size.
       Confirmed cases are assumed to be the tests returning a positive result.
-      The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result.*"
+      The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result."
     )
+  ) %>%
+  formatCurrency(
+    columns = c("Population", "Confirmed", "Total Tested"),
+    currency = "",
+    digits = 0,
+    mark = ","
+  ) %>%
+  formatPercentage(
+    columns = c("Percent Tested", "Positive", "Negative"),
+    digits = 2
   )
 ```
 
