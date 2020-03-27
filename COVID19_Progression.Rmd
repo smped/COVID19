@@ -72,7 +72,7 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
     ) 
 ```
 
-```{r govData}
+```{r govTable}
 govUrl <- "https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers"
 govLines <- govUrl %>%
   read_html() %>%
@@ -134,7 +134,7 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
     confirmed, deaths, tested
   ) %>%
   bind_rows(govTable) %>% 
-  dplyr::filter(date > prevDateAU) %>%
+  # dplyr::filter(date > prevDateAU) %>%
   group_by(`Province/State`) %>% 
   summarise(
     Country = unique(Country),
@@ -155,8 +155,12 @@ if (updateAU) {
     bind_rows(
       dplyr::select(latestAU, any_of(colnames(.)))
     )
-  n <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
-    dplyr::filter(date_updated == max(date_updated), state != "AU") %>% 
+  n <- confirmed %>%
+    dplyr::filter(Country == "Australia", date == prevDateAU) %>%
+    bind_rows(latestAU) %>% 
+    group_by(`Province/State`) %>% 
+    summarise(n = length(unique(confirmed))) %>% 
+    dplyr::filter(n > 1) %>%
     nrow()
 }
 ```
@@ -335,12 +339,13 @@ Similarly, reporting in many countries may have features that cause concerns reg
 
 ```{r setThreshols}
 startingPoint <- 4
-minPop <- 4e6
+minPop <- 5e6
 ```
 
 
 For this section, all data is presented *relative to population size*.
 Data is only shown for countries with a population larger than `r comma(minPop)`.
+This excludes countries such as `r pander(dplyr::filter(pops, Population < minPop)$Country)`.
 In addition, growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
 This equates to about `r round(startingPoint*dplyr::filter(pops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
 
@@ -771,6 +776,9 @@ pca$x %>%
   rownames_to_column("Country") %>%
   mutate(
     Cluster = cbind(PC1, PC2) %>%
+      apply(2, function(x){
+        (x - mean(x)) / sd(x)
+      }) %>%
       kmeans(centers = k, nstart = 10) %>%
       .[["cluster"]] %>%
       as.factor()
@@ -1250,11 +1258,12 @@ confirmed %>%
     str_replace(names(.), "d_.+", "%Increase")
   ) %>%
   arrange(desc(`%Increase`)) %>%
+  mutate(`%Increase` = percent(`%Increase` + 1)) %>%
   pander(
     justify = "lrrr",
     caption = paste(
       "*Confirmed cases reported by each state at time of preparation.",
-      "Any states with unchanged values may indicate issues with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
+      "Any states with unchanged, or decreasing values may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
     )
   )
 ```
