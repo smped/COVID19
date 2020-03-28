@@ -286,6 +286,7 @@ hb <- 59170000
 hk <- 7479307
 pops <- tribble(
     ~Country, ~Population, 
+    "Argentina", 45086325,
     "Australia", 25499884,
     "Austria", 9006398, 
     "Belgium", 11575214, 
@@ -317,6 +318,9 @@ pops <- tribble(
     "New Zealand", 4811065, 
     "Norway", 5408930, 
     "Pakistan",  219629013, 
+    "Panama", 4296582,
+    "Peru", 32849371,
+    "Philippines", 109192665,
     "Poland", 37858096, 
     "Portugal", 10196709, 
     "Qatar", 2866531, 
@@ -325,6 +329,7 @@ pops <- tribble(
     "Saudi Arabia", 34661353 , 
     "Singapore", 5836728, 
     "Slovenia", 2078860, 
+    "South Africa", 59109858,
     "South Korea", 51269185, 
     "Spain", 46754778, 
     "Sweden", 10081035, 
@@ -418,6 +423,7 @@ confirmed %>%
     caption = paste(
       "The most impacted countries studied here and shown as a proportion of total population.",
       "The initial filter is set so that only countries with a population greater than", comma(minPop), "are shown.",
+      "Populations have been rounded to the nearest thousand to make reading values easier.",
       "The final column provides the latest confirmed infection rate as cumulative cases per million people.",
       "No adjustment has been made for patients who have recovered or passed away.",
       "Whilst the virus spreads with no regard to population size, the rate as shown here indicates the degree of stress which each country's health-care system is likely to be experiencing.",
@@ -1083,9 +1089,9 @@ ggplotly(
 minDays <- ausDays - 5
 df <- confirmed %>%
   left_join(deaths) %>%
-  mutate(
-    Country = str_replace_all(Country, "China.+", "China")
-  ) %>%
+  # mutate(
+  #   Country = str_replace_all(Country, "China.+", "China")
+  # ) %>%
   group_by(Country, date) %>%
   summarise_at(vars(confirmed, deaths), sum) %>%
   left_join(
@@ -1308,14 +1314,15 @@ confirmed %>%
     ) %>% 
   dplyr::select(seq_len(ncol(.) - 1)) %>%
   set_names(
-    str_replace(names(.), "d_.+", "%Increase")
+    str_replace(names(.), "d_.+", "Increase")
   ) %>%
-  arrange(desc(`%Increase`)) %>%
+  arrange(desc(Increase)) %>%
   ungroup() %>%
   mutate(tot = grepl("Total", `Province/State`)) %>%
-  arrange(tot, desc(`%Increase`)) %>%
+  arrange(tot, desc(Increase)) %>%
   dplyr::select(-tot) %>%
-  mutate(`%Increase` = percent(`%Increase` + 1)) %>%
+  mutate(Increase = percent(Increase, accuracy = 0.1)) %>%
+  rename(`Daily Increase` = Increase) %>%
   pander(
     justify = "lrrr",
     caption = paste(
@@ -1772,7 +1779,7 @@ All results are valid at the time of report generation.
 
 ```{r propTest}
 tested %>%
-  left_join(
+  full_join(
     confirmed %>%
       dplyr::filter(
         date == max(date)
@@ -1782,58 +1789,82 @@ tested %>%
       )
   ) %>%
   left_join(ausPops) %>%
+  bind_rows(
+    tibble(
+      State = "Total",
+      Population = sum(.$Population, na.rm = TRUE),
+      confirmed = sum(.$confirmed, na.rm = TRUE),
+      Tested = sum(.$Tested, na.rm = TRUE)
+    )
+  ) %>%
   mutate(
     `Percent Tested` = Tested / Population,
     Positive = confirmed / Tested,
-    Negative = 1 - Positive
+    Negative = 1 - Positive,
+    isTotal = grepl("Total", State)
   ) %>%
   dplyr::select(
     State, Population,
     Confirmed = confirmed,
-    `Total Tested` = Tested, 
+    Tested, 
     contains("Percent"), 
-    ends_with("ive")
+    ends_with("ive"),
+    isTotal
   ) %>%
-  arrange(desc(`Percent Tested`)) %>%
-  bind_rows(
-    tibble(
-      State = "Total",
-      Population = sum(.$Population),
-      Confirmed = sum(.$Confirmed),
-      `Total Tested` = sum(.$`Total Tested`)
-    ) %>%
-      mutate(
-        `Percent Tested` = `Total Tested` / Population,
-        Positive = Confirmed / `Total Tested`,
-        Negative = 1 - Positive
-      )
+  arrange(isTotal, desc(`Percent Tested`)) %>%
+  dplyr::select(-isTotal) %>%
+  dplyr::rename(
+    `% Tested` = `Percent Tested`,
+    `% Positive Tests` = Positive,
+    `% Negative Tests` = Negative
   ) %>%
-  datatable(
-    class = "stripe",
-    rownames = FALSE,
-    options = list(
-      dom = "t",
-      pageLength = nrow(.), 
-      autoWidth = TRUE,
-      lengthChange = FALSE
-    ),
+  mutate_at(
+    vars(starts_with("%")), percent, accuracy = 0.01
+  ) %>%
+  pander(
+    justify = "lrrrrrr",
+    missing = "",
     caption = glue(
-      "COVID-19 testing scaled by state population size.
+      "*COVID-19 testing scaled by state population size.
       Confirmed cases are assumed to be the tests returning a positive result.
       The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result.
-      As no testing results have yet been released by the NT Health department, figures for this Territory have been excluded."
-    )
-  ) %>%
-  formatCurrency(
-    columns = c("Population", "Confirmed", "Total Tested"),
-    currency = "",
-    digits = 0,
-    mark = ","
-  ) %>%
-  formatPercentage(
-    columns = c("Percent Tested", "Positive", "Negative"),
-    digits = 2
+      No testing statistics have yet been released by the NT Health department.*"
+    ),
+    emphasize.strong.rows = nrow(.)
   )
+```
+
+## Australian Fatalities
+
+```{r ausDeathPlot}
+ausDeathPlot <- ggplotly(
+  deaths %>%
+    dplyr::filter(Country == "Australia", deaths > 0) %>%
+    group_by(date) %>%
+    summarise_at(vars(deaths), sum) %>%
+    mutate(
+      isValid  = c(TRUE, deaths[-1] >= deaths[-nrow(.)]),
+      deaths = case_when(
+        !isValid ~ NA_real_,
+        isValid ~ deaths
+      ),
+      deaths = zoo::na.locf(deaths)
+    ) %>%
+    rename(
+      Date = date,
+      Fatalities = deaths
+    ) %>%
+    ggplot(aes(Date, Fatalities)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    scale_y_log10() +
+    labs(x = "Date", y = "Fatalities") 
+)
+```
+
+```{r, fig.cap="Cumulative fatalities wthin Australia"}
+ausDeathPlot$x$data[[2]]$hoverinfo <- "none"
+ausDeathPlot
 ```
 
 
