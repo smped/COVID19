@@ -394,15 +394,17 @@ confirmed %>%
   right_join(pops) %>%
   mutate(
     rate = 1e6*confirmed / Population,
-    rate = round(rate, 1),
-    Population = round(Population, -4) / 1e6
+    occurence = Population / confirmed,
+    Population = round(Population, -5) / 1e6
   ) %>%
+  dplyr::filter(rate >= 1) %>%
   arrange(desc(rate)) %>%
   rename_at(vars(everything()), str_to_title) %>%
   dplyr::select(
     Country, Date, Confirmed, 
     `Population (millions)` = Population, 
-    `Rate (Cases per Million)` = Rate
+    `Rate (Cases per Million)` = Rate,
+    Occurence
   ) %>%
   datatable(
     options = list(
@@ -425,7 +427,9 @@ confirmed %>%
       "The most impacted countries studied here and shown as a proportion of total population.",
       "The initial filter is set so that only countries with a population greater than", comma(minPop), "are shown.",
       "Populations have been rounded to the nearest thousand to make reading values easier.",
-      "The final column provides the latest confirmed infection rate as cumulative cases per million people.",
+      "Rate represent the latest confirmed infection rate as cumulative cases per million people, whilst Occurence represents the number of people expected before one case is found, assuming an even distribution amongst the population.",
+      "In other words, one in every 'Occurence' people within the population have been confirmed to have contracted COVID-19.",
+      "Occurence is inversely proportional to Rate.",
       "No adjustment has been made for patients who have recovered or passed away.",
       "Whilst the virus spreads with no regard to population size, the rate as shown here indicates the degree of stress which each country's health-care system is likely to be experiencing.",
       "Several countries shown here have not attracted much media attention due lower case numbers than China and Italy, but are likely to be experiencing significant duress."
@@ -434,18 +438,14 @@ confirmed %>%
   formatCurrency(
     columns = c("Population (millions)"),
     currency = "", 
-    digits = 2,
+    digits = 1,
     mark = ","
   ) %>%
   formatCurrency(
-    columns = c("Confirmed"),
+    columns = c("Confirmed", "Rate (Cases per Million)", "Occurence"),
     currency = "", 
     digits = 0,
     mark = ","
-  ) %>%
-  formatRound(
-    columns = "Rate (Cases per Million)",
-    digits = 1
   )
 ```
 
