@@ -612,6 +612,7 @@ This choice seemed to be a useful way of enabling the comparison of COVID-19 pro
 
 As an alternative viewpoint, the numbers of recovered and deceased patients have been removed from the numbers of confirmed infections plot to provide an estimate of the **currently active infections**.
 Importantly, information regarding recovered cases is likely to be *the least reliable of reported values* as many regions do not report updated numbers for several consecutive days.
+Additionally many regions do not report recovered cases as the **criteria for considering a person to have recovered as currently unclear**.
 
 
 ```{r p2}
