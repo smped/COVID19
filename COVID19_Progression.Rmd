@@ -395,14 +395,15 @@ confirmed %>%
   mutate(
     rate = 1e6*confirmed / Population,
     rate = round(rate, 1),
-    Population = round(Population, -3) %>% as.integer()
+    Population = round(Population, -4) / 1e6
   ) %>%
   arrange(desc(rate)) %>%
   rename_at(vars(everything()), str_to_title) %>%
   dplyr::select(
-    Country, Date, Confirmed, Population, Rate
+    Country, Date, Confirmed, 
+    `Population (millions)` = Population, 
+    `Rate (Cases per Million)` = Rate
   ) %>%
-  rename(`Rate (Cases per Million)` = Rate) %>%
   datatable(
     options = list(
       pageLength = 25, 
@@ -411,7 +412,7 @@ confirmed %>%
         NULL, NULL, NULL,
         list(
           search = glue(
-            '{as.integer(minPop) + 1L} ... {max(pops$Population)}'
+            '{minPop/1e6} ... {max(pops$Population/1e6)}'
           )
         ),
         NULL
@@ -431,7 +432,13 @@ confirmed %>%
     )
   ) %>%
   formatCurrency(
-    columns = c("Confirmed", "Population"),
+    columns = c("Population (millions)"),
+    currency = "", 
+    digits = 2,
+    mark = ","
+  ) %>%
+  formatCurrency(
+    columns = c("Confirmed"),
     currency = "", 
     digits = 0,
     mark = ","
@@ -604,6 +611,7 @@ This choice seemed to be a useful way of enabling the comparison of COVID-19 pro
 ## Currently Active Infection Rates
 
 As an alternative viewpoint, the numbers of recovered and deceased patients have been removed from the numbers of confirmed infections plot to provide an estimate of the **currently active infections**.
+Importantly, information regarding recovered cases is likely to be *the least reliable of reported values* as many regions do not report updated numbers for several consecutive days.
 
 
 ```{r p2}
@@ -1089,9 +1097,6 @@ ggplotly(
 minDays <- ausDays - 5
 df <- confirmed %>%
   left_join(deaths) %>%
-  # mutate(
-  #   Country = str_replace_all(Country, "China.+", "China")
-  # ) %>%
   group_by(Country, date) %>%
   summarise_at(vars(confirmed, deaths), sum) %>%
   left_join(
@@ -1106,12 +1111,7 @@ df <- confirmed %>%
   ) %>%
   ungroup() %>%
   right_join(
-    pops %>%
-      mutate(
-        Country = str_replace_all(Country, "China.+", "China")
-      ) %>%
-      group_by(Country) %>%
-      summarise_at(vars(Population), sum)
+    pops 
   ) %>%
   mutate(
     active = confirmed - deaths - recovered,
@@ -1302,29 +1302,33 @@ confirmed %>%
   ) %>% 
   group_by(`Province/State`) %>% 
   mutate(
-    d = diff(confirmed) / min(confirmed)
+    d = diff(confirmed),
+    p = diff(confirmed) / min(confirmed)
   ) %>%
   pivot_wider(
     id_cols = "Province/State", 
     names_from = date, 
-    values_from = c(confirmed, d)
-    ) %>% 
+    values_from = c(confirmed, d, p)
+  ) %>% 
   set_names(
     str_remove(names(.), "confirmed_")
-    ) %>% 
-  dplyr::select(seq_len(ncol(.) - 1)) %>%
-  set_names(
-    str_replace(names(.), "d_.+", "Increase")
   ) %>%
-  arrange(desc(Increase)) %>%
+  dplyr::select(1:4, 6) %>%
+  set_names(
+    str_replace(names(.), "d_.+", "Daily Change")
+  ) %>%
+  set_names(
+    str_replace(names(.), "p_.+", "Percent")
+  ) %>%
+  arrange(desc(Percent)) %>%
   ungroup() %>%
-  mutate(tot = grepl("Total", `Province/State`)) %>%
-  arrange(tot, desc(Increase)) %>%
-  dplyr::select(-tot) %>%
-  mutate(Increase = percent(Increase, accuracy = 0.1)) %>%
-  rename(`Daily Increase` = Increase) %>%
+  mutate(isTotal = grepl("Total", `Province/State`)) %>%
+  arrange(isTotal, desc(Percent)) %>%
+  dplyr::select(-isTotal) %>%
+  mutate(Percent = percent(Percent, accuracy = 0.1)) %>%
+  rename(`% Change` = Percent) %>%
   pander(
-    justify = "lrrr",
+    justify = "lrrrr",
     caption = paste(
       "*Confirmed cases reported by each state at time of preparation.",
       "Any states with unchanged, or decreasing values may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
@@ -1332,6 +1336,75 @@ confirmed %>%
     emphasize.strong.rows = nrow(.)
   )
 ```
+
+## Plot of Current Australian Values
+
+```{r ausDeathPlot, echo=FALSE, eval=FALSE}
+ausDeathPlot <- ggplotly(
+  deaths %>%
+    dplyr::filter(Country == "Australia", deaths > 0) %>%
+    group_by(date) %>%
+    summarise_at(vars(deaths), sum) %>%
+    mutate(
+      isValid  = c(TRUE, deaths[-1] >= deaths[-nrow(.)]),
+      deaths = case_when(
+        !isValid ~ NA_real_,
+        isValid ~ deaths
+      ),
+      deaths = zoo::na.locf(deaths)
+    ) %>%
+    rename(
+      Date = date,
+      Fatalities = deaths
+    ) %>%
+    ggplot(aes(Date, Fatalities)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE) +
+    scale_y_log10() +
+    labs(x = "Date", y = "Fatalities") 
+)
+ausDeathPlot$x$data[[2]]$hoverinfo <- "none"
+ausDeathPlot
+```
+
+
+```{r ausStatsPlot, fig.height=7, fig.width=9, fig.cap = "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines.*"}
+ggplotly(
+  confirmed %>%
+    dplyr::filter(Country == "Australia", confirmed > 0) %>%
+    left_join(deaths) %>%
+    left_join(recovered) %>%
+    group_by(Country, date) %>%
+    summarise_at(vars(confirmed, deaths, recovered), sum) %>%
+    ungroup() %>%
+    mutate(active = confirmed - deaths - recovered) %>%
+    pivot_longer(
+      cols = c(active, confirmed, deaths, recovered),
+      names_to = "Type",
+      values_to = "Total"
+    ) %>%
+    distinct(Type, Total, .keep_all = TRUE) %>%
+    mutate(
+      Type = str_to_title(Type),
+      Type = str_replace_all(Type, "Deaths", "Fatalities"),
+    ) %>%
+    dplyr::filter(Total > 0) %>%
+    rename_all(str_to_title) %>%
+    ggplot(aes(Date, Total, colour = Type)) +
+    geom_point() +
+    geom_smooth(method = "loess", se = FALSE, size = 1/2) +
+    scale_y_log10() +
+    scale_colour_manual(
+      values = c(
+        Active = rgb(0, 0, 0),
+        Confirmed = rgb(0, 0.3, 0.7),
+        Fatalities = rgb(0.8, 0.2, 0.2),
+        Recovered = rgb(0.2, 0.7, 0.4)
+      )
+    )
+)
+```
+
 
 
 ## State-wise Comparison of Confirmed Infection Rates
@@ -1833,40 +1906,6 @@ tested %>%
     emphasize.strong.rows = nrow(.)
   )
 ```
-
-## Australian Fatalities
-
-```{r ausDeathPlot}
-ausDeathPlot <- ggplotly(
-  deaths %>%
-    dplyr::filter(Country == "Australia", deaths > 0) %>%
-    group_by(date) %>%
-    summarise_at(vars(deaths), sum) %>%
-    mutate(
-      isValid  = c(TRUE, deaths[-1] >= deaths[-nrow(.)]),
-      deaths = case_when(
-        !isValid ~ NA_real_,
-        isValid ~ deaths
-      ),
-      deaths = zoo::na.locf(deaths)
-    ) %>%
-    rename(
-      Date = date,
-      Fatalities = deaths
-    ) %>%
-    ggplot(aes(Date, Fatalities)) +
-    geom_point() +
-    geom_smooth(method = "lm", se = FALSE) +
-    scale_y_log10() +
-    labs(x = "Date", y = "Fatalities") 
-)
-```
-
-```{r, fig.cap="Cumulative fatalities wthin Australia"}
-ausDeathPlot$x$data[[2]]$hoverinfo <- "none"
-ausDeathPlot
-```
-
 
 # R Session Information
 
