@@ -1368,8 +1368,8 @@ ausDeathPlot
 ```
 
 
-```{r ausStatsPlot, fig.height=7, fig.width=9, fig.cap = "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines.*"}
-ggplotly(
+```{r ausStatsPlot}
+ausStatsPlot <- ggplotly(
   confirmed %>%
     dplyr::filter(Country == "Australia", confirmed > 0) %>%
     left_join(deaths) %>%
@@ -1383,7 +1383,12 @@ ggplotly(
       names_to = "Type",
       values_to = "Total"
     ) %>%
-    distinct(Type, Total, .keep_all = TRUE) %>%
+    arrange(Type, date) %>%
+    split(f = .$Type) %>%
+    lapply(mutate, keep = c(TRUE, diff(Total) != 0)) %>%
+    bind_rows() %>%
+    dplyr::filter(keep) %>%
+    dplyr::select(-keep) %>%
     mutate(
       Type = str_to_title(Type),
       Type = str_replace_all(Type, "Deaths", "Fatalities"),
@@ -1403,8 +1408,20 @@ ggplotly(
       )
     )
 )
+ausStatsPlot$x$data[5:8] %<>%
+  lapply(function(x){
+    x$hoverinfo <- "none"
+    x
+  })
 ```
 
+```{r ausStatsCap}
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines.*"
+```
+
+```{r, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
+ausStatsPlot
+```
 
 
 ## State-wise Comparison of Confirmed Infection Rates
@@ -1748,7 +1765,7 @@ if (url.exists(waUrl)){
 ```{r saTests}
 saTests <- NA_real_
 saUrl <- glue(
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{format(Sys.Date(), '%d+%B++%Y')}"
+  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+coronavirus+update+{format(Sys.Date(), '%d+%B+%Y')}"
   ) %>%
   str_to_lower()
 if (url.exists(saUrl)) {
@@ -1761,7 +1778,8 @@ if (url.exists(saUrl)) {
   if (length(saTests)) {
     saTests <- saTests[[1]] %>%
       str_trim() %>%
-      str_subset("more than.+tests") %>%
+      .[!. == ""] %>%
+      str_subset("(more than|around).+tests") %>%
       str_replace_all(".+ ([0-9,]+) tests.", "\\1") %>%
       str_remove_all(",") %>%
       as.numeric()
@@ -1786,7 +1804,7 @@ if (url.exists(actUrl)){
     .[. != ""] %>%
     str_split_fixed(":", 2) %>%
     apply(2, str_trim) %>%
-    .[,2] %>%
+    .[!str_detect(.[,1], "recovered"),2] %>%
     as.numeric() %>%
     sum()
 }
@@ -1861,6 +1879,13 @@ tested %>%
         State = `Province/State`
       )
   ) %>%
+  mutate(
+    Tested = case_when(
+      is.na(Tested) ~ confirmed,
+      Tested < confirmed ~ confirmed,
+      !is.na(Tested) ~ Tested
+    )
+  ) %>%
   left_join(ausPops) %>%
   bind_rows(
     tibble(
@@ -1894,6 +1919,9 @@ tested %>%
   mutate_at(
     vars(starts_with("%")), percent, accuracy = 0.01
   ) %>%
+  mutate(
+    State = str_replace(State, "Northern Territory", "Northern Territory^+^")
+  ) %>%
   pander(
     justify = "lrrrrrr",
     missing = "",
@@ -1901,7 +1929,7 @@ tested %>%
       "*COVID-19 testing scaled by state population size.
       Confirmed cases are assumed to be the tests returning a positive result.
       The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result.
-      No testing statistics have yet been released by the NT Health department.*"
+      ^+^As no testing statistics have yet been released by the NT Health department, the minimum number of known tests was used, as given by the number of confirmed cases.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
