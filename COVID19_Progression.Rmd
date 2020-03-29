@@ -128,6 +128,25 @@ govTable <- govLines %>%
 ```
 
 
+```{r}
+guardianData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")$sheets 
+guardTable <- guardianData$`latest totals` %>%
+  as_tibble() %>%
+  dplyr::select(
+    `Province/State` = `Long name`,
+    confirmed = `Confirmed cases (cumulative)`,
+    date = `Last updated`
+  ) %>%
+  mutate(
+    Country = "Australia",
+    date = ymd(date),
+    confirmed = as.numeric(confirmed)
+  ) %>%
+  dplyr::filter(`Province/State` != "National")
+```
+
+
+
 ```{r latestAU}
 prevDateAU <- confirmed %>%
   dplyr::filter(Country == "Australia") %>%
@@ -154,6 +173,7 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
     confirmed, deaths
   ) %>%
   bind_rows(govTable) %>% 
+  bind_rows(guardTable) %>%
   # dplyr::filter(date > prevDateAU) %>%
   group_by(`Province/State`) %>% 
   summarise(
@@ -366,7 +386,7 @@ Data for confirmed cases, recoveries and fatalities was primarily sourced from J
 JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
-Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/ and those at [www.health.gov.au](`r govUrl`).
+Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/, [The Guardian](https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json) and those at [www.health.gov.au](`r govUrl`).
 The Australian numbers used below **`r ifelse(updateAU, "do contain**", "do not contain** any")` confirmed cases reported since the JHU dataset was updated.
 `r ifelse(updateAU, glue("As of {format(Sys.time(), '%H:%M')}, {n} of 7 states/territories have released updated COVID-19 figures since the overnight JHU release."), "")`
 The current Australia total is `r comma(sum(dplyr::filter(confirmed, date == max(date), Country == "Australia")$confirmed))` using these data sources, and any corrections to these will be made as soon as is possible. 
@@ -1803,10 +1823,16 @@ if (url.exists(waUrl)){
 
 ```{r saTests}
 saTests <- NA_real_
-saUrl <- glue(
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+coronavirus+update+{format(Sys.Date(), '%d+%B+%Y')}"
-  ) %>%
-  str_to_lower()
+saUrl <- paste0(
+  "https://www.sahealth.sa.gov.au",
+  # Find the latest media release as the naming is VERY inconsistent
+  "https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/" %>%
+  read_html() %>%
+  xml_find_all("//div[contains(@class, 'newstitle')]") %>% 
+  .[[1]] %>%
+  html_nodes("a") %>% 
+  html_attr("href")
+)
 if (url.exists(saUrl)) {
   saTests <- saUrl %>%
     read_html() %>%
@@ -1824,7 +1850,6 @@ if (url.exists(saUrl)) {
       as.numeric()
   }
 }
-
 ```
 
 ```{r actTests}
@@ -1835,16 +1860,16 @@ if (url.exists(actUrl)){
     read_html() %>%
     html_nodes("body") %>%
     xml_find_all(
-      "//div[contains(@class, 'statuscontent')]"
-    ) %>%
-    html_text() %>%
-    str_split("\n") %>%
-    .[[1]] %>%
-    .[. != ""] %>%
-    str_split_fixed(":", 2) %>%
-    apply(2, str_trim) %>%
-    .[!str_detect(.[,1], "recovered"),2] %>%
-    as.numeric() %>%
+       "//div[contains(@class, 'spf-article-card--tabular')]"
+    ) %>% 
+    html_text() %>% 
+    str_split("\r\n") %>% 
+    .[[4]] %>% 
+    str_trim %>% 
+    setdiff(y = "") %>% 
+    matrix(ncol = 2, byrow = TRUE) %>% 
+    .[!str_detect(.[,1], "recovered"), 2] %>%
+    as.numeric() %>% 
     sum()
 }
 ```
@@ -1856,19 +1881,21 @@ tasUrl <- glue(
 ) %>%
   str_to_lower()
 if (url.exists(tasUrl)) {
-  tasTests <- tasUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all(
-      "//div[contains(@id, 'content_div_117564')]"
-    ) %>%
-    html_text() %>%
-    str_split("\n") %>%
-    .[[1]] %>%
-    str_trim() %>%
-    .[. != ""] %>%
-    str_replace_all(".+Tasmania has conducted ([0-9]+) tests.+", "\\1") %>%
-    as.numeric()
+  suppressWarnings(
+    tasTests <- tasUrl %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all(
+        "//div[contains(@id, 'content_div_117564')]"
+      ) %>%
+      html_text() %>%
+      str_split("\r\n") %>%
+      .[[1]] %>%
+      str_trim() %>%
+      .[. != ""] %>%
+      str_replace_all(".+Tasmania has conducted ([0-9]+) tests.+", "\\1") %>%
+      as.numeric()
+  )
 }
 ```
 
