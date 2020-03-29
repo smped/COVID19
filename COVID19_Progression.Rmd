@@ -165,6 +165,23 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
   mutate(
     deaths = ifelse(is.finite(deaths), deaths, NA)
   )
+## The API & Govt website seems not to keep on top of NT & TAS cases so well
+## Future versions of this script may need to manually update these via webscraping
+## Here, just ensure that we don't have a decrease
+oldTas <- max(dplyr::filter(confirmed, `Province/State` == "Tasmania")$confirmed)
+newTas <- max(dplyr::filter(latestAU, `Province/State` == "Tasmania")$confirmed)
+oldNT <- max(dplyr::filter(confirmed, `Province/State` == "Northern Territory")$confirmed)
+newNT <- max(dplyr::filter(latestAU, `Province/State` == "Northern Territory")$confirmed)
+if (newTas < oldTas | newNT < oldNT) {
+  latestAU %<>%
+    mutate(
+      confirmed = case_when(
+        `Province/State` == "Tasmania" ~ max(newTas, oldTas),
+        `Province/State` == "Northern Territory" ~ max(newNT, oldNT),
+        !`Province/State` %in% c("Tasmania", "Northern Territory") ~ confirmed
+      )
+    )
+}
 # Update the AU records if there are any timepoints
 # on days beyond the last value provided by JHU
 updateAU <- max(latestAU$date) > prevDateAU
@@ -345,69 +362,6 @@ write_tsv(wikiPops, "wikiPops.tsv")
 ```
 
 
-```{r pops, echo=FALSE, eval=FALSE}
-hb <- 59170000
-hk <- 7479307
-pops <- tribble(
-    ~Country, ~Population, 
-    "Argentina", 45086325,
-    "Australia", 25499884,
-    "Austria", 9006398, 
-    "Belgium", 11575214, 
-    "Brazil", 212129490, 
-    "Canada", 37742154, 
-    "Chile", 19068026, 
-    "China (Hubei)", hb, 
-    "China (Other)", 1408526449 - hb, 
-    "Czechia", 10703010, 
-    "Denmark", 5786274, 
-    "Ecuador", 17564089, 
-    "Finland", 5538181, 
-    "France", 65273511, 
-    "Germany", 83783942, 
-    "Greece", 10423054, 
-    "Hong Kong", hk, 
-    "Iceland", 364260, 
-    "India", 1376270475, 
-    "Indonesia", 272702678, 
-    "Italy", 60486925, 
-    "Iran", 83677594, 
-    "Ireland", 4921810, 
-    "Israel", 8615601, 
-    "Japan", 126476461, 
-    "Jordan", 10174146, 
-    "Luxembourg", 613894, 
-    "Malaysia", 32245488, 
-    "Netherlands", 17134872, 
-    "New Zealand", 4811065, 
-    "Norway", 5408930, 
-    "Pakistan",  219629013, 
-    "Panama", 4296582,
-    "Peru", 32849371,
-    "Philippines", 109192665,
-    "Poland", 37858096, 
-    "Portugal", 10196709, 
-    "Qatar", 2866531, 
-    "Romania", 19271798, 
-    "Russia", 145917069, 
-    "Saudi Arabia", 34661353 , 
-    "Singapore", 5836728, 
-    "Slovenia", 2078860, 
-    "South Africa", 59109858,
-    "South Korea", 51269185, 
-    "Spain", 46754778, 
-    "Sweden", 10081035, 
-    "Switzerland", 8654622, 
-    "Taiwan*", 23804524, 
-    "Thailand", 69752040, 
-    "Turkey", 84081383, 
-    "United Arab Emirates", 9856053,  
-    "United Kingdom", 67886011, 
-    "US", 331002651
-)
-```
-
-
 Data for confirmed cases, recoveries and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
 JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
 
@@ -418,14 +372,15 @@ The Australian numbers used below **`r ifelse(updateAU, "do contain**", "do not 
 The current Australia total is `r comma(sum(dplyr::filter(confirmed, date == max(date), Country == "Australia")$confirmed))` using these data sources, and any corrections to these will be made as soon as is possible. 
 
 Population sizes were obtained from [2019 UN Estimates](https://en.wikipedia.org/wiki/List_of_countries_by_population_(United_Nations)).
-Given the disparity of infection within China, China was broken into Hubei Province and the rest of China, with Hong Kong already being considered in all datasets as a separate country, as is Taiwan.
-Population estimates for Hubei Province were taken from the 2018 estimates given by [Statista.com](https://www.statista.com/statistics/279013/population-in-china-by-region/).
+Given the disparity of infection within China, China was broken into Hubei Province and the rest of China, with Hong Kong and Taiwan already being considered as separate countries in all datasets.
+Population estimates for Hubei Province were taken from the 2018 estimates given by [Statista.com](https://www.statista.com/statistics/279013/population-in-china-by-region/) and this is likely to be a very slight underestimate.
 
 Confirmed cases of COVID-19 as provided by the Chinese Government have been discussed elsewhere as unusual, and data appears potentially unreliable.
 In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
 
 However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for most countries.
 Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
+Information on *recovered cases is also difficult to accurately obtain* due inconsistent methods for considering a case as recovered, and lack of reporting for these cases in many jurisdictions.
 
 # International Data {.tabset}
 
@@ -490,11 +445,14 @@ confirmed %>%
     caption = paste(
       "The most impacted countries studied here and shown as a proportion of total population.",
       "The initial filter is set so that only countries with a population greater than", comma(minPop), "are shown.",
+      "All fields are searchable and sortable.",
+      "To filter numeric columns, either use the slider or enter the values in the form 'min ... max'.",
+      "To filter text columns, partial matching used in a case-insensitive manner.",
       "Populations have been rounded to the nearest thousand to make reading values easier.",
-      "Rate represent the latest confirmed infection rate as cumulative cases per million people, whilst Occurrence represents the number of people expected before one case is found, assuming an even distribution amongst the population.",
+      "'Rate' represents the latest confirmed infection rate as cumulative cases per million people, whilst 'Occurrence' represents the number of people expected before one case is found, assuming an even distribution amongst the population.",
       "In other words, one in every 'Occurrence' people within the population have been confirmed to have contracted COVID-19.",
       "Occurrence is inversely proportional to Rate.",
-      "No adjustment has been made for patients who have recovered or passed away.",
+      "No adjustment has been made in this table for patients who have recovered or passed away.",
       "Whilst the virus spreads with no regard to population size, the rate as shown here indicates the degree of stress which each country's health-care system is likely to be experiencing.",
       "Several countries shown here have not attracted much media attention due lower case numbers than China and Italy, but are likely to be experiencing significant duress.",
       "Continent and Region information is as provided by the UN classifications."
@@ -1467,7 +1425,7 @@ ausStatsPlot <- ggplotly(
     split(f = .$Type) %>%
     lapply(mutate, keep = c(TRUE, diff(Total) != 0)) %>%
     bind_rows() %>%
-    dplyr::filter(keep) %>%
+    dplyr::filter(keep, date > ymd("2020-02-28")) %>%
     dplyr::select(-keep) %>%
     mutate(
       Type = str_to_title(Type),
@@ -1496,10 +1454,10 @@ ausStatsPlot$x$data[5:8] %<>%
 ```
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 29^th^ Feb 2020 as data is noticeably sparse prior to this date.*"
 ```
 
-```{r, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
+```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
 ausStatsPlot
 ```
 
