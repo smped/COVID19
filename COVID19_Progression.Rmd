@@ -135,12 +135,15 @@ guardTable <- guardianData$`latest totals` %>%
   dplyr::select(
     `Province/State` = `Long name`,
     confirmed = `Confirmed cases (cumulative)`,
-    date = `Last updated`
+    date = `Last updated`,
+    deaths = Deaths
   ) %>%
   mutate(
     Country = "Australia",
     date = ymd(date),
-    confirmed = as.numeric(confirmed)
+    confirmed = as.numeric(confirmed),
+    deaths = as.numeric(deaths),
+    deaths = ifelse(is.na(deaths), 0, deaths)
   ) %>%
   dplyr::filter(`Province/State` != "National")
 ```
@@ -1341,7 +1344,7 @@ Australia's spread of the virus appears in the previous plots as marginally slow
 
 - This may be a reflection of Australian geography or our tendency to have large personal space requirements
 - This may also be a reflection of the pre-emptive strategies already being taken by the population and government
-- Despite the above, Australia is **still clearly in the exponential growth phase** with no sign of the growth levelling out.
+- Despite the above, Australia is **still in the exponential growth phase**, however there are early signs of the growth levelling out.
 Infections are currently doubling in slightly less than 4 days.
 - Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
 - However, projecting forward using a 7 day lag as representative of the delay between contracting the virus and manifestation of symptoms, the number of people within Australia who are currently infected may be near `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% comma()`, which corresponds to `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% percent(accuracy = 0.001)` of the population, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`
