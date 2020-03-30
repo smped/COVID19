@@ -578,7 +578,7 @@ plotIncVConf <- confirmed %>%
 ```{r capIncVConf}
 capIncVConf <- glue(
   "*Daily Increase in Cases plotted against Confirmed Cases.
-  These two values are directly proportional until interventions are successful, at which point the proportional relationsip changes, as evidenced by a sudden downwards turn.
+  These two values are directly proportional until interventions are successful, at which point the proportional relationship changes, as evidenced by a sudden downwards turn.
   Values shown are 7-day moving averages in order to minimise the impact of day-to-day variation.
   Countries are only shown from the point at which the moving average exceeds {minCases} cases, and have exceeded this value for > {minDays} days.
   Data is additionally restricted to countries with a population > {comma(minPop)}, for greater clarity.
