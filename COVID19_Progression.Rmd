@@ -326,7 +326,7 @@ if (updateAU){
 
 
 
-```{r wikiPops, cache=TRUE}
+```{r wikiPops, eval=FALSE, echo=FALSE}
 hb <- 59170000L
 wikiPops <- "https://en.wikipedia.org/wiki/List_of_countries_by_population_(United_Nations)" %>%
   read_html() %>%
@@ -382,6 +382,10 @@ wikiPops <- "https://en.wikipedia.org/wiki/List_of_countries_by_population_(Unit
   ) %>%
   arrange(desc(Population))
 write_tsv(wikiPops, "wikiPops.tsv")
+```
+
+```{r}
+wikiPops <- read_tsv("wikiPops.tsv")
 ```
 
 
@@ -495,6 +499,100 @@ confirmed %>%
   )
 ```
 
+## Daily Increase Vs Confirmed Cases
+
+An alternate viewpoint on the data is to remove time and inspect the relationship between the daily increase in cases and the total number of cases.
+When this relationship ceases it's near linear relationship, this can be a sign the control measures have begun to take effect.
+
+```{r sma}
+sma <- function(x, n = 7){
+    
+    if (length(x) < n) return(rep(NA, length(x)))
+    ind <- vapply(seq(1, length(x) - (n - 1)), seq, numeric(n), length.out = n)
+    c(
+        rep(NA, n - 1),
+        colMeans(matrix(x[ind], nrow = n), na.rm = TRUE)
+    )
+}
+```
+
+```{r plotIncVConf}
+minPop <- 5e6
+minCases <- 100
+minDays <- 15
+plotIncVConf <- confirmed %>%
+  group_by(Country, date) %>%
+  summarise_at(vars(confirmed), sum) %>%
+  dplyr::filter(confirmed > 0) %>%
+  split(f = .$Country) %>%
+  lapply(function(x, n = 7){
+    x %>%
+      mutate(
+        d = c(0, diff(confirmed))
+      ) %>%
+      mutate_at(
+        vars(confirmed, d), sma, n = n
+      )
+  }
+  ) %>%
+  bind_rows() %>%
+  inner_join(wikiPops) %>%
+  dplyr::filter(confirmed > minCases) %>%
+  mutate_at(vars(confirmed, d), round, 2) %>%
+  mutate(n = n()) %>%
+  dplyr::filter(
+    n > minDays,
+    Population > minPop,
+    d > 0
+  ) %>%
+  rename_all(str_to_title) %>%
+  rename(`Daily Increase` = D) %>%
+  mutate(Population = comma(round(Population, -3))) %>%
+  ggplot(aes(Confirmed, `Daily Increase`, colour = Country, label = Date, key = Population)) +
+  geom_hline(
+    aes(yintercept = `Daily Increase`),
+    data = . %>%
+      dplyr::filter(Country == "Australia", Date == max(Date)),
+    linetype = 3,
+    colour = "blue",
+    size = 1/3
+  ) +
+  geom_vline(
+    aes(xintercept = Confirmed),
+    data = . %>%
+      dplyr::filter(Country == "Australia", Date == max(Date)),
+    linetype = 3,
+    colour = "blue",
+    size = 1/3
+  ) +
+  geom_point() +
+  geom_line() +
+  scale_x_log10(labels = comma) +
+  scale_y_log10(labels = comma) +
+  labs(
+    x = "Confirmed Cases",
+    y = 'Daily Increase'
+  )
+```
+
+```{r capIncVConf}
+capIncVConf <- glue(
+  "*Daily Increase in Cases plotted against Confirmed Cases.
+  These two values are directly proportional until interventions are successful, at which point the proportional relationsip changes, as evidenced by a sudden downwards turn.
+  Values shown are 7-day moving averages in order to minimise the impact of day-to-day variation.
+  Countries are only shown from the point at which the moving average exceeds {minCases} cases, and have exceeded this value for > {minDays} days.
+  Data is additionally restricted to countries with a population > {comma(minPop)}, for greater clarity.
+  Australia's position is indicated by the dashed blue lines.*
+  "
+)
+```
+
+
+```{r showIncVConf, fig.cap=capIncVConf, fig.height=7, fig.width=9}
+ggplotly(plotIncVConf)
+```
+
+
 ## Cumulative Incidence Rates
 
 ```{r nDays}
@@ -521,7 +619,6 @@ nDays <- confirmed %>%
   nrow() %>%
   subtract(1)
 ```
-
 
 
 ```{r p}
