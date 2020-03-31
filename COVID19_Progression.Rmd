@@ -128,7 +128,7 @@ govTable <- govLines %>%
 ```
 
 
-```{r}
+```{r guardTable}
 guardianData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")$sheets 
 guardTable <- guardianData$`latest totals` %>%
   as_tibble() %>%
@@ -384,7 +384,7 @@ wikiPops <- "https://en.wikipedia.org/wiki/List_of_countries_by_population_(Unit
 write_tsv(wikiPops, "wikiPops.tsv")
 ```
 
-```{r}
+```{r loadWikiPops}
 wikiPops <- read_tsv("wikiPops.tsv")
 ```
 
@@ -582,7 +582,7 @@ capIncVConf <- glue(
   Values shown are 7-day moving averages in order to minimise the impact of day-to-day variation.
   Countries are only shown from the point at which the moving average exceeds {minCases} cases, and have exceeded this value for > {minDays} days.
   Data is additionally restricted to countries with a population > {comma(minPop)}, for greater clarity.
-  Australia's position is indicated by the dashed blue lines.*
+  Australia's position is indicated by the intersection of the dashed blue lines.*
   "
 )
 ```
