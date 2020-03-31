@@ -1923,33 +1923,48 @@ if (url.exists(waUrl)){
 
 ```{r saTests}
 saTests <- NA_real_
-saUrl <- paste0(
-  "https://www.sahealth.sa.gov.au",
-  # Find the latest media release as the naming is VERY inconsistent
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/" %>%
+saTests <- "https://www.sa.gov.au/covid-19/dashboard" %>%
   read_html() %>%
-  xml_find_all("//div[contains(@class, 'newstitle')]") %>% 
+  xml_find_all("//div[contains(@id, 'content_container_605362')]") %>%
+  html_text() %>%
+  str_split("\r\n") %>%
   .[[1]] %>%
-  html_nodes("a") %>% 
-  html_attr("href")
-)
-if (url.exists(saUrl)) {
-  saTests <- saUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//div[contains(@class, 'wysiwyg')]") %>%
-    html_text() %>%
-    str_split("\n") 
-  if (length(saTests)) {
-    saTests <- saTests[[1]] %>%
-      str_trim() %>%
-      .[!. == ""] %>%
-      str_subset("(more than|around).+tests") %>%
-      str_replace_all(".+ ([0-9,]+) tests.", "\\1") %>%
-      str_remove_all(",") %>%
-      as.numeric()
-  }
-}
+  str_trim() %>%
+  .[. != ""] %>%
+  str_replace_all(".+ ([0-9,]+) COVID-19 laboratory tests.+", "\\1") %>%
+  str_remove(",") %>%
+  as.numeric()
+```
+
+
+```{r oldSaUrl, echo = FALSE,eval=FALSE}
+# saUrl <- paste0(
+#   "https://www.sahealth.sa.gov.au",
+#   # Find the latest media release as the naming is VERY inconsistent
+#   "https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/" %>%
+#   read_html() %>%
+#   xml_find_all("//div[contains(@class, 'newstitle')]") %>% 
+#   .[[1]] %>%
+#   html_nodes("a") %>% 
+#   html_attr("href")
+# )
+# if (url.exists(saUrl)) {
+#   saTests <- saUrl %>%
+#     read_html() %>%
+#     html_nodes("body") %>%
+#     xml_find_all("//div[contains(@class, 'wysiwyg')]") %>%
+#     html_text() %>%
+#     str_split("\n") 
+#   if (length(saTests)) {
+#     saTests <- saTests[[1]] %>%
+#       str_trim() %>%
+#       .[!. == ""] %>%
+#       str_subset("(more than|around).+tests") %>%
+#       str_replace_all(".+ ([0-9,]+) tests.", "\\1") %>%
+#       str_remove_all(",") %>%
+#       as.numeric()
+#   }
+# }
 ```
 
 ```{r actTests}
@@ -2028,7 +2043,7 @@ tested %>%
 
 
 Testing numbers were initially sourced on 24^th^ March, 2020 from manual inspection of individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
-No testing figures have yet been released by the NT government.
+No testing figures have yet been released by the [NT government](https://coronavirus.nt.gov.au/) on their website, with the latest values being taken from audio of press conferences.
 
 Updates on testing numbers beyond the initial values were performed automatically using the above code which probes each state's official releases for the latest values, and updates where found.
 The number of tested individuals in each state was then assessed as a function of State population size.
@@ -2095,7 +2110,7 @@ tested %>%
       "*COVID-19 testing scaled by state population size.
       Confirmed cases are assumed to be the tests returning a positive result.
       The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result.
-      ^+^As no testing statistics have yet been released by the NT Health department, the minimum number of known tests was used, as given by the number of confirmed cases.*"
+      ^+^As no testing statistics have yet been released by the NT Health department via press releases, the number of known tests was updated manually from the audio of press conferences.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
