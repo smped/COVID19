@@ -1500,34 +1500,6 @@ confirmed %>%
 
 ## Plot of Current Australian Values
 
-```{r ausDeathPlot, echo=FALSE, eval=FALSE}
-ausDeathPlot <- ggplotly(
-  deaths %>%
-    dplyr::filter(Country == "Australia", deaths > 0) %>%
-    group_by(date) %>%
-    summarise_at(vars(deaths), sum) %>%
-    mutate(
-      isValid  = c(TRUE, deaths[-1] >= deaths[-nrow(.)]),
-      deaths = case_when(
-        !isValid ~ NA_real_,
-        isValid ~ deaths
-      ),
-      deaths = zoo::na.locf(deaths)
-    ) %>%
-    rename(
-      Date = date,
-      Fatalities = deaths
-    ) %>%
-    ggplot(aes(Date, Fatalities)) +
-    geom_point() +
-    geom_smooth(method = "lm", se = FALSE) +
-    scale_y_log10() +
-    labs(x = "Date", y = "Fatalities") 
-)
-ausDeathPlot$x$data[[2]]$hoverinfo <- "none"
-ausDeathPlot
-```
-
 
 ```{r ausStatsPlot}
 ausStatsPlot <- ggplotly(
@@ -1662,17 +1634,6 @@ p5
 
 ## Statistical Analysis of State-wise Infection Rates
 
-In order to test whether the infection rates are different between states, a linear regression model was fit.
-$\log_{10}$(Cumulative Confirmed Infection Rate) was assigned as the response variable with predictor variables being the State and Date.
-Each State was assigned its own intercept and slope by use of an interaction term (i.e. State:date).
-Given the potentially larger slope in NSW, this state was set as the baseline, with each other slope (i.e. interaction term) being presented as the difference in slope between each state and NSW. 
-In this way comparisons against NSW were performed, but no comparisons between other states were performed.
-
-Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial time at which cumulative confirmed infection rate exceeded `r minRate` cases / million.
-Differences between State-level slopes and NSW however, are of great interest, and as such only the slopes are shown.
-For NSW (`Term = date`) this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
-Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
-For those States which appear to be of interest, a negative value indicates an infection rate increasing more slowly than NSW, whilst a positive value indicates the opposite..
 
 ```{r lm}
 lm <- confirmed %>%
@@ -1705,6 +1666,21 @@ lm <- confirmed %>%
 ```
 
 
+In order to test whether the infection rates are different between states, a linear regression model was fit.
+$\log_{10}$(Cumulative Confirmed Infection Rate) was assigned as the response variable with predictor variables being the State and Date.
+Each State was assigned its own intercept and slope by use of an interaction term (i.e. State:date).
+Given the potentially larger slope in NSW, this state was set as the baseline, with each other slope (i.e. interaction term) being presented as the difference in slope between each state and NSW. 
+In this way comparisons against NSW were performed, but no comparisons between other states were performed.
+
+Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial time at which cumulative confirmed infection rate exceeded `r minRate` cases / million.
+Differences between State-level slopes and NSW however, are of great interest, and as such only the slopes are shown.
+For NSW (`Term = date`) this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
+Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
+For those States which appear to be of interest, a negative value indicates an infection rate increasing more slowly than NSW, whilst a positive value indicates the opposite.
+If no difference is noted between any state and NSW, it can be consideed that these states are all experiencing growth at a similar rate.
+Currently, **the infection rate in most states is doubling every `r round(log(2, base = 10^coef(lm)["date"]), 1)` days.**
+
+
 ```{r lmSummary}
 st <- shapiro.test(resid(lm))$p.value
 lm %>%
@@ -1721,10 +1697,11 @@ lm %>%
     p = p.value
   ) %>%
   dplyr::filter(
-    str_detect(Term, ":date")
+    str_detect(Term, "date")
   ) %>%
   mutate(
     Term = str_remove(Term, ":date"),
+    Term = str_replace_all(Term, "date", "NSW Daily Increase"),
     Estimate = sprintf("%.4f", Estimate),
     SE = sprintf("%.3f", SE),
     `T` = sprintf("%.2f", `T`),
@@ -1744,14 +1721,15 @@ lm %>%
     justify = "lrrrrr",
     emphasize.strong.rows = which(
       as.numeric(.$`p~bonf~`) < 0.05 & .$Term != "date"
-      ),
+      )[-1],
     caption = paste(
       "*Results of linear regression analysis", 
       "comparing the slopes of lines which track __daily",
       "change in cumulative confirmed infection rates__,",
       "scaled for population size in each state.",
       "Intercept terms are not shown.",
-      "All states are shown in comparison to NSW.", 
+      "The daily slope of the NSW regression line is given as the first value, with any differences between this line and other states shown as the subsequent rows.",
+      "All slopes and differences in slopes are given on the log~10~ scale.",
       "Any highlighted state indicates an infection rate which is increasing at a different daily rate to NSW.",
       "Positive values in the Estimate column indicate a greater rate the NSW, whilst a negative value in the Estimate column indicates a slower growth rate than NSW.",
       "Diagnostic plots visually appeared",  
@@ -2121,17 +2099,13 @@ tested %>%
   mutate_at(
     vars(starts_with("%")), percent, accuracy = 0.01
   ) %>%
-  mutate(
-    State = str_replace(State, "Northern Territory", "Northern Territory^+^")
-  ) %>%
   pander(
     justify = "lrrrrrr",
     missing = "",
     caption = glue(
       "*COVID-19 testing scaled by state population size.
       Confirmed cases are assumed to be the tests returning a positive result.
-      The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result.
-      ^+^As no testing statistics have yet been released by the NT Health department via press releases, the number of known tests was updated manually from the audio of press conferences.*"
+      The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
