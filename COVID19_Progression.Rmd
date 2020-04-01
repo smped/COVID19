@@ -169,7 +169,8 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
     )
   ) %>%
   dplyr::filter(
-    !str_detect(`Province/State`, "Total")
+    !str_detect(`Province/State`, "Total"),
+    `Province/State` != "Australia"
   ) %>%
   dplyr::select(
     `Province/State`, Country, date, 
