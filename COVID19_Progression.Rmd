@@ -418,9 +418,11 @@ minPop <- 2e6
 ```
 
 
-For this section, all data is presented *relative to population size*.
+For this section, most data is presented *relative to population size*.
 Growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
 This equates to about `r round(startingPoint*dplyr::filter(wikiPops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
+
+The exception to this is the `Daily Increase Vs Confirmed Cases` plot which uses raw case numbers and 100 confirmed cases as the point for beginning the plot.
 
 ## Table of Most Impacted Countries
 
@@ -1873,7 +1875,7 @@ if (url.exists(qldUrl)){
 ```{r vicTests}
 vicTests <- NA_real_
 vicUrl <- glue(
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(Sys.Date(), '%d-%B-%Y')}"
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{str_trim(format(Sys.Date(), '%e-%B-%Y'))}"
 ) %>%
   str_to_lower()
 if (url.exists(vicUrl)){
@@ -1884,9 +1886,9 @@ if (url.exists(vicUrl)){
     html_text() %>%
     str_split("\n") %>%
     .[[1]] %>%
-    str_subset("tested") %>%
+    str_subset("test(ed|s)") %>%
     str_replace_all(
-      ".+than ([0-9,]+) Victorians have been tested.+",
+      ".+than ([0-9,]+) .*test(ed|s).+",
       "\\1"
     ) %>%
     str_remove_all(",") %>%
@@ -1932,8 +1934,8 @@ saTests <- "https://www.sa.gov.au/covid-19/dashboard" %>%
   .[[1]] %>%
   str_trim() %>%
   .[. != ""] %>%
-  str_replace_all(".+ ([0-9,]+) COVID-19 laboratory tests.+", "\\1") %>%
-  str_remove(",") %>%
+  str_replace_all(".+have been ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
+  str_remove_all("[, ]") %>%
   as.numeric()
 ```
 
@@ -1981,8 +1983,9 @@ if (url.exists(actUrl)){
     html_text() %>% 
     str_split("\r\n") %>% 
     .[[4]] %>% 
-    str_trim %>% 
+    str_trim() %>% 
     setdiff(y = "") %>% 
+    str_remove_all("[,*]") %>%
     matrix(ncol = 2, byrow = TRUE) %>% 
     .[!str_detect(.[,1], "recovered"), 2] %>%
     as.numeric() %>% 
@@ -2012,8 +2015,25 @@ if (url.exists(tasUrl)) {
       str_replace_all(".+Tasmania has conducted ([0-9]+) tests.+", "\\1") %>%
       as.numeric()
   )
-}
+} 
 ```
+
+```{r ntTests}
+ntTests <- NA_real_
+ntUrl <- "https://coronavirus.nt.gov.au/"
+ntTests <- ntUrl %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all(
+    "//p[contains(@class, 'mt-2')]"
+  ) %>%
+  html_text() %>%
+  .[1] %>%
+  str_replace_all("^([0-9,]+) people.+", "\\1") %>%
+  str_remove_all(",") %>%
+  as.numeric()
+```
+
 
 
 ```{r updateTested}
@@ -2024,7 +2044,8 @@ tested <- c(
   "Western Australia" = waTests,
   "South Australia" = saTests,
   "Australian Capital Territory" = actTests,
-  "Tasmania" = tasTests
+  "Tasmania" = tasTests,
+  "Northern Territory" = ntTests
 ) %>%
   enframe(
     name = "State", value = "Tested"
@@ -2043,8 +2064,7 @@ tested %>%
 ```
 
 
-Testing numbers were initially sourced on 24^th^ March, 2020 from manual inspection of individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/), [TAS](https://www.dhhs.tas.gov.au/news/2020) and the [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19).
-No testing figures have yet been released by the [NT government](https://coronavirus.nt.gov.au/) on their website, with the latest values being taken from audio of press conferences.
+Testing numbers were initially sourced on 24^th^ March, 2020 from manual inspection of individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sa.gov.au/covid-19/dashboard), [TAS](https://www.dhhs.tas.gov.au/news/2020) [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19) and the [NT](https://coronavirus.nt.gov.au/).
 
 Updates on testing numbers beyond the initial values were performed automatically using the above code which probes each state's official releases for the latest values, and updates where found.
 The number of tested individuals in each state was then assessed as a function of State population size.
