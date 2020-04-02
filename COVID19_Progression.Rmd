@@ -396,7 +396,7 @@ JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 1
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/, [The Guardian](https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json) and those at [www.health.gov.au](`r govUrl`).
 The Australian numbers used below **`r ifelse(updateAU, "do contain**", "do not contain** any")` confirmed cases reported since the JHU dataset was updated.
-`r ifelse(updateAU, glue("As of {format(Sys.time(), '%H:%M')}, {n} of 7 states/territories have released updated COVID-19 figures since the overnight JHU release."), "")`
+`r ifelse(updateAU, glue("As of {format(Sys.time(), '%H:%M')}, {n} of 8 states/territories have released updated COVID-19 figures since the overnight JHU release."), "")`
 The current Australia total is `r comma(sum(dplyr::filter(confirmed, date == max(date), Country == "Australia")$confirmed))` using these data sources, and any corrections to these will be made as soon as is possible. 
 
 Population sizes were obtained from [2019 UN Estimates](https://en.wikipedia.org/wiki/List_of_countries_by_population_(United_Nations)).
