@@ -1206,7 +1206,7 @@ plotFr <- mutate(
   ) +
   scale_fill_viridis_c(
     option = "magma",
-    breaks = seq(0, 0.1, by = 0.02)
+    breaks = seq(0, 0.12, by = 0.02)
   ) +
   scale_x_continuous(
     expand = expand_scale(0, 0),
