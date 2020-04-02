@@ -428,6 +428,7 @@ The exception to this is the `Daily Increase Vs Confirmed Cases` plot which uses
 
 Confirmed cases in this table are effectively the cumulative, confirmed incidence rate.
 Recovered patients and those who have passed away are still included in these numbers.
+At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
 
 ```{r tabMostInfected}
 confirmed %>%
@@ -1912,7 +1913,7 @@ saTests <- "https://www.sa.gov.au/covid-19/dashboard" %>%
   .[[1]] %>%
   str_trim() %>%
   .[. != ""] %>%
-  str_replace_all(".+have been ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
+  str_replace_all(".+have been.* ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
   str_remove_all("[, ]") %>%
   as.numeric()
 ```
