@@ -75,56 +75,59 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
 ```
 
 ```{r govTable}
+govTable <- tibble()
 govUrl <- "https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers"
-govDate <- govUrl %>%
-   read_html() %>%
-   html_nodes("body") %>%
-   xml_find_all("//p[contains(@class, 'au-callout')]") %>%
-  html_text() %>%
-  .[[1]] %>% 
-  str_split("\n") %>%
-  .[[1]] %>% 
-  str_trim() %>% 
-  .[. != ""] %>% 
-  str_replace_all(".+ ([0-9]+) (March|April) (2020).+", "\\3-\\2-\\1") %>% 
-  str_replace_all("March", "03") %>%
-  str_replace_all("April", "04") %>%
-  ymd()
-govLines <- govUrl %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  xml_find_all("//div[contains(@class, 'health-table')]") %>% 
-  html_text() 
-govTable <- govLines %>% 
-  str_split("\n") %>% 
-  .[[1]] %>% 
-  str_trim() %>% 
-  .[. != ""] %>% 
-  matrix(ncol = 2, byrow = TRUE) %>%
-  set_colnames(.[1,]) %>% 
-  .[-1,] %>% 
-  as_tibble() %>%
-  dplyr::filter(
-    Location %in% c(
-      "Queensland",
-      "Australian Capital Territory",
-      "New South Wales",
-      "Victoria",
-      "Tasmania",
-      "South Australia",
-      "Western Australia",
-      "Northern Territory"
+if (url.exists(govUrl)) {
+  govDate <- govUrl %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//p[contains(@class, 'au-callout')]") %>%
+    html_text() %>%
+    .[[1]] %>% 
+    str_split("\n") %>%
+    .[[1]] %>% 
+    str_trim() %>% 
+    .[. != ""] %>% 
+    str_replace_all(".+ ([0-9]+) (March|April) (2020).+", "\\3-\\2-\\1") %>% 
+    str_replace_all("March", "03") %>%
+    str_replace_all("April", "04") %>%
+    ymd()
+  govLines <- govUrl %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//div[contains(@class, 'health-table')]") %>% 
+    html_text() 
+  govTable <- govLines %>% 
+    str_split("\n") %>% 
+    .[[1]] %>% 
+    str_trim() %>% 
+    .[. != ""] %>% 
+    matrix(ncol = 2, byrow = TRUE) %>%
+    set_colnames(.[1,]) %>% 
+    .[-1,] %>% 
+    as_tibble() %>%
+    dplyr::filter(
+      Location %in% c(
+        "Queensland",
+        "Australian Capital Territory",
+        "New South Wales",
+        "Victoria",
+        "Tasmania",
+        "South Australia",
+        "Western Australia",
+        "Northern Territory"
+      )
+    ) %>% 
+    rename(
+      `Province/State` = Location, 
+      confirmed = `Confirmed cases*`
+    ) %>%
+    mutate(
+      confirmed = str_remove_all(confirmed, ",") %>% as.numeric(),
+      date = govDate,
+      Country = "Australia"
     )
-  ) %>% 
-  rename(
-    `Province/State` = Location, 
-    confirmed = `Confirmed cases*`
-  ) %>%
-  mutate(
-    confirmed = str_remove_all(confirmed, ",") %>% as.numeric(),
-    date = govDate,
-    Country = "Australia"
-  )
+}
 ```
 
 
