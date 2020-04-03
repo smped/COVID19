@@ -38,6 +38,15 @@ panderOptions("table.style", "rmarkdown")
 theme_set(theme_bw())
 ```
 
+```{r}
+# Handle updates between 12am & 9am
+dt <- Sys.Date()
+if (as.numeric(format(Sys.time(), "%H")) < 9){
+  dt <- Sys.Date() - 1
+}
+```
+
+
 *Disclaimer: This very simple report was prepared by a bioinformatician with no experience in epidemiology or virology, and as such should be treated simply as an alternate viewpoint on the data, which I was simply unable to find elsewhere. Many other people exist with much greater expertise on this subject. However, I do hope this provides a useful perspective which is able to add constructively to the wider discussion. In addition, it should be noted that this is very much focussed on Australian data.*
 
 # Data Sources
@@ -151,6 +160,220 @@ guardTable <- guardianData$`latest totals` %>%
   dplyr::filter(`Province/State` != "National")
 ```
 
+```{r nswTests}
+nswTests <- NA_real_
+nswUrl <- glue(
+  "https://www.health.nsw.gov.au/news/Pages/{str_remove_all(dt, '-')}_00.aspx"
+)
+if (url.exists(nswUrl)){
+  nswTests <- nswUrl %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//td[contains(@class, 'moh-rteTableFooterOddCol-6')]") %>% 
+    html_text() 
+  if (length(nswTests)) {
+    nswTests <- nswTests[[1]] %>%
+      str_remove_all(",") %>%
+      as.numeric()
+  }
+}
+```
+
+```{r qldTests}
+qldTests <- NA_real_
+qldUrl <- glue(
+  "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing"
+)
+if (url.exists(qldUrl)){
+  qldTests <- qldUrl %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//table[contains(@id, 'table59454')]") %>%
+    html_text() %>%
+    str_replace_all(
+      ".+Samples testedTotal([0-9,]+)Tests.+",
+      "\\1"
+    ) %>%
+    str_remove_all(",") %>%
+    as.numeric()
+}
+```
+
+```{r vicTests}
+vicTests <- NA_real_
+vicUrl <- glue(
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{str_trim(format(dt, '%e-%B-%Y'))}"
+) %>%
+  str_to_lower()
+if (url.exists(vicUrl)){
+  vicTests <- vicUrl %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//div[contains(@class, 'field field--name-field-dhhs')]") %>%
+    html_text() %>%
+    str_split("\n") %>%
+    .[[1]] %>%
+    str_subset("test(ed|s)") %>%
+    str_replace_all(
+      ".+than ([0-9,]+) .*test(ed|s).+",
+      "\\1"
+    ) %>%
+    str_remove_all(",") %>%
+    as.numeric()
+}
+```
+
+```{r waTests}
+waTests <- NA_real_
+waRecov <- NA_real_
+waUrl <- glue(
+  "https://ww2.health.wa.gov.au/Media-releases/2020/COVID19-update-{str_replace(format(dt, '%d-%B-%Y'), '^0', '')}"
+)
+if (url.exists(waUrl)){
+  
+  waTxt <- waUrl %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//div[contains(@id, 'contentArea')]") %>%
+    html_text() %>%
+    str_split("\n") %>%
+    .[[1]] %>%
+    str_trim()
+  waConf <- waTxt %>%
+    str_subset("total to") %>%
+    str_replace_all(".+total to ([0-9,]+).", "\\1") %>%
+    as.numeric()
+  waNeg <- waTxt %>%
+    str_subset("have tested") %>%
+    str_replace_all(".+ ([0-9,]+) Western.+", "\\1") %>%
+    str_remove_all(",") %>%
+    as.numeric()
+  waTests <- waConf + waNeg
+  waRecov <- waTxt %>%
+    str_subset(pattern = "recovered") %>%
+    str_replace_all(pattern = ".+ ([0-9]+) recovered.+", "\\1") %>%
+    as.numeric()
+}
+```
+
+```{r saTests}
+saRecov <- saTests <- NA_real_
+saUrl <- "https://www.sa.gov.au/covid-19/dashboard"
+saTxt <- saUrl  %>%
+  read_html() %>%
+  xml_find_all("//div[contains(@id, 'content_container_605362')]") %>%
+  html_text() %>%
+  str_split("\r\n") %>%
+  .[[1]] %>%
+  str_trim() %>%
+  .[. != ""] 
+saTests <- saTxt %>%
+  str_replace_all(".+have been.* ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
+  str_remove_all("[, ]") %>%
+  as.numeric()
+saRecov <- saTxt %>%
+  str_replace(".+\\..+ ([0-9]+) .*recovered.+", "\\1") %>%
+  as.numeric()
+```
+
+
+```{r actTests}
+actRecov <- actTests <- NA_real_
+actUrl <- "https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19"
+if (url.exists(actUrl)){
+  actTxt <- actUrl %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all(
+       "//div[contains(@class, 'spf-article-card--tabular')]"
+    ) %>% 
+    html_text() %>% 
+    str_split("\r\n") %>% 
+    .[[4]] %>% 
+    str_trim() %>% 
+    setdiff(y = "") %>% 
+    str_remove_all("[,*]") %>%
+    matrix(ncol = 2, byrow = TRUE) 
+  actTests <- actTxt %>% 
+    .[!str_detect(.[,1], "recovered"), 2] %>%
+    as.numeric() %>% 
+    sum()
+  actRecov <- actTxt %>%
+    .[str_detect(.[,1], "recov"), 2] %>%
+    as.numeric()
+}
+```
+
+```{r tasTests}
+tasTests <- NA_real_
+tasUrl <- glue(
+  "https://www.dhhs.tas.gov.au/news/2020/coronavirus_update_{format(dt, '%d_%B_%Y')}"
+) %>%
+  str_to_lower()
+if (url.exists(tasUrl)) {
+  suppressWarnings(
+    tasTests <- tasUrl %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all(
+        "//div[contains(@id, 'content_div_117564')]"
+      ) %>%
+      html_text() %>%
+      str_split("\r\n") %>%
+      .[[1]] %>%
+      str_trim() %>%
+      .[. != ""] %>%
+      str_replace_all(".+Tasmania has conducted ([0-9]+) tests.+", "\\1") %>%
+      as.numeric()
+  )
+} 
+```
+
+```{r ntTests}
+ntRecov <- ntTests <- NA_real_
+ntUrl <- "https://coronavirus.nt.gov.au/"
+ntTxt <- ntUrl %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all(
+    "//p[contains(@class, 'mt-2')]"
+  ) %>%
+  html_text() %>%
+  .[1] 
+ntTests <- ntTxt %>%
+  str_replace_all("^([0-9,]+) (people|test).+", "\\1") %>%
+  str_remove_all(",") %>%
+  as.numeric()
+ntRecov <- ntTxt %>%
+  str_replace(".+conducted([0-9,]+) .+recovered", "\\1") %>%
+  as.numeric()
+```
+
+```{r updateRecovered}
+auRec <- data.frame(obj = ls(pattern = "Recov"), stringsAsFactors = FALSE) %>% 
+  mutate(
+    recovered = vapply(obj, function(x){eval(str2lang(x))}, numeric(1)),
+    `Province/State` = case_when(
+      str_detect(obj, "act") ~ "Australian Capital Territory",
+      str_detect(obj, "nt") ~ "Northern Territory",
+      str_detect(obj, "sa") ~ "South Australia",
+      str_detect(obj, "wa") ~ "Western Australia",
+      str_detect(obj, "nsw") ~ "New South Wales",
+      str_detect(obj, "vic") ~ "Victoria",
+      str_detect(obj, "qld") ~ "Queensland",
+    ),
+    date = max(govTable$date),
+    Country = "Australia"
+  ) %>%
+  dplyr::select(`Province/State`, Country, date, recovered)
+if (nrow(auRec) > 0 ){
+  auRec %>%
+    write_tsv(
+      here::here(glue("recovered/recovered_{dt}.tsv"))
+    )
+}
+```
+
 
 
 ```{r latestAU}
@@ -191,7 +414,8 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
   ) %>% 
   mutate(
     deaths = ifelse(is.finite(deaths), deaths, NA)
-  )
+  ) %>%
+  left_join(auRec)
 ## The API & Govt website seems not to keep on top of NT & TAS cases so well
 ## Future versions of this script may need to manually update these via webscraping
 ## Here, just ensure that we don't have a decrease
@@ -225,31 +449,6 @@ if (updateAU) {
     dplyr::filter(n > 1) %>%
     nrow()
 }
-```
-
-```{r recovered, echo=FALSE, eval=FALSE}
-# recovered <- url("https://raw.githubusercontent.com/ulklc/covid19-timeseries/master/countryReport/raw/rawReport.csv") %>%
-#   read_csv() %>%
-#   rename(
-#     date = day,
-#     Country = countryName
-#   ) %>%
-#   mutate(
-#     Country = str_replace_all(Country, "United States", "US")
-#   ) %>%
-#   dplyr::select(
-#     Country, Lat = lat, Long = lon, date,
-#     recovered 
-#   )
-# if (updateAU){
-#   recovered %<>%
-#     bind_rows(
-#       latestAU %>% 
-#         distinct(Country, date)
-#     ) %>%
-#     arrange(Country, date) %>%
-#     mutate(recovered = zoo::na.locf(recovered)) 
-# }
 ```
 
 
@@ -286,8 +485,14 @@ if (updateAU){
       latestAU %>%
         dplyr::select(any_of(colnames(recovered)))
     ) %>%
-    arrange(`Province/State`, date) %>%
-    mutate(recovered = zoo::na.locf(recovered))
+    arrange(
+      `Province/State`, Country, date
+    ) %>%
+    mutate(recovered = zoo::na.locf(recovered)) %>%
+    group_by(
+      `Province/State`, Country, date
+    ) %>%
+    summarise_at(vars(recovered), max)
 }
 ```
 
@@ -327,7 +532,6 @@ if (updateAU){
     mutate(deaths = zoo::na.locf(deaths))
 }
 ```
-
 
 
 ```{r wikiPops, eval=FALSE, echo=FALSE}
@@ -522,6 +726,7 @@ sma <- function(x, n = 7){
     )
 }
 ```
+
 
 ```{r plotIncVConf}
 minPop <- 5e6
@@ -1034,13 +1239,13 @@ fr <- confirmed %>%
   ungroup() %>%
   summarise(fr = sum(deaths) / sum(confirmed)) %>%
   .[["fr"]]
-rr <-confirmed %>%
+rr <- confirmed %>%
   group_by(Country, date) %>%
-  summarise_at(vars(confirmed), sum) %>%
+  summarise_at(vars(confirmed), sum, na.rm = TRUE) %>%
   left_join(
     recovered %>% 
       group_by(Country, date) %>%
-      summarise_at(vars(recovered), sum)
+      summarise_at(vars(recovered), sum, na.rm = TRUE)
   ) %>%
   dplyr::filter(date == max(date)) %>%
   ungroup() %>%
@@ -1454,17 +1659,23 @@ Infections are currently doubling in slightly less than 4 days.
 - However, projecting forward using a 7 day lag as representative of the delay between contracting the virus and manifestation of symptoms, the number of people within Australia who are currently infected may be near `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% comma()`, which corresponds to `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% percent(accuracy = 0.001)` of the population, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`
 - Assuming a hospitalisation rate of 12% (based on US figures found [here](https://www.livescience.com/new-coronavirus-compare-with-flu.html)), it can be expected that within a week, `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(.48) %>% round(0)` will be hospitalised around Australia with severe symptoms.
 
+
 ```{r latestAUTable}
 confirmed %>% 
   dplyr::filter(
     Country == "Australia", 
     date >= max(date) - 1
-  ) %>% 
+  ) %>%
+  left_join(
+    latestAU %>%
+      dplyr::select(`Province/State`, date, deaths)
+  ) %>%
   bind_rows(
     group_by(., date) %>%
-      summarise_at(vars(confirmed), sum) %>%
+      summarise_at(vars(confirmed, deaths), sum, na.rm = TRUE) %>%
       mutate(`Province/State` = "Total")
-  ) %>% 
+  ) %>%
+  mutate(FRate = deaths / confirmed) %>% 
   group_by(`Province/State`) %>% 
   mutate(
     d = diff(confirmed),
@@ -1473,30 +1684,43 @@ confirmed %>%
   pivot_wider(
     id_cols = "Province/State", 
     names_from = date, 
-    values_from = c(confirmed, d, p)
+    values_from = c(confirmed, d, p, deaths, FRate)
   ) %>% 
   set_names(
     str_remove(names(.), "confirmed_")
   ) %>%
-  dplyr::select(1:4, 6) %>%
+  dplyr::select(1:4, 6, ncol(.) - 2, ncol(.)) %>%
   set_names(
     str_replace(names(.), "d_.+", "Daily Change")
   ) %>%
   set_names(
     str_replace(names(.), "p_.+", "Percent")
   ) %>%
+  set_names(
+    str_replace(names(.), "deaths.+", "deaths")
+  ) %>%
+  set_names(
+    str_replace(names(.), "FRate.+", "Fatality Rate")
+  ) %>%
   arrange(desc(Percent)) %>%
   ungroup() %>%
   mutate(isTotal = grepl("Total", `Province/State`)) %>%
   arrange(isTotal, desc(Percent)) %>%
   dplyr::select(-isTotal) %>%
-  mutate(Percent = percent(Percent, accuracy = 0.1)) %>%
-  rename(`% Change` = Percent) %>%
+  mutate_at(
+    vars(Percent, `Fatality Rate`),
+    percent,
+    accuracy = 0.1
+  ) %>%
+  rename(
+    `% Change` = Percent,
+    Fatalities = deaths
+  ) %>%
   pander(
-    justify = "lrrrr",
+    justify = "lrrrrrr",
     caption = paste(
-      "*Confirmed cases reported by each state at time of preparation.",
-      "Any states with unchanged, or decreasing values may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
+      "*Confirmed cases and fatalities reported by each state at time of preparation.",
+      "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
@@ -1565,7 +1789,7 @@ ausStatsPlot
 
 
 ```{r p5}
-minRate <- 4
+minRate <- 5
 p5 <- confirmed %>%
   dplyr::filter(
     Country == "Australia"
@@ -1578,7 +1802,6 @@ p5 <- confirmed %>%
   ) %>%
   dplyr::filter(
     !is.na(Population),
-    !str_detect(State, "Northern"),
     Rate > minRate
   ) %>%
   arrange(date) %>%
@@ -1597,7 +1820,7 @@ p5 <- confirmed %>%
   ) +
   geom_point() +
   geom_smooth(
-    method = "lm", 
+    method = "lm",
     se = FALSE,
     show.legend = FALSE,
     size = 1/2
@@ -1611,7 +1834,7 @@ p5 <- confirmed %>%
 # Hide the tooltip from the regression lines
 n <- length(levels(p5$data$State))
 p5 <- ggplotly(p5, tooltip = c("Date", "Rate", "State", "Confirmed"))
-regIndex <- seq(n + 1, length.out = n, by = 1)
+regIndex <- seq(n + 2, length.out = n, by = 1)
 p5$x$data[regIndex] <- lapply(
   p5$x$data[regIndex],
   function(x){
@@ -1626,13 +1849,14 @@ cp5 <- glue(
 Linear regression lines are shown for each state as  solid lines, with NSW perhaps showing a slightly increased rate of infection within the population.
 Once again, the y-axis is on a logarithmic scale indicating exponential growth is occurring.
 States are shown in order of the initial date they passed {minRate} cases/million.
-Due to the low population size in the NT, these cases were omitted.*
+Most states show a strong upward curve during the week following 19^th^ March, clearly showing the impact of the Ruby Princess.
+The hypothetical growth in the infection rate without that event occurring is not calculated here, however it is clear that the spread of COVID-19 has not continued at the same pace after that event initially occured.*
 "
 )
 ```
 
 
-```{r plotP5, fig.cap=cp5, fig.width=8, fig.height=6}
+```{r plotP5, fig.cap=cp5, fig.width=10, fig.height=7}
 p5
 ```
 
@@ -1678,7 +1902,7 @@ In this way comparisons against NSW were performed, but no comparisons between o
 
 Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial time at which cumulative confirmed infection rate exceeded `r minRate` cases / million.
 Differences between State-level slopes and NSW however, are of great interest, and as such only the slopes are shown.
-For NSW (`Term = date`) this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
+For NSW this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
 Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
 For those States which appear to be of interest, a negative value indicates an infection rate increasing more slowly than NSW, whilst a positive value indicates the opposite.
 If no difference is noted between any state and NSW, it can be consideed that these states are all experiencing growth at a similar rate.
@@ -1687,10 +1911,10 @@ Currently, **the infection rate in most states is doubling every `r round(log(2,
 
 ```{r lmSummary}
 st <- shapiro.test(resid(lm))$p.value
+bp <- olsrr::ols_test_breusch_pagan(lm)$p
 lm %>%
   tidy() %>%
   mutate(
-    adjP = p.adjust(p.value, method = "bonf"),
     term = str_remove_all(term, "State")
   ) %>%
   rename(
@@ -1706,6 +1930,7 @@ lm %>%
   mutate(
     Term = str_remove(Term, ":date"),
     Term = str_replace_all(Term, "date", "NSW Daily Increase"),
+    adjP = p.adjust(p, method = "bonf"),
     Estimate = sprintf("%.4f", Estimate),
     SE = sprintf("%.3f", SE),
     `T` = sprintf("%.2f", `T`),
@@ -1723,11 +1948,11 @@ lm %>%
   ) %>%
   pander(
     justify = "lrrrrr",
-    emphasize.strong.rows = which(
-      as.numeric(.$`p~bonf~`) < 0.05 & .$Term != "date"
-      )[-1],
+    # emphasize.strong.rows = which(
+    #   as.numeric(.$`p~bonf~`) < 0.05 & .$Term != "date"
+    #   )[-1]
     caption = paste(
-      "*Results of linear regression analysis", 
+      "*Results of linear regression analysis",
       "comparing the slopes of lines which track __daily",
       "change in cumulative confirmed infection rates__,",
       "scaled for population size in each state.",
@@ -1736,20 +1961,74 @@ lm %>%
       "All slopes and differences in slopes are given on the log~10~ scale.",
       "Any highlighted state indicates an infection rate which is increasing at a different daily rate to NSW.",
       "Positive values in the Estimate column indicate a greater rate the NSW, whilst a negative value in the Estimate column indicates a slower growth rate than NSW.",
-      "Diagnostic plots visually appeared",  
-      "to be within acceptable bounds for real data,",
-      "the fitted model was also checked using the Shapiro-Wilk Test for normality", 
+      "The fitted model was also checked using the Shapiro-Wilk Test for normality",
       paste0(
-        "(p = ", 
+        "(p = ",
         sprintf( "%.4f", st),
-        ").",
-        ifelse(st < 0.05, "The current results indicate potential violations of the assumption of normality and results in this table should be __taken with caution__.*", "No issues with the linear model assumptions were noted.*")
+        "). ",
+        ifelse(st < 0.05, "The current results indicate potential violations of the assumption of normality and results in this table __should be taken with caution__.", "No issues with the assumption of normality were noted.")
+      ),
+      paste0(
+        "Heteroscdasticity was tested using the Breusch-Pagan test (p = ",
+        sprintf( "%.4f", bp),
+        "). ",
+        ifelse(bp < 0.05, "Given that unequal variances were detected, results and predictions from this model __should be taken with caution__* The source of this unequal variance is the spike in cases immediately following the Ruby Princess disembarkation.", "No issues with the assumption of constant variance were noted.*")
       )
     )
   )
 ```
 
 ```{r lmPred}
+new <- latestAU %>%
+    mutate(date = date + 1) %>%
+    dplyr::select(State = `Province/State`, date, confirmed) %>%
+    dplyr::filter(State != "Northern Territory") %>%
+    droplevels()
+rate2Val <- function(x){10^x / 1e6}
+new %>%
+  cbind(
+    predict.lm(
+      lm,
+      newdata = new, 
+      interval = "predict",
+      level = 0.95
+    )
+  ) %>%
+  left_join(ausPops) %>%
+  pivot_longer(
+    cols = c(fit, lwr, upr),
+    names_to = "type",
+    values_to = "value"
+  ) %>%
+  mutate(
+    value = round(Population * 10^value / 1e6, 0)
+  ) %>%
+  pivot_wider(
+    names_from = type,
+    values_from = value
+  ) %>%
+  arrange(desc(Population)) %>%
+  mutate(
+    lwr = case_when(
+      lwr < confirmed ~ confirmed,
+      lwr >= confirmed ~ lwr
+    )
+  ) %>%
+  mutate(`Prediction Interval` = glue("[{lwr}, {upr}]")) %>%
+  dplyr::select(State, date, Latest = confirmed, `Prediction Interval`) %>%
+  rename_all(str_to_title) %>%
+  pander(
+    justify = "llrr",
+    caption = glue(
+      "*95% prediction intervals for cumulative confirmed cases in each state on {format(max(.$Date), '%B %d, %Y')}.
+      Values were obtained using the above linear model, and as such, any caveats about the appropriateness of the model should be taken into account.*"
+    )
+  )
+```
+
+
+
+```{r lmPred_old, echo=FALSE, eval=FALSE}
 coef(lm) %>% 
   enframe(name = "Term", value = "coef") %>%
   dplyr::filter(str_detect(Term, "date")) %>%
@@ -1815,208 +2094,6 @@ tested <- list.files("tested", pattern = "tsv", full.names = TRUE) %>%
   read_tsv()
 ```
 
-```{r nswTests}
-nswTests <- NA_real_
-nswUrl <- glue(
-  "https://www.health.nsw.gov.au/news/Pages/{str_remove_all(Sys.Date(), '-')}_00.aspx"
-)
-if (url.exists(nswUrl)){
-  nswTests <- nswUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//td[contains(@class, 'moh-rteTableFooterOddCol-6')]") %>% 
-    html_text() 
-  if (length(nswTests)) {
-    nswTests <- nswTests[[1]] %>%
-      str_remove_all(",") %>%
-      as.numeric()
-  }
-}
-```
-
-```{r qldTests}
-qldTests <- NA_real_
-qldUrl <- glue(
-  "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing"
-)
-if (url.exists(qldUrl)){
-  qldTests <- qldUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//table[contains(@id, 'table59454')]") %>%
-    html_text() %>%
-    str_replace_all(
-      ".+Samples testedTotal([0-9,]+)Tests.+",
-      "\\1"
-    ) %>%
-    str_remove_all(",") %>%
-    as.numeric()
-}
-```
-
-```{r vicTests}
-vicTests <- NA_real_
-vicUrl <- glue(
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{str_trim(format(Sys.Date(), '%e-%B-%Y'))}"
-) %>%
-  str_to_lower()
-if (url.exists(vicUrl)){
-  vicTests <- vicUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//div[contains(@class, 'field field--name-field-dhhs')]") %>%
-    html_text() %>%
-    str_split("\n") %>%
-    .[[1]] %>%
-    str_subset("test(ed|s)") %>%
-    str_replace_all(
-      ".+than ([0-9,]+) .*test(ed|s).+",
-      "\\1"
-    ) %>%
-    str_remove_all(",") %>%
-    as.numeric()
-}
-```
-
-```{r waTests}
-waTests <- NA_real_
-waUrl <- glue(
-  "https://ww2.health.wa.gov.au/Media-releases/2020/COVID19-update-{format(Sys.Date(), '%d-%B-%Y')}"
-)
-if (url.exists(waUrl)){
-  
-  waTxt <- waUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//div[contains(@id, 'contentArea')]") %>%
-    html_text() %>%
-    str_split("\n") %>%
-    .[[1]] %>%
-    str_trim()
-  waConf <- waTxt %>%
-    str_subset("total to") %>%
-    str_replace_all(".+total to ([0-9,]+).", "\\1") %>%
-    as.numeric()
-  waNeg <- waTxt %>%
-    str_subset("have tested") %>%
-    str_replace_all(".+ ([0-9,]+) Western.+", "\\1") %>%
-    str_remove_all(",") %>%
-    as.numeric()
-  waTests <- waConf + waNeg
-}
-```
-
-```{r saTests}
-saTests <- NA_real_
-saTests <- "https://www.sa.gov.au/covid-19/dashboard" %>%
-  read_html() %>%
-  xml_find_all("//div[contains(@id, 'content_container_605362')]") %>%
-  html_text() %>%
-  str_split("\r\n") %>%
-  .[[1]] %>%
-  str_trim() %>%
-  .[. != ""] %>%
-  str_replace_all(".+have been.* ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
-  str_remove_all("[, ]") %>%
-  as.numeric()
-```
-
-
-```{r oldSaUrl, echo = FALSE,eval=FALSE}
-# saUrl <- paste0(
-#   "https://www.sahealth.sa.gov.au",
-#   # Find the latest media release as the naming is VERY inconsistent
-#   "https://www.sahealth.sa.gov.au/wps/wcm/connect/Public+Content/SA+Health+Internet/About+us/News+and+media/all+media+releases/" %>%
-#   read_html() %>%
-#   xml_find_all("//div[contains(@class, 'newstitle')]") %>% 
-#   .[[1]] %>%
-#   html_nodes("a") %>% 
-#   html_attr("href")
-# )
-# if (url.exists(saUrl)) {
-#   saTests <- saUrl %>%
-#     read_html() %>%
-#     html_nodes("body") %>%
-#     xml_find_all("//div[contains(@class, 'wysiwyg')]") %>%
-#     html_text() %>%
-#     str_split("\n") 
-#   if (length(saTests)) {
-#     saTests <- saTests[[1]] %>%
-#       str_trim() %>%
-#       .[!. == ""] %>%
-#       str_subset("(more than|around).+tests") %>%
-#       str_replace_all(".+ ([0-9,]+) tests.", "\\1") %>%
-#       str_remove_all(",") %>%
-#       as.numeric()
-#   }
-# }
-```
-
-```{r actTests}
-actTests <- NA_real_
-actUrl <- "https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19"
-if (url.exists(actUrl)){
-  actTests <- actUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all(
-       "//div[contains(@class, 'spf-article-card--tabular')]"
-    ) %>% 
-    html_text() %>% 
-    str_split("\r\n") %>% 
-    .[[4]] %>% 
-    str_trim() %>% 
-    setdiff(y = "") %>% 
-    str_remove_all("[,*]") %>%
-    matrix(ncol = 2, byrow = TRUE) %>% 
-    .[!str_detect(.[,1], "recovered"), 2] %>%
-    as.numeric() %>% 
-    sum()
-}
-```
-
-```{r tasTests}
-tasTests <- NA_real_
-tasUrl <- glue(
-  "https://www.dhhs.tas.gov.au/news/2020/coronavirus_update_{format(Sys.Date(), '%d_%B_%Y')}"
-) %>%
-  str_to_lower()
-if (url.exists(tasUrl)) {
-  suppressWarnings(
-    tasTests <- tasUrl %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all(
-        "//div[contains(@id, 'content_div_117564')]"
-      ) %>%
-      html_text() %>%
-      str_split("\r\n") %>%
-      .[[1]] %>%
-      str_trim() %>%
-      .[. != ""] %>%
-      str_replace_all(".+Tasmania has conducted ([0-9]+) tests.+", "\\1") %>%
-      as.numeric()
-  )
-} 
-```
-
-```{r ntTests}
-ntTests <- NA_real_
-ntUrl <- "https://coronavirus.nt.gov.au/"
-ntTests <- ntUrl %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  xml_find_all(
-    "//p[contains(@class, 'mt-2')]"
-  ) %>%
-  html_text() %>%
-  .[1] %>%
-  str_replace_all("^([0-9,]+) people.+", "\\1") %>%
-  str_remove_all(",") %>%
-  as.numeric()
-```
-
-
 
 ```{r updateTested}
 tested <- c(
@@ -2040,14 +2117,13 @@ tested <- c(
 tested %>%
   write_tsv(
     glue(
-      "tested/tested_{format(Sys.Date(), '%Y%m%d')}.tsv"
+      "tested/tested_{format(dt, '%Y%m%d')}.tsv"
     )
   )
 ```
 
 
-Testing numbers were initially sourced on 24^th^ March, 2020 from manual inspection of individual press releases for [NSW](https://www.health.nsw.gov.au/news/Pages/default.aspx), [QLD](https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing), [VIC](https://www.dhhs.vic.gov.au/media-hub-coronavirus-disease-covid-19), [WA](https://ww2.health.wa.gov.au/News/Media-releases-listing-page), [SA](https://www.sa.gov.au/covid-19/dashboard), [TAS](https://www.dhhs.tas.gov.au/news/2020) [ACT](https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19) and the [NT](https://coronavirus.nt.gov.au/).
-
+Testing numbers were initially sourced from manual inspection of individual press releases for [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
 Updates on testing numbers beyond the initial values were performed automatically using the above code which probes each state's official releases for the latest values, and updates where found.
 The number of tested individuals in each state was then assessed as a function of State population size.
 All results are valid at the time of report generation.
