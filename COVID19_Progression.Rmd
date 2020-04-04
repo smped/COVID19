@@ -255,15 +255,16 @@ waRecov <- dplyr::filter(waTxt, Cases == "Recovered")$Total
 
 ```{r saTests}
 saRecov <- saTests <- NA_real_
-saUrl <- "https://www.sa.gov.au/covid-19/dashboard"
+saUrl <- "https://www.covid-19.sa.gov.au/home/dashboard"
 saTxt <- saUrl  %>%
   read_html() %>%
-  xml_find_all("//div[contains(@id, 'content_container_605362')]") %>%
+  xml_find_all("//div[contains(@class, 'accordion__content')]") %>%
+  .[[1]] %>%
   html_text() %>%
   str_split("\r\n") %>%
   .[[1]] %>%
   str_trim() %>%
-  .[. != ""] 
+  .[. != ""]
 saTests <- saTxt %>%
   str_replace_all(".+have been.* ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
   str_remove_all("[, ]") %>%
@@ -647,7 +648,7 @@ Information on *recovered cases is also difficult to accurately obtain* due inco
 
 ```{r setThresholds}
 startingPoint <- 4
-minPop <- 2e6
+minPop <- 4e6
 ```
 
 
@@ -755,7 +756,7 @@ sma <- function(x, n = 7){
 
 
 ```{r plotIncVConf}
-minPop <- 5e6
+minPop <- 10e6
 minCases <- 100
 minDays <- 15
 plotIncVConf <- confirmed %>%
@@ -1290,7 +1291,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 
 
 ```{r p4}
-minPop <- 4e6
+minPop <- 5e6
 p4 <- confirmed %>%
   dplyr::filter(
     confirmed > 0
@@ -1366,8 +1367,8 @@ ggplotly(p4)
 ## Fatality Rate Vs Time
 
 ```{r plotFr}
-minDays <- 9
-minPop <- 2e6
+minDays <- 12
+minPop <- 5e6
 df <- confirmed %>%
   inner_join(deaths) %>%
   group_by(Country, date) %>%
@@ -1602,9 +1603,15 @@ ggplotly(p6)
 
 ```{r deathPlot}
 minDeaths <- 10
-minDays <- 3
-minPop <- 4e6
-deathPlot <- confirmed %>%
+ausDays <- deaths %>%
+  dplyr::filter(Country == "Australia") %>% 
+  group_by(date) %>%
+  summarise_at(vars(deaths), sum) %>% 
+  dplyr::filter(deaths > 10) %>%
+  nrow()
+minDays <- ausDays - 2
+minPop <- 5e6
+deathPlot <-confirmed %>%
   left_join(deaths) %>%
   group_by(Country, date) %>%
   summarise_at(
@@ -1630,6 +1637,22 @@ deathPlot <- confirmed %>%
       x = Days, y = Deaths, colour = Country,
       label = Date, conf = Confirmed)
     ) +
+    geom_vline(
+    aes(xintercept = Days),
+    data = . %>% 
+      dplyr::filter(Country == "Australia") %>%
+      slice(1),
+    linetype = 3,
+    colour = "blue"
+  ) +
+    geom_hline(
+    aes(yintercept = Deaths),
+    data = . %>% 
+      dplyr::filter(Country == "Australia") %>%
+      slice(1),
+    linetype = 3,
+    colour = "blue"
+  ) +
   geom_point() +
   geom_line() +
   scale_y_log10() +
@@ -1643,8 +1666,8 @@ deathPlot <- confirmed %>%
 cpDeath <- glue(
   "*As with the spread of the virus, fatalities also grow at an exponential rate.
   Any slowing in the growth of fatalities is an accurate marker for when the spread of the virus has definitively slowed, despite being a significantly lagging marker.
-  Cumulative fatalities are only shown for countries which have seen {minDeaths} or more fatalities for a period beyond {minDays} days.
-  Only countries with a population > {comma(minPop)} are shown.*"
+  Cumulative fatalities are only shown for countries which have seen {minDeaths} or more fatalities for a period beyond {minDays} days, and for countries with a population > {comma(minPop)}.
+  The blue dashed lines indicate the current position of Australia on this plot.*"
 )
 ```
 
