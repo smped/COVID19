@@ -35,6 +35,7 @@ library(plotly)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
 panderOptions("table.style", "rmarkdown")
+panderOptions("missing", "")
 theme_set(theme_bw())
 ```
 
@@ -162,21 +163,15 @@ guardTable <- guardianData$`latest totals` %>%
 
 ```{r nswTests}
 nswTests <- NA_real_
-nswUrl <- glue(
-  "https://www.health.nsw.gov.au/news/Pages/{str_remove_all(dt, '-')}_00.aspx"
-)
-if (url.exists(nswUrl)){
-  nswTests <- nswUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//td[contains(@class, 'moh-rteTableFooterOddCol-6')]") %>% 
-    html_text() 
-  if (length(nswTests)) {
-    nswTests <- nswTests[[1]] %>%
-      str_remove_all(",") %>%
-      as.numeric()
-  }
-}
+nswUrl <- "https://www.health.nsw.gov.au/Infectious/diseases/Pages/covid-19-latest.aspx"
+nswTests <- nswUrl %>%
+  read_html() %>%
+  html_nodes("body")  %>%
+  xml_find_all("//td[contains(@class, 'moh-rteTableFooterOddCol-6')]") %>%
+  html_text() %>%
+  .[[1]] %>%
+  str_remove(",") %>%
+  as.numeric()
 ```
 
 ```{r qldTests}
@@ -200,19 +195,20 @@ if (url.exists(qldUrl)){
 ```
 
 ```{r vicTests}
-vicTests <- NA_real_
+vicRecov <- vicTests <- NA_real_
 vicUrl <- glue(
   "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{str_trim(format(dt, '%e-%B-%Y'))}"
 ) %>%
   str_to_lower()
 if (url.exists(vicUrl)){
-  vicTests <- vicUrl %>%
+  vicTxt <- vicUrl %>%
     read_html() %>%
     html_nodes("body") %>%
     xml_find_all("//div[contains(@class, 'field field--name-field-dhhs')]") %>%
     html_text() %>%
     str_split("\n") %>%
-    .[[1]] %>%
+    .[[1]] 
+  vicTests <- vicTxt %>%
     str_subset("test(ed|s)") %>%
     str_replace_all(
       ".+than ([0-9,]+) .*test(ed|s).+",
@@ -220,40 +216,41 @@ if (url.exists(vicUrl)){
     ) %>%
     str_remove_all(",") %>%
     as.numeric()
+  vicRecov <- vicTxt %>%
+    str_subset("recovered") %>%
+    str_replace_all(".+ ([0-9,]+) people have recovered.", "\\1") %>%
+    str_remove(",") %>%
+    as.numeric()
 }
 ```
 
 ```{r waTests}
 waTests <- NA_real_
 waRecov <- NA_real_
-waUrl <- glue(
-  "https://ww2.health.wa.gov.au/Media-releases/2020/COVID19-update-{str_replace(format(dt, '%d-%B-%Y'), '^0', '')}"
-)
-if (url.exists(waUrl)){
-  
-  waTxt <- waUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//div[contains(@id, 'contentArea')]") %>%
-    html_text() %>%
-    str_split("\n") %>%
-    .[[1]] %>%
-    str_trim()
-  waConf <- waTxt %>%
-    str_subset("total to") %>%
-    str_replace_all(".+total to ([0-9,]+).", "\\1") %>%
-    as.numeric()
-  waNeg <- waTxt %>%
-    str_subset("have tested") %>%
-    str_replace_all(".+ ([0-9,]+) Western.+", "\\1") %>%
-    str_remove_all(",") %>%
-    as.numeric()
-  waTests <- waConf + waNeg
-  waRecov <- waTxt %>%
-    str_subset(pattern = "recovered") %>%
-    str_replace_all(pattern = ".+ ([0-9]+) recovered.+", "\\1") %>%
-    as.numeric()
-}
+# waUrl <- glue(
+#   "https://ww2.health.wa.gov.au/Media-releases/2020/COVID19-update-{str_replace(format(dt, '%d-%B-%Y'), '^0', '')}"
+# )
+waUrl <- "https://ww2.health.wa.gov.au/Articles/A_E/Coronavirus/COVID19-statistics"
+waTxt <- waUrl %>%
+  read_html() %>%
+  xml_find_all("//table") %>%
+  .[[1]] %>%
+  html_text() %>%
+  str_split("\n") %>%
+  .[[1]] %>%
+  str_trim() %>%
+  .[. != ""] %>%
+  str_remove(",") %>%
+  matrix(ncol = 2, byrow = TRUE) %>%
+  set_colnames(.[1,]) %>%
+  .[-1,] %>%
+  as_tibble() %>%
+  mutate(Total = as.numeric(Total))
+waTests <- waTxt %>%
+  dplyr::filter(str_detect(Cases, "ive")) %>%
+  summarise(n = sum(Total)) %>%
+  .[["n"]]
+waRecov <- dplyr::filter(waTxt, Cases == "Recovered")$Total
 ```
 
 ```{r saTests}
@@ -350,22 +347,51 @@ ntRecov <- ntTxt %>%
 ```
 
 ```{r updateRecovered}
-auRec <- data.frame(obj = ls(pattern = "Recov"), stringsAsFactors = FALSE) %>% 
+auRec <- c(
+  "Australian Capital Territory" = actRecov,
+  "Northern Territory" = ntRecov,
+  "South Australia" = saRecov,
+  "Western Australia" = waRecov,
+  "Victoria" = vicRecov
+) %>%
+  enframe("Province/State", "recovered") %>%
   mutate(
-    recovered = vapply(obj, function(x){eval(str2lang(x))}, numeric(1)),
-    `Province/State` = case_when(
-      str_detect(obj, "act") ~ "Australian Capital Territory",
-      str_detect(obj, "nt") ~ "Northern Territory",
-      str_detect(obj, "sa") ~ "South Australia",
-      str_detect(obj, "wa") ~ "Western Australia",
-      str_detect(obj, "nsw") ~ "New South Wales",
-      str_detect(obj, "vic") ~ "Victoria",
-      str_detect(obj, "qld") ~ "Queensland",
-    ),
-    date = dt,
+    date = ymd(dt),
     Country = "Australia"
   ) %>%
-  dplyr::select(`Province/State`, Country, date, recovered)
+  bind_rows(
+    guardianData$updates %>% 
+      as_tibble() %>%
+      dplyr::select(State, Date, recovered = `Recovered (cumulative)`) %>%
+      mutate(
+        date = str_replace_all(Date, "([0-9]+)/([0-9]+)/2020", "2020-\\2-\\1") %>% ymd(),
+        recovered = as.numeric(recovered),
+        `Province/State` = case_when(
+          State == "ACT" ~ "Australian Capital Territory" ,
+          State == "NSW" ~ "New South Wales",
+          State == "QLD" ~ "Queensland",
+          State == "VIC" ~ "Victoria",
+          State == "SA" ~ "South Australia",
+          State == "WA" ~ "Western Australia",
+          State == "TAS" ~ "Tasmania",
+          State == "NT" ~ "Northern Territory"
+        ),
+        Country = "Australia"
+      ) %>% 
+      dplyr::filter(!is.na(recovered)) 
+  ) %>%
+  bind_rows(
+    here::here("recovered") %>%
+      list.files(full.names = TRUE, pattern = "recovered.+tsv", ) %>%
+      sort() %>%
+      .[[length(.)]] %>%
+      read_tsv()
+  ) %>%
+  group_by(`Province/State`, Country) %>%
+  summarise(
+    date = max(date),
+    recovered = max(recovered)
+  )
 if (nrow(auRec) > 0 ){
   auRec %>%
     write_tsv(
@@ -1653,11 +1679,9 @@ Australia's spread of the virus appears in the previous plots as marginally slow
 
 - This may be a reflection of Australian geography or our tendency to have large personal space requirements
 - This may also be a reflection of the pre-emptive strategies already being taken by the population and government
-- Despite the above, Australia is **still in the exponential growth phase**, however there are early signs of the growth levelling out.
-Infections are currently doubling in slightly less than 4 days.
+- Despite the above, Australia is **still in an exponential growth phase**, however there are **early signs of the growth levelling out**. The contribution of the distortions caused by the Ruby Princess to this apparent levelling our is still unclear
 - Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
-- However, projecting forward using a 7 day lag as representative of the delay between contracting the virus and manifestation of symptoms, the number of people within Australia who are currently infected may be near `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% comma()`, which corresponds to `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% percent(accuracy = 0.001)` of the population, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`
-- Assuming a hospitalisation rate of 12% (based on US figures found [here](https://www.livescience.com/new-coronavirus-compare-with-flu.html)), it can be expected that within a week, `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(.48) %>% round(0)` will be hospitalised around Australia with severe symptoms.
+<!-- - However, projecting forward using a 7 day lag as representative of the delay between contracting the virus and manifestation of symptoms, the number of people within Australia who are currently infected may be near `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% comma()`, which corresponds to `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% percent(accuracy = 0.001)` of the population, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()` -->
 
 
 ```{r latestAUTable}
@@ -1668,14 +1692,17 @@ confirmed %>%
   ) %>%
   left_join(
     latestAU %>%
-      dplyr::select(`Province/State`, date, deaths)
+      dplyr::select(`Province/State`, date, deaths, recovered)
   ) %>%
   bind_rows(
     group_by(., date) %>%
-      summarise_at(vars(confirmed, deaths), sum, na.rm = TRUE) %>%
+      summarise_at(vars(confirmed, deaths, recovered), sum, na.rm = TRUE) %>%
       mutate(`Province/State` = "Total")
   ) %>%
-  mutate(FRate = deaths / confirmed) %>% 
+  mutate(
+    FRate = deaths / confirmed,
+    RRate = recovered / confirmed
+  ) %>% 
   group_by(`Province/State`) %>% 
   mutate(
     d = diff(confirmed),
@@ -1684,23 +1711,31 @@ confirmed %>%
   pivot_wider(
     id_cols = "Province/State", 
     names_from = date, 
-    values_from = c(confirmed, d, p, deaths, FRate)
+    values_from = c(confirmed, d, p, deaths, recovered, FRate, RRate)
   ) %>% 
   set_names(
     str_remove(names(.), "confirmed_")
   ) %>%
-  dplyr::select(1:4, 6, ncol(.) - 2, ncol(.)) %>%
+  dplyr::select(
+    1:4, seq(7, ncol(.), by = 2)
+  ) %>%
   set_names(
-    str_replace(names(.), "d_.+", "Daily Change")
+    str_replace(names(.), "^d_.+", "Daily Change")
   ) %>%
   set_names(
     str_replace(names(.), "p_.+", "Percent")
   ) %>%
   set_names(
-    str_replace(names(.), "deaths.+", "deaths")
+    str_replace(names(.), "deaths.+", "Fatalities")
+  ) %>%
+  set_names(
+    str_replace(names(.), "recov.+", "Recovered")
   ) %>%
   set_names(
     str_replace(names(.), "FRate.+", "Fatality Rate")
+  ) %>%
+  set_names(
+    str_replace(names(.), "RRate.+", "Recovery Rate")
   ) %>%
   arrange(desc(Percent)) %>%
   ungroup() %>%
@@ -1708,18 +1743,17 @@ confirmed %>%
   arrange(isTotal, desc(Percent)) %>%
   dplyr::select(-isTotal) %>%
   mutate_at(
-    vars(Percent, `Fatality Rate`),
+    vars(Percent, `Fatality Rate`, `Recovery Rate`),
     percent,
     accuracy = 0.1
   ) %>%
-  rename(
-    `% Change` = Percent,
-    Fatalities = deaths
-  ) %>%
+  rename(`% Change` = Percent) %>%
+  dplyr::select(1:5, starts_with("Fatal"), starts_with("Recov")) %>%
   pander(
-    justify = "lrrrrrr",
+    justify = "lrrrrrrrr",
     caption = paste(
-      "*Confirmed cases and fatalities reported by each state at time of preparation.",
+      "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.",
+      "Some states are not reporting recovered patient numbers, and these values are presented as empty cells.",
       "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
     ),
     emphasize.strong.rows = nrow(.)
@@ -1950,7 +1984,7 @@ lm %>%
     justify = "lrrrrr",
     emphasize.strong.rows = which(
       as.numeric(.$`p~bonf~`) < 0.1 & .$Term != "date"
-      )[-1],
+    ),
     caption = paste(
       "*Results of linear regression analysis",
       "comparing the slopes of lines which track __daily",
@@ -2013,12 +2047,17 @@ new %>%
       lwr >= confirmed ~ lwr
     )
   ) %>%
-  mutate(`Prediction Interval` = glue("[{lwr}, {upr}]")) %>%
-  set_names(str_replace_all(names(.), "confirmed", as.character(dt))) %>%
-  dplyr::select(State, one_of(as.character(dt)), `Prediction Date` = date, `Prediction Interval`) %>%
-  rename_all(str_to_title) %>%
+  mutate(PI = glue("[{lwr}, {upr}]")) %>%
+  dplyr::select(State, Confirmed = confirmed, PI) %>%
+  set_names(
+    case_when(
+      names(.) == "Confirmed" ~ as.character(dt),
+      names(.) == "PI" ~ paste0("95% Pred Interveral (", as.character(dt + 1), ")"),
+      names(.) != "Confirmed" ~ names(.)
+    )
+  ) %>%
   pander(
-    justify = "lrlr",
+    justify = "lrr",
     caption = glue(
       "*95% prediction intervals for cumulative confirmed cases in each state on {format(dt, '%B %d, %Y')}.
       Values were obtained using the above linear model, and as such, any caveats about the appropriateness of the model should be taken into account.*"
