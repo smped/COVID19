@@ -39,9 +39,9 @@ theme_set(theme_bw())
 ```
 
 ```{r}
-# Handle updates between 12am & 9am
+# Handle updates between 12am & 12pm
 dt <- Sys.Date()
-if (as.numeric(format(Sys.time(), "%H")) < 9){
+if (as.numeric(format(Sys.time(), "%H")) <= 12){
   dt <- Sys.Date() - 1
 }
 ```
@@ -362,7 +362,7 @@ auRec <- data.frame(obj = ls(pattern = "Recov"), stringsAsFactors = FALSE) %>%
       str_detect(obj, "vic") ~ "Victoria",
       str_detect(obj, "qld") ~ "Queensland",
     ),
-    date = max(govTable$date),
+    date = dt,
     Country = "Australia"
   ) %>%
   dplyr::select(`Province/State`, Country, date, recovered)
@@ -1876,7 +1876,8 @@ lm <- confirmed %>%
   ) %>%
   dplyr::filter(
     !is.na(Population),
-    Rate > minRate
+    Rate > minRate,
+    date <= dt
   ) %>%
   arrange(desc(confirmed)) %>%
   mutate(
@@ -1978,11 +1979,11 @@ lm %>%
 ```
 
 ```{r lmPred}
-new <- latestAU %>%
-    mutate(date = date + 1) %>%
-    dplyr::select(State = `Province/State`, date, confirmed) %>%
-    droplevels()
-rate2Val <- function(x){10^x / 1e6}
+new <- confirmed %>% 
+  dplyr::filter(Country == "Australia", date == dt) %>%
+  mutate(date = dt + 1) %>%
+  dplyr::select(State = `Province/State`, date, confirmed) %>%
+  droplevels()
 new %>%
   cbind(
     predict.lm(
@@ -2013,12 +2014,13 @@ new %>%
     )
   ) %>%
   mutate(`Prediction Interval` = glue("[{lwr}, {upr}]")) %>%
-  dplyr::select(State, date, Latest = confirmed, `Prediction Interval`) %>%
+  set_names(str_replace_all(names(.), "confirmed", as.character(dt))) %>%
+  dplyr::select(State, one_of(as.character(dt)), `Prediction Date` = date, `Prediction Interval`) %>%
   rename_all(str_to_title) %>%
   pander(
-    justify = "llrr",
+    justify = "lrlr",
     caption = glue(
-      "*95% prediction intervals for cumulative confirmed cases in each state on {format(max(.$Date), '%B %d, %Y')}.
+      "*95% prediction intervals for cumulative confirmed cases in each state on {format(dt, '%B %d, %Y')}.
       Values were obtained using the above linear model, and as such, any caveats about the appropriateness of the model should be taken into account.*"
     )
   )
@@ -2115,7 +2117,7 @@ tested <- c(
 tested %>%
   write_tsv(
     glue(
-      "tested/tested_{format(dt, '%Y%m%d')}.tsv"
+      "tested/tested_{format(Sys.Date(), '%Y%m%d')}.tsv"
     )
   )
 ```
