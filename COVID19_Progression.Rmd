@@ -625,7 +625,7 @@ wikiPops <- read_tsv("wikiPops.tsv")
 
 
 Data for confirmed cases, recoveries and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
-JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 10:30AM in Adelaide.
+JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 9:30AM in Adelaide.
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/, [The Guardian](https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json) and those at [www.health.gov.au](`r govUrl`).
