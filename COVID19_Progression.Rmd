@@ -1,6 +1,6 @@
 ---
 title: "COVID-19 Progression"
-date: "`r paste('Last Updated:', format(Sys.time(), '%d-%B-%Y %H:%M'), '(UTC+9:30)')`"
+date: "`r paste('Last Updated:', format(Sys.time(), '%d-%B-%Y %H:%M'), '(UTC+8:30)')`"
 output: 
   html_document: 
     code_folding: hide
