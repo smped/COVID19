@@ -661,8 +661,6 @@ For this section, most data is presented *relative to population size*.
 Growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
 This equates to about `r round(startingPoint*dplyr::filter(wikiPops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
 
-The exception to this is the `Daily Increase Vs Confirmed Cases` plot which uses raw case numbers and 100 confirmed cases as the point for beginning the plot.
-
 ## Table of Most Impacted Countries
 
 Confirmed cases in this table are effectively the cumulative, confirmed incidence rate.
@@ -746,6 +744,7 @@ confirmed %>%
 
 An alternate viewpoint on the data is to remove time and inspect the relationship between the daily increase in cases and the total number of cases.
 When this relationship ceases it's near linear relationship, this can be a sign the control measures have begun to take effect.
+Whilst this relationship **appears to be breaking down for Australia**, the cases of Hong Kong, Singapore and Iran should be taken as cautionary notes, where after a brief respite the proportional relationship once again resumed.
 
 ```{r sma}
 sma <- function(x, n = 7){
@@ -761,41 +760,59 @@ sma <- function(x, n = 7){
 
 
 ```{r plotIncVConf}
-minPop <- 10e6
-minCases <- 100
+minPop <- 6e6
 minDays <- 15
-plotIncVConf <- confirmed %>%
+minRate <- 6
+plotIncVConf <- ggplotly(
+confirmed %>%
   group_by(Country, date) %>%
   summarise_at(vars(confirmed), sum) %>%
   dplyr::filter(confirmed > 0) %>%
-  split(f = .$Country) %>%
+  inner_join(
+    dplyr::filter(wikiPops, Population > minPop | Country == "Singapore")
+  ) %>%
+  mutate(
+    rate = 1e6 * confirmed / Population
+  ) %>%
+  split(f = .$Country) %>% 
   lapply(function(x, n = 7){
     x %>%
       mutate(
-        d = c(0, diff(confirmed))
+        d = c(0, diff(rate))
       ) %>%
       mutate_at(
-        vars(confirmed, d), sma, n = n
+        vars(d), sma, n = n
+      ) %>%
+      dplyr::filter(
+        !is.na(d),
+        rate > minRate
+      ) %>%
+      mutate(
+        nDays = nrow(.)
       )
   }
   ) %>%
   bind_rows() %>%
-  inner_join(wikiPops) %>%
-  dplyr::filter(confirmed > minCases) %>%
-  mutate_at(vars(confirmed, d), round, 2) %>%
-  mutate(n = n()) %>%
-  dplyr::filter(
-    n > minDays,
-    Population > minPop,
-    d > 0
-  ) %>%
   ungroup() %>%
+  dplyr::filter(
+    nDays > minDays,
+    d > 0.01
+  ) %>%
   arrange(date) %>%
-  mutate(Country = fct_inorder(Country)) %>%
-  rename_all(str_to_title) %>%
-  rename(`Average Daily Increase` = D) %>%
-  mutate(Population = comma(round(Population, -3))) %>%
-  ggplot(aes(Confirmed, `Average Daily Increase`, colour = Country, label = Date, key = Population)) +
+  mutate(
+    Country = fct_inorder(Country),
+    rate = round(rate, 2),
+    d = round(d, 3),
+    Population = comma(round(Population, -3))
+  ) %>%
+  rename(
+    Rate = rate,
+    `Average Daily Increase` = d,
+    Date = date
+  ) %>%
+  ggplot(
+    aes(Rate, `Average Daily Increase`, colour = Country, label = Population, key = Date)
+  ) +
   geom_hline(
     aes(yintercept = `Average Daily Increase`),
     data = . %>%
@@ -805,30 +822,32 @@ plotIncVConf <- confirmed %>%
     size = 1/3
   ) +
   geom_vline(
-    aes(xintercept = Confirmed),
+    aes(xintercept = Rate),
     data = . %>%
       dplyr::filter(Country == "Australia", Date == max(Date)),
     linetype = 3,
     colour = "blue",
     size = 1/3
   ) +
-  geom_point() +
+    geom_point() +
   geom_line() +
-  scale_x_log10(labels = comma) +
-  scale_y_log10(labels = comma) +
-  labs(
-    x = "Confirmed Cases",
-    y = 'Average Daily Increase'
+  scale_y_log10(
+    name = "Average Daily Increase (Cases / Million)",
+    label = label_comma(accuracy = 0.01)) +
+  scale_x_log10(
+    name = "Cumulative Confirmed Infection Rate (Cases / Million)"
   )
+)
 ```
 
 ```{r capIncVConf}
 capIncVConf <- glue(
-  "*Daily Increase in Cases plotted against Confirmed Cases.
+  "*Daily Increase in Cases plotted against Confirmed Cases, using confirmed cases / million.
   These two values are directly proportional until interventions are successful, at which point the proportional relationship changes, as evidenced by a sudden downwards turn.
-  Values shown are 7-day moving averages in order to minimise the impact of day-to-day variation.
-  Countries are only shown from the point at which the moving average exceeds {minCases} cases, and have exceeded this value for > {minDays} days.
-  Data is additionally restricted to countries with a population > {comma(minPop)}, for greater clarity.
+  Scaling by population aids in the visualisation of where in the relative infection trajectory each country's control measures have begun to take effect.
+  Daily increases are shown using a 7-day moving average in order to minimise the impact of day-to-day variation.
+  Countries are only shown from the point at which the moving average exceeds {minRate} cases/million, and have exceeded this value for > {minDays} days.
+  Data is additionally restricted to countries with a population > {comma(minPop)}, for greater clarity, with the addition of Singapore.
   Australia's position is indicated by the intersection of the dashed blue lines.*
   "
 )
@@ -838,7 +857,6 @@ capIncVConf <- glue(
 ```{r showIncVConf, fig.cap=capIncVConf, fig.height=8, fig.width=10}
 ggplotly(plotIncVConf)
 ```
-
 
 
 ## Cumulative Incidence Rates
@@ -2010,7 +2028,7 @@ Regression lines are shown for each state as solid lines.
 The y-axis is on a logarithmic scale indicating exponential growth is occurring.
 States are shown in order of the initial date they passed {minRate} cases/million.
 Most states show a strong upward curve during the week following 19^th^ March, clearly showing the impact of the Ruby Princess, however the consistent deviation below regression lines for all states is strongly suggestive of a slowing in the recent infection rate.
-The hypothetical growth in the infection rate without that event occurring is not calculated here, however it is clear that the spread of COVID-19 has not continued at the same pace after that event initially occured.*
+The hypothetical growth in the infection rate without that event occurring is not calculated here, however it is clear that the spread of COVID-19 has not continued at the same pace after that event initially occurred.*
 "
 )
 ```
@@ -2065,7 +2083,7 @@ Differences between State-level slopes and NSW however, are of great interest, a
 For NSW this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
 Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
 For those States which appear to be of interest, a negative value indicates an infection rate increasing more slowly than NSW, whilst a positive value indicates the opposite.
-If no difference is noted between any state and NSW, it can be consideed that these states are all experiencing growth at a similar rate.
+If no difference is noted between any state and NSW, it can be considered that these states are all experiencing growth at a similar rate.
 Currently, **the infection rate in most states is doubling every `r round(log(2, base = 10^coef(lm)["date"]), 1)` days.**
 
 
@@ -2129,7 +2147,7 @@ lm %>%
         ifelse(st < 0.05, "The current results indicate potential violations of the assumption of normality and results in this table __should be taken with caution__.", "No issues with the assumption of normality were noted.")
       ),
       paste0(
-        "Heteroscdasticity was tested using the Breusch-Pagan test (p = ",
+        "Heteroscedasticity was tested using the Breusch-Pagan test (p = ",
         sprintf( "%.4f", bp),
         "). ",
         ifelse(bp < 0.05, "Given that unequal variances were detected, results and predictions from this model __should be taken with caution__* The source of this unequal variance is the spike in cases immediately following the Ruby Princess disembarkation.", "No issues with the assumption of constant variance were noted.*")
@@ -2178,7 +2196,7 @@ new %>%
   set_names(
     case_when(
       names(.) == "Confirmed" ~ as.character(dt),
-      names(.) == "PI" ~ paste0("95% Pred Interveral (", as.character(dt + 1), ")"),
+      names(.) == "PI" ~ paste0("95% Pred. Interval (", as.character(dt + 1), ")"),
       names(.) != "Confirmed" ~ names(.)
     )
   ) %>%
