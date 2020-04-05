@@ -1989,7 +1989,7 @@ p5 <- confirmed %>%
   dplyr::rename(
     Confirmed = confirmed
   ) %>%
-  distinct(State, Confirmed, .keep_all = TRUE) %>%
+  # distinct(State, Confirmed, .keep_all = TRUE) %>%
   ggplot(
     aes(
       x = date, y = Rate, colour = State, 
@@ -1998,12 +1998,20 @@ p5 <- confirmed %>%
   ) +
   geom_point() +
   geom_smooth(
+    data = . %>%
+      dplyr::filter(date >= dt - 14),
     method = "lm",
     se = FALSE,
     show.legend = FALSE,
     size = 1/2
   ) +
-  geom_line(linetype = 3) +
+  # geom_line(linetype = 3) +
+  geom_smooth(
+    method = "loess",
+    se = FALSE,
+    linetype = 3,
+    size = 1/2
+  ) +
   scale_y_log10() +
   labs(
     x = "Date",
@@ -2012,7 +2020,7 @@ p5 <- confirmed %>%
 # Hide the tooltip from the regression lines
 n <- length(levels(p5$data$State))
 p5 <- ggplotly(p5, tooltip = c("Date", "Rate", "State", "Confirmed"))
-regIndex <- seq(n + 2, length.out = n, by = 1)
+regIndex <- seq(n + 1, length.out = length(p5$x$data) , by = 1)
 p5$x$data[regIndex] <- lapply(
   p5$x$data[regIndex],
   function(x){
@@ -2024,7 +2032,7 @@ p5$x$data[regIndex] <- lapply(
 ```{r cp5, echo=FALSE}
 cp5 <- glue(
 "*Infection rates for each state with data beginning for each state once {minRate} confirmed cases /million was exceeded.
-Regression lines are shown for each state as solid lines.
+Regression lines for the last 2 weeks are shown for each state as solid lines, with loess curves through the complete set of daily points shown as dashed lines.
 The y-axis is on a logarithmic scale indicating exponential growth is occurring.
 States are shown in order of the initial date they passed {minRate} cases/million.
 Most states show a strong upward curve during the week following 19^th^ March, clearly showing the impact of the Ruby Princess, however the consistent deviation below regression lines for all states is strongly suggestive of a slowing in the recent infection rate.
@@ -2055,7 +2063,8 @@ lm <- confirmed %>%
   dplyr::filter(
     !is.na(Population),
     Rate > minRate,
-    date <= dt
+    date <= dt,
+    date >= dt - 13
   ) %>%
   arrange(desc(confirmed)) %>%
   mutate(
@@ -2084,7 +2093,7 @@ For NSW this captures the actual slope of the daily change in infection rate, wh
 Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
 For those States which appear to be of interest, a negative value indicates an infection rate increasing more slowly than NSW, whilst a positive value indicates the opposite.
 If no difference is noted between any state and NSW, it can be considered that these states are all experiencing growth at a similar rate.
-Currently, **the infection rate in most states is doubling every `r round(log(2, base = 10^coef(lm)["date"]), 1)` days.**
+Taking only the last 2 weeks of data, **the infection rate in most states is doubling every `r round(log(2, base = 10^coef(lm)["date"]), 1)` days.**
 
 
 ```{r lmSummary}
@@ -2130,7 +2139,7 @@ lm %>%
       as.numeric(.$`p~bonf~`) < 0.1 & .$Term != "date"
     ),
     caption = paste(
-      "*Results of linear regression analysis",
+      "*Results of linear regression analysis for the last 14 days only,",
       "comparing the slopes of lines which track __daily",
       "change in cumulative confirmed infection rates__,",
       "scaled for population size in each state.",
