@@ -788,6 +788,9 @@ plotIncVConf <- confirmed %>%
     Population > minPop,
     d > 0
   ) %>%
+  ungroup() %>%
+  arrange(date) %>%
+  mutate(Country = fct_inorder(Country)) %>%
   rename_all(str_to_title) %>%
   rename(`Average Daily Increase` = D) %>%
   mutate(Population = comma(round(Population, -3))) %>%
