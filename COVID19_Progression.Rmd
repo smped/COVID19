@@ -358,7 +358,7 @@ auRec <- c(
 ) %>%
   enframe("Province/State", "recovered") %>%
   mutate(
-    date = ymd(dt),
+    date = ymd(Sys.Date()),
     Country = "Australia"
   ) %>%
   bind_rows(
@@ -401,7 +401,7 @@ auRec <- c(
 if (nrow(auRec) > 0 ){
   auRec %>%
     write_tsv(
-      here::here(glue("recovered/recovered_{dt}.tsv"))
+      here::here(glue("recovered/recovered_{ymd(Sys.Date())}.tsv"))
     )
 }
 ```
