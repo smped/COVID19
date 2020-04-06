@@ -210,6 +210,7 @@ if (url.exists(vicUrl)){
     .[[1]] 
   vicTests <- vicTxt %>%
     str_subset("test(ed|s)") %>%
+    .[[1]] %>%
     str_replace_all(
       ".+than ([0-9,]+) .*test(ed|s).+",
       "\\1"
