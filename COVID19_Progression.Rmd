@@ -196,10 +196,7 @@ if (url.exists(qldUrl)){
 
 ```{r vicTests}
 vicRecov <- vicTests <- NA_real_
-vicUrl <- glue(
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{str_trim(format(dt, '%e-%B-%Y'))}"
-) %>%
-  str_to_lower()
+vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-daily-update"
 if (url.exists(vicUrl)){
   vicTxt <- vicUrl %>%
     read_html() %>%
