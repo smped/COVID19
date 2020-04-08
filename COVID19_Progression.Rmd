@@ -176,19 +176,14 @@ nswTests <- nswUrl %>%
 
 ```{r qldTests}
 qldTests <- NA_real_
-qldUrl <- glue(
-  "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts#symptoms-testing"
-)
+qldUrl <- "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts"
 if (url.exists(qldUrl)){
-  qldTests <- qldUrl %>%
+  qldTests <-qldUrl %>%
     read_html() %>%
     html_nodes("body") %>%
-    xml_find_all("//table[contains(@id, 'table59454')]") %>%
+    xml_find_all("//td[contains(@headers, 'table59454r1c2')]") %>%
     html_text() %>%
-    str_replace_all(
-      ".+Samples testedTotal([0-9,]+).*Tests.+",
-      "\\1"
-    ) %>%
+    .[[1]] %>%
     str_remove_all(",") %>%
     as.numeric()
 }
@@ -1823,7 +1818,6 @@ Australia's spread of the virus appears in the previous plots as marginally slow
 - This may also be a reflection of the pre-emptive strategies already being taken by the population and government
 - It is now becoming possible that Australia is **no longer in an exponential growth phase** and there are **early signs of the growth levelling out**. The contribution of the distortions caused by the Ruby Princess to this apparent levelling out is still unclear
 - Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
-<!-- - However, projecting forward using a 7 day lag as representative of the delay between contracting the virus and manifestation of symptoms, the number of people within Australia who are currently infected may be near `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% comma()`, which corresponds to `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% percent(accuracy = 0.001)` of the population, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% multiply_by(4) %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()` -->
 
 
 ```{r latestAUTable}
@@ -1836,20 +1830,39 @@ confirmed %>%
     latestAU %>%
       dplyr::select(`Province/State`, date, deaths, recovered)
   ) %>%
-  bind_rows(
-    group_by(., date) %>%
-      summarise_at(vars(confirmed, deaths, recovered), sum, na.rm = TRUE) %>%
-      mutate(`Province/State` = "Total")
-  ) %>%
   mutate(
     FRate = deaths / confirmed,
     RRate = recovered / confirmed
   ) %>% 
   group_by(`Province/State`) %>% 
   mutate(
-    d = diff(confirmed),
-    p = diff(confirmed) / min(confirmed)
+    d = c(NA, diff(confirmed)),
+    p = d / min(confirmed)
   ) %>%
+  bind_rows(
+    group_by(., date) %>%
+      summarise(
+        confirmed = sum(confirmed),
+        deaths = sum(deaths, na.rm = TRUE),
+        recovered = sum(recovered, na.rm = TRUE),
+        FRate = sum(deaths, na.rm = TRUE) / sum(confirmed),
+        d = sum(d),
+        p = d / (confirmed - d)
+      ) %>%
+      ungroup() %>%
+      mutate(
+        `Province/State` = "Total",
+        Country = "Australia"
+      )
+  ) %>%
+  ungroup() %>%
+  group_by(date) %>%
+  mutate(
+    RRate = case_when(
+      `Province/State` != "Total" ~ RRate,
+      `Province/State` == "Total" ~ sum(recovered[`Province/State` != "Total"], na.rm = TRUE) / sum(confirmed[!is.na(recovered) & `Province/State` != "Total"])
+    )
+  ) %>% 
   pivot_wider(
     id_cols = "Province/State", 
     names_from = date, 
@@ -1857,10 +1870,8 @@ confirmed %>%
   ) %>% 
   set_names(
     str_remove(names(.), "confirmed_")
-  ) %>%
-  dplyr::select(
-    1:4, seq(7, ncol(.), by = 2)
-  ) %>%
+  ) %>% 
+  dplyr::select_if(function(x){sum(is.na(x)) <= 1}) %>%
   set_names(
     str_replace(names(.), "^d_.+", "Daily Change")
   ) %>%
@@ -1880,7 +1891,6 @@ confirmed %>%
     str_replace(names(.), "RRate.+", "Recovery Rate")
   ) %>%
   arrange(desc(Percent)) %>%
-  ungroup() %>%
   mutate(isTotal = grepl("Total", `Province/State`)) %>%
   arrange(isTotal, desc(Percent)) %>%
   dplyr::select(-isTotal) %>%
@@ -1889,14 +1899,17 @@ confirmed %>%
     percent,
     accuracy = 0.1
   ) %>%
-  rename(`% Change` = Percent) %>%
+  rename(
+    `% Change` = Percent,
+    `Recovery Rate^+^` = `Recovery Rate`) %>%
   dplyr::select(1:5, starts_with("Fatal"), starts_with("Recov")) %>%
   pander(
     justify = "lrrrrrrrr",
     caption = paste(
       "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.",
-      "Some states are not reporting recovered patient numbers, and these values are presented as empty cells.",
-      "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
+      "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.",
+      "Only NSW is __not reporting recovered patient numbers__, and these values are presented as empty cells.",
+      "^+^The recovery rate has been calculated only using states for which recovered patient information has been released, i.e. excluding NSW cases.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
@@ -1953,7 +1966,7 @@ ausStatsPlot$x$data[5:8] %<>%
 ```
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 29^th^ Feb 2020 as data is noticeably sparse prior to this date.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 29^th^ Feb 2020 as data is noticeably sparse prior to this date. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 7^th^ April. NSW is __still not reporting recovered patients__, and as such active infections remains a considerable underestimate.*"
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
