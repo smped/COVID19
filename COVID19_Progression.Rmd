@@ -1908,7 +1908,6 @@ confirmed %>%
     caption = paste(
       "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.",
       "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.",
-      "Only NSW is __not reporting recovered patient numbers__, and these values are presented as empty cells.",
       "^+^The recovery rate has been calculated only using states for which recovered patient information has been released, i.e. excluding NSW cases.*"
     ),
     emphasize.strong.rows = nrow(.)
@@ -1966,7 +1965,7 @@ ausStatsPlot$x$data[5:8] %<>%
 ```
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 29^th^ Feb 2020 as data is noticeably sparse prior to this date. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 7^th^ April. NSW is __still not reporting recovered patients__, and as such active infections remains a considerable underestimate.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 29^th^ Feb 2020 as data is noticeably sparse prior to this date. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 9^th^ April.*"
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
