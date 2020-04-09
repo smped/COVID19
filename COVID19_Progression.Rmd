@@ -39,12 +39,25 @@ panderOptions("missing", "")
 theme_set(theme_bw())
 ```
 
-```{r}
+```{r dt}
 # Handle updates between 12am & 12pm
 dt <- Sys.Date()
 if (as.numeric(format(Sys.time(), "%H")) <= 12){
   dt <- Sys.Date() - 1
 }
+```
+
+```{r ausStates}
+auStates <- c(
+  ACT = "Australian Capital Territory",
+  QLD = "Queensland",
+  NSW = "New South Wales",
+  VIC = "Victoria",
+  SA = "South Australia",
+  WA = "Western Australia",
+  NT = "Northern Territory",
+  TAS = "Tasmania"
+)
 ```
 
 
@@ -167,9 +180,13 @@ nswUrl <- "https://www.health.nsw.gov.au/Infectious/diseases/Pages/covid-19-late
 nswTests <- nswUrl %>%
   read_html() %>%
   html_nodes("body")  %>%
-  xml_find_all("//td[contains(@class, 'moh-rteTableFooterOddCol-6')]") %>%
+  xml_find_all("//table[contains(@class, 'moh-rteTable-6')]") %>%
   html_text() %>%
   .[[1]] %>%
+  str_split("\r\n") %>%
+  .[[1]] %>%
+  .[which(str_detect(., "Total cases tested$")) + 1] %>%
+  str_extract("^[0-9,]+") %>%
   str_remove(",") %>%
   as.numeric()
 ```
@@ -221,9 +238,6 @@ if (url.exists(vicUrl)){
 ```{r waTests}
 waTests <- NA_real_
 waRecov <- NA_real_
-# waUrl <- glue(
-#   "https://ww2.health.wa.gov.au/Media-releases/2020/COVID19-update-{str_replace(format(dt, '%d-%B-%Y'), '^0', '')}"
-# )
 waUrl <- "https://ww2.health.wa.gov.au/Articles/A_E/Coronavirus/COVID19-statistics"
 waTxt <- waUrl %>%
   read_html() %>%
@@ -260,14 +274,13 @@ saTxt <- saUrl  %>%
   str_trim() %>%
   .[. != ""]
 saTests <- saTxt %>%
-  str_replace_all(".+have been.* ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
+  str_replace_all(".+ ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
   str_remove_all("[, ]") %>%
   as.numeric()
 saRecov <- saTxt %>%
   str_replace(".+\\..+ ([0-9]+) .*recovered.+", "\\1") %>%
   as.numeric()
 ```
-
 
 ```{r actTests}
 actRecov <- actTests <- NA_real_
@@ -299,7 +312,7 @@ if (url.exists(actUrl)){
 ```{r tasTests}
 tasTests <- NA_real_
 tasUrl <- glue(
-  "https://www.dhhs.tas.gov.au/news/2020/coronavirus_update_{format(dt, '%d_%B_%Y')}"
+  "http://health.tas.gov.au/news/2020/coronavirus_update_{str_remove(format(dt, '%d_%B_%Y'), '^0')}"
 ) %>%
   str_to_lower()
 if (url.exists(tasUrl)) {
@@ -310,7 +323,7 @@ if (url.exists(tasUrl)) {
       xml_find_all(
         "//div[contains(@id, 'content_div_117564')]"
       ) %>%
-      html_text() %>%
+      html_text()%>%
       str_split("\r\n") %>%
       .[[1]] %>%
       str_trim() %>%
@@ -361,16 +374,7 @@ auRec <- c(
       mutate(
         date = str_replace_all(Date, "([0-9]+)/([0-9]+)/2020", "2020-\\2-\\1") %>% ymd(),
         recovered = as.numeric(recovered),
-        `Province/State` = case_when(
-          State == "ACT" ~ "Australian Capital Territory" ,
-          State == "NSW" ~ "New South Wales",
-          State == "QLD" ~ "Queensland",
-          State == "VIC" ~ "Victoria",
-          State == "SA" ~ "South Australia",
-          State == "WA" ~ "Western Australia",
-          State == "TAS" ~ "Tasmania",
-          State == "NT" ~ "Northern Territory"
-        ),
+        `Province/State` = auStates[State],
         Country = "Australia"
       ) %>% 
       dplyr::filter(!is.na(recovered)) 
@@ -398,7 +402,6 @@ if (nrow(auRec) > 0 ){
     )
 }
 ```
-
 
 
 ```{r latestAU}
@@ -429,7 +432,6 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
   ) %>%
   bind_rows(govTable) %>% 
   bind_rows(guardTable) %>%
-  # dplyr::filter(date > prevDateAU) %>%
   group_by(`Province/State`) %>% 
   summarise(
     Country = unique(Country),
@@ -476,6 +478,12 @@ if (updateAU) {
 }
 ```
 
+```{r auRecTS}
+auRecTS<- list.files(here::here("recovered"), pattern = "rec.*tsv",full.names = TRUE) %>%
+  lapply(read_tsv) %>%
+  bind_rows()
+```
+
 
 ```{r jhuRecovered}
 recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv") %>%
@@ -503,22 +511,12 @@ recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
       !grepl("China", Country) ~ Country
     )
   ) %>%
-  dplyr::select(-Lat, -Long)
-if (updateAU){
-  recovered %<>%
-    bind_rows(
-      latestAU %>%
-        dplyr::select(any_of(colnames(recovered)))
-    ) %>%
-    arrange(
-      `Province/State`, Country, date
-    ) %>%
-    mutate(recovered = zoo::na.locf(recovered)) %>%
-    group_by(
-      `Province/State`, Country, date
-    ) %>%
-    summarise_at(vars(recovered), max)
-}
+  dplyr::select(-Lat, -Long) %>%
+  bind_rows(auRecTS) %>%
+  group_by(
+    `Province/State`, Country, date
+  ) %>%
+  summarise_at(vars(recovered), max)
 ```
 
 
@@ -1147,7 +1145,8 @@ ggplotly(p2)
 
 Notable features of this perspective are:
 
-- Active infection rates in South Korea are currently either declining or stable
+- Active infection rates in South Korea are currently declining 
+- Active infection rates __appear to be declining in Australia__, Hong Kong, Iran and Switzerland
 - Despite strict control measures, active infection rates are exponentially increasing in both Hong Kong and Singapore
 
 ## Dimensional Reduction
@@ -1697,8 +1696,6 @@ ggplotly(deathPlot)
 ```
 
 
-
-
 ## Daily Increase in Fatalities Vs Confirmed Fatalities
 
 ```{r dailyVsTotalDeaths}
@@ -1901,14 +1898,18 @@ confirmed %>%
   ) %>%
   rename(
     `% Change` = Percent,
-    `Recovery Rate^+^` = `Recovery Rate`) %>%
-  dplyr::select(1:5, starts_with("Fatal"), starts_with("Recov")) %>%
+    `Recovered^+^` = Recovered
+  ) %>%
+  dplyr::select(State = `Province/State`, 2:3, ends_with("Change"), starts_with("Fatal"), starts_with("Recov")) %>%
+  mutate(
+     `Currently Active` = (!!as.name(as.character(dt))) - Fatalities - `Recovered^+^`
+  ) %>%
   pander(
-    justify = "lrrrrrrrr",
+    justify = "lrrrrrrrrr",
     caption = paste(
       "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.",
       "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.",
-      "^+^The recovery rate has been calculated only using states for which recovered patient information has been released, i.e. excluding NSW cases.*"
+      "^+^Recovered cases are not reported by NSW so this value is taken by subtracting all other states from the national total.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
@@ -1965,7 +1966,7 @@ ausStatsPlot$x$data[5:8] %<>%
 ```
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 29^th^ Feb 2020 as data is noticeably sparse prior to this date. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 9^th^ April.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 29^th^ Feb 2020 as data is noticeably sparse prior to this date. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date, which allowed estimation of the number of recoveed cases in NSW.*"
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
@@ -1999,7 +2000,6 @@ p5 <- confirmed %>%
   dplyr::rename(
     Confirmed = confirmed
   ) %>%
-  # distinct(State, Confirmed, .keep_all = TRUE) %>%
   ggplot(
     aes(
       x = date, y = Rate, colour = State, 
@@ -2015,7 +2015,6 @@ p5 <- confirmed %>%
     show.legend = FALSE,
     size = 1/2
   ) +
-  # geom_line(linetype = 3) +
   geom_smooth(
     method = "loess",
     se = FALSE,
@@ -2228,64 +2227,6 @@ new %>%
   )
 ```
 
-
-
-```{r lmPred_old, echo=FALSE, eval=FALSE}
-coef(lm) %>% 
-  enframe(name = "Term", value = "coef") %>%
-  dplyr::filter(str_detect(Term, "date")) %>%
-  mutate(
-    slope = case_when(
-      str_detect(Term, "State") ~ coef[[1]] + coef,
-      !str_detect(Term, "State") ~ coef
-    ),
-    Term = str_remove(Term, "State"),
-    State = str_remove(Term, ":date"),
-    State = str_replace(State, "date", "New South Wales")
-    ) %>%
-  left_join(
-    confirmed %>% 
-      dplyr::filter(
-        Country == "Australia", 
-        date == max(date)
-      ) %>% 
-      rename(State = `Province/State`) %>%
-      dplyr::select(State, date, confirmed)
-  ) %>%
-  mutate(
-    predicted = round(10^slope*confirmed, 0),
-    slope = percent(10^slope, accuracy = 0.1),
-  ) %>%
-  dplyr::select(
-    State, 
-    `Expected Daily Increase` = slope,
-    `Most Recent` = confirmed,
-    `Predicted For Next Day` = predicted
-    ) %>%
-  pander(
-    justify = "lrrr",
-    caption = paste(
-      "Results from linear regression shown as the",
-      "expected daily increase in cases for the",
-      "current exponential growth phase.",
-      "Most recent values were taken from the official",
-      "figures on",
-      confirmed %>%
-        dplyr::filter(Country == "Australia") %>%
-        .[["date"]] %>%
-        max() %>%
-        format("%d %B, %Y."),
-      "Predictions are for",
-      confirmed %>%
-        dplyr::filter(Country == "Australia") %>%
-        .[["date"]] %>%
-        max() %>%
-        add(1) %>%
-        format("%d %B, %Y."),
-      "Standard errors for predictions have not been included."
-    )
-  )
-```
 
 ## Assessment of Testing Within Each State
 
