@@ -209,7 +209,11 @@ if (url.exists(qldUrl)){
 ```{r vicTests}
 vicRecov <- vicTests <- NA_real_
 # Might need to revert to the dated url
-vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-daily-update"
+# vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-daily-update"
+vicUrl <- glue(
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt, '%d-%B-%Y')}"
+) %>%
+  str_to_lower()
 if (url.exists(vicUrl)){
   vicTxt <- vicUrl %>%
     read_html() %>%
@@ -222,7 +226,7 @@ if (url.exists(vicUrl)){
     str_subset("test(ed|s)") %>%
     .[[1]] %>%
     str_replace_all(
-      ".+than ([0-9,]+) .*test(ed|s).+",
+      ".+ ([0-9,]+) .*test(ed|s).+",
       "\\1"
     ) %>%
     str_remove_all(",") %>%
