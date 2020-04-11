@@ -1975,6 +1975,65 @@ ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities fo
 ausStatsPlot
 ```
 
+## Individual States
+
+```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases are still poorly reported and these estimates are unreliable.*"}
+ggplotly(
+  confirmed %>%
+    dplyr::filter(Country == "Australia") %>%
+    left_join(deaths) %>%
+    left_join(recovered) %>%
+    rename(State = `Province/State`) %>%
+    dplyr::filter(
+      date > ymd("2020-03-19"),
+    ) %>%
+    arrange(date) %>%
+    group_by(State) %>%
+    mutate_at(
+      vars(confirmed, recovered, deaths), cummax
+    ) %>%
+    ungroup() %>%
+    left_join(ausPops) %>%
+    mutate(active = confirmed - deaths - recovered) %>%
+    pivot_longer(
+      cols = c(confirmed, deaths, recovered, active),
+      names_to = "status",
+      values_to = "count"
+    ) %>%
+    dplyr::filter(
+      count > 0,
+      !(State %in% c("Queensland", "New South Wales") & status == "recovered" & date < ymd("2020-04-06")),
+      !(State %in% c("South Australia") & status == "recovered" & date < ymd("2020-04-01")),    
+      !(State %in% c("Tasmania") & status == "recovered" & date < ymd("2020-04-02")),
+    ) %>%
+    mutate(
+      rate = 1e6*count/Population,
+      rate = round(rate, 2),
+      status = str_replace(status, "deaths", "fatal") %>% str_to_title(),
+      status = factor(status, levels = c("Confirmed", "Active", "Recovered", "Fatal"))
+    ) %>%
+    rename_all(str_to_title) %>%
+    ggplot(aes(Date, Rate, colour = Status, label = Count)) +
+    geom_point() +
+    geom_smooth(method = "loess", se = FALSE, size = 1/2) +
+    scale_y_log10() +
+    scale_colour_manual(
+      values = c(
+        Active = rgb(0, 0, 0),
+        Confirmed = rgb(0, 0.3, 0.7),
+        Fatal = rgb(0.8, 0.2, 0.2),
+        Recovered = rgb(0.2, 0.7, 0.4)
+      )
+    ) +
+    facet_wrap(~State, ncol = 4) +
+    labs(
+      x = "Date",
+      y = "Cases / Million",
+      colour = "Case Status"
+    )
+)
+```
+
 
 ## State-wise Comparison of Confirmed Infection Rates
 
@@ -2335,6 +2394,9 @@ tested %>%
     emphasize.strong.rows = nrow(.)
   )
 ```
+
+
+
 
 # R Session Information
 
