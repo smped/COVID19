@@ -368,6 +368,7 @@ auRec <- c(
   "Victoria" = vicRecov
 ) %>%
   enframe("Province/State", "recovered") %>%
+  dplyr::filter(!is.na(recovered)) %>%
   mutate(
     date = ymd(Sys.Date()),
     Country = "Australia"
@@ -1939,11 +1940,7 @@ ausStatsPlot <- ggplotly(
       values_to = "Total"
     ) %>%
     arrange(Type, date) %>%
-    split(f = .$Type) %>%
-    lapply(mutate, keep = c(TRUE, diff(Total) != 0)) %>%
-    bind_rows() %>%
-    dplyr::filter(keep, date > ymd("2020-02-28")) %>%
-    dplyr::select(-keep) %>%
+    dplyr::filter(date > ymd("2020-02-29")) %>%
     mutate(
       Type = str_to_title(Type),
       Type = str_replace_all(Type, "Deaths", "Fatalities"),
@@ -1971,7 +1968,7 @@ ausStatsPlot$x$data[5:8] %<>%
 ```
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 29^th^ Feb 2020 as data is noticeably sparse prior to this date. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date, which allowed estimation of the number of recoveed cases in NSW.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ March 2020 as this was the date of the first recorded fatality in Australia. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date, which allowed estimation of the number of recovered cases in NSW.*"
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
