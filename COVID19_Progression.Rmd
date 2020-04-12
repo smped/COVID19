@@ -1164,16 +1164,16 @@ Notable features of this perspective are:
 - Despite strict control measures, active infection rates are exponentially increasing in both Hong Kong and Singapore
 
 
-## Comparison of Fatality Rates
+## Comparison of Total Fatalities
 
 ```{r setScaledFatalPrams}
 minPop <- 1e6
 minDeaths <- 200
 nCnt <- 25
 cp <- glue(
-  "Comparison of the {nCnt} most impacted countries by fatalities per million showing A) the number of fatalities scaled by population size and B) Total Fatalities.
+  "*Comparison of the {nCnt} most impacted countries by fatalities per million showing A) the number of fatalities scaled by population size and B) Total Fatalities.
   Only countries with populations > {comma(minPop)}, and with more than {minDeaths} fatalities are shown.
-  Countries are also grouped by their continent as designated by the UN classifications"
+  Countries are also grouped by their continent as designated by the UN classifications*"
 )
 ```
 
