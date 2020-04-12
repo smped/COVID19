@@ -196,13 +196,14 @@ nswTests <- nswUrl %>%
 qldTests <- NA_real_
 qldUrl <- "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts"
 if (url.exists(qldUrl)){
-  qldTests <-qldUrl %>%
+  qldTests <- qldUrl %>%
     read_html() %>%
     html_nodes("body") %>%
-    xml_find_all("//td[contains(@headers, 'table59454r1c2')]") %>%
-    html_text() %>%
-    .[[1]] %>%
-    str_remove_all(",") %>%
+    xml_find_all("//p") %>%
+    html_text() %>% 
+    str_subset("tested") %>% 
+    str_replace_all(".+: ([0-9,]+).*", "\\1") %>%
+    str_remove_all(",") %>% 
     as.numeric()
 }
 ```
@@ -450,10 +451,11 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
     deaths = ifelse(is.finite(deaths), deaths, NA)
   ) %>%
   left_join(
-    here::here(
-      glue("recovered/recovered_{as.character(dt)}.tsv")
-    ) %>%
-      read_tsv()
+    here::here("recovered") %>% 
+      list.files(full.names = TRUE) %>%
+      .[length(.)] %>%
+      read_tsv() %>%
+      dplyr::select(-date)
   )
 ## The API & Govt website seems not to keep on top of NT & TAS cases so well
 ## Future versions of this script may need to manually update these via webscraping
