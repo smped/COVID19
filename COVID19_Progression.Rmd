@@ -1561,7 +1561,7 @@ plotFr <- mutate(
   ) +
   scale_fill_viridis_c(
     option = "magma",
-    breaks = seq(0, 0.12, by = 0.02)
+    breaks = seq(0, 0.15, by = 0.025)
   ) +
   scale_x_continuous(
     expand = expand_scale(0, 0),
@@ -1592,7 +1592,7 @@ cpFr <- glue(
 )
 ```
 
-```{r plotlyFr, fig.cap=cpFr, fig.height=8, fig.width=8}
+```{r plotlyFr, fig.cap=cpFr, fig.height=9, fig.width=8}
 ggplotly(
   plotFr,
   tooltip = c(
@@ -1600,122 +1600,6 @@ ggplotly(
     "Fatality Rate"
     )
   )
-```
-
-## Recoveries Vs Fatalities Vs Time
-
-```{r p6}
-minDays <- ausDays - 5
-df <- confirmed %>%
-  left_join(deaths) %>%
-  group_by(Country, date) %>%
-  summarise_at(vars(confirmed, deaths), sum) %>%
-  left_join(
-    recovered %>%
-      group_by(Country, date) %>%
-      summarise_at(vars(recovered), sum)
-  ) %>%
-  group_by(Country, date) %>%
-  summarise_at(
-    vars(confirmed, recovered, deaths),
-    sum
-  ) %>%
-  ungroup() %>%
-  right_join(
-    wikiPops 
-  ) %>%
-  mutate(
-    active = confirmed - deaths - recovered,
-    `Infection Rate` = 1e6 * confirmed / Population
-  ) %>%
-  dplyr::filter(`Infection Rate` > startingPoint) %>%
-  group_by(Country) %>%
-  mutate(
-    Days = date - min(date),
-    ratio = round(log2(recovered / deaths), 2),
-  ) %>%
-  dplyr::filter(
-    max(Days) > minDays
-  ) %>%
-  ungroup() %>%
-  dplyr::filter(
-    !is.infinite(ratio),
-    !is.na(ratio)
-  ) 
-p6 <- df %>%
-  mutate(
-    Country = factor(
-      Country, 
-      levels = df %>%
-        dplyr::select(Country, Days, ratio) %>%
-        group_by(Country) %>% 
-        mutate(minusT = as.integer(Days - max(Days))) %>% 
-        pivot_wider(Country, minusT, values_from = ratio) %>% 
-        as.data.frame() %>%
-        column_to_rownames("Country") %>% 
-        as.matrix %>% 
-        .[matrixStats::rowCounts(.,value = NA) < ncol(.),] %>% 
-        dist() %>% 
-        hclust() %>%
-        as.dendrogram() %>%
-        labels()
-    )
-  ) %>%
-  rename_all(str_to_title) %>%
-  ggplot(
-    aes(
-      x = Days, y = Country, fill = Ratio,
-      conf = Confirmed, 
-      rec = Recovered,
-      deaths = Deaths,
-      date = Date,
-    )
-  ) +
-  geom_raster() +
-  scale_fill_gradient2(
-    low = "red", high = "green", na.value = "grey80"
-  ) +
-  scale_x_continuous(
-    expand = expand_scale(0, 0)
-  ) +
-  scale_y_discrete(
-    expand = expand_scale(0, 0)
-  ) +
-  labs(
-    x = glue(
-      "Days since passing {startingPoint} cases/million"
-    ),
-    y = c(),
-    fill = "Ratio"
-  ) +
-  theme(
-    panel.grid = element_blank()
-  )
-```
-
-```{r cp6}
-cp6 <- glue(
-  "*Comparison of recoveries and fatalities as a time course, beginning at the day cases exceeded {startingPoint} confirmed cases / million.
-  Countries are only shown if data is available for more than {minDays} days since passing this threshold.
-  The ratio of recoveries to fatalities is shown on the log~2~ scale, such that when fatalities outnumber recoveries, the colour become more red.
-  Conversely if the recoveries outnumber the fatalities the colour will become more green.
-  If these two numbers are approximately equal, the colour will be white.
-  As the numbers are on the log~2~ scale, a ratio of 2, would indicate 2^2^ = 4 times the number of __recoveries to fatalities__.
-  Similarly a ratio of -2 would indicate that fatalities outnumber recoveries by a factor of 2^2^ = 4.
-  Ratios are only available once there is one or more confirmed recoveries in addition to one or more confirmed fatalities.*"
-)
-```
-
-
-A time-course of the relationship between recoveries and fatalities is shown.
-Series of days which extend deeply into the red may possibly indicate where medical facilities are overloaded.
-However, it is possible that during these times more attention is focussed on keeping critically ill patients alive than confirming a recovery.
-It should be noted that many of the countries which are deep into the red at the current time are **affluent Western countries**.
-It is also worth noting that despite the high death toll in Italy, recoveries outnumber fatalities for the majority of this time-course.
-
-
-```{r plotlyP6, fig.cap=cp6, fig.height=7, fig.width=8}
-ggplotly(p6)
 ```
 
 ## Unscaled Fatality Rate
