@@ -1198,14 +1198,14 @@ a <- deaths %>%
   ggplot(aes(Country, rate, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = rate+8, label = round(rate, 0)),
+    aes(y = rate + 18, label = round(rate, 0)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
-  scale_y_continuous(expand = expand_scale(c(0, 0.05))) +
+  scale_y_continuous(expand = expand_scale(c(0, 0.08))) +
   labs(y = "Fatalities / Million") +
   coord_flip() +
-  facet_grid(Continent~., scales= "free_y", space = "free_y") +
+  facet_grid(Continent~., scales = "free_y", space = "free_y") +
   theme(legend.position = "none")
 b <- deaths %>%
   dplyr::filter(deaths > 0) %>%
@@ -1227,11 +1227,11 @@ b <- deaths %>%
   ggplot(aes(Country, deaths, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = deaths + 800, label = comma(deaths, accuracy = 1)),
+    aes(y = deaths + 1800, label = comma(deaths, accuracy = 1)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
-  scale_y_continuous(expand = expand_scale(c(0, 0.05)), labels = comma) +
+  scale_y_continuous(expand = expand_scale(c(0, 0.08)), labels = comma) +
   labs(y = "Total Fatalities") +
   coord_flip() +
   facet_grid(Continent~., scales= "free_y", space = "free_y") +
