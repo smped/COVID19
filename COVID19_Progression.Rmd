@@ -1872,8 +1872,9 @@ Australia's spread of the virus appears in the previous plots as marginally slow
 
 - This may be a reflection of Australian geography or our tendency to have large personal space requirements
 - This may also be a reflection of the pre-emptive strategies already being taken by the population and government
-- It is now becoming possible that Australia is **no longer in an exponential growth phase** and there are **early signs of the growth levelling out**. The contribution of the distortions caused by the Ruby Princess to this apparent levelling out is still unclear
+- It is now clear that Australia is **no longer in an exponential growth phase** and there are **clear signs of the growth levelling out**. The contribution of the distortions caused by the Ruby Princess to this apparent levelling out is still unclear
 - Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
+- Notably, the proportion of recovered cases is now >50%
 
 
 ```{r latestAUTable}
@@ -2021,14 +2022,13 @@ ausStatsPlot$x$data[5:8] %<>%
 ```
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ March 2020 as this was the date of the first recorded fatality in Australia. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date, which allowed estimation of the number of recovered cases in NSW.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ March 2020 as this was the date of the first recorded fatality in Australia. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date, which allowed estimation of the number of recovered cases in NSW. Below this plot, the same figures can be seen broken down by state.*"
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
 ausStatsPlot
 ```
 
-## Individual States
 
 ```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases are still poorly reported and these estimates are unreliable.*"}
 ggplotly(
@@ -2168,8 +2168,6 @@ The hypothetical growth in the infection rate without that event occurring is no
 ```{r plotP5, fig.cap=cp5, fig.width=10, fig.height=7}
 p5
 ```
-
-## Statistical Analysis of State-wise Infection Rates
 
 
 ```{r lm}
