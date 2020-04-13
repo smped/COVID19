@@ -2315,11 +2315,12 @@ tested %>%
   full_join(
     confirmed %>%
       dplyr::filter(
-        date == max(date)
+        date == max(date),
+        Country == "Australia"
       ) %>%
       rename(
         State = `Province/State`
-      )
+      ) 
   ) %>%
   mutate(
     Tested = case_when(
