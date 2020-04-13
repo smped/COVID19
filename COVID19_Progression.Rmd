@@ -1193,6 +1193,7 @@ a <- deaths %>%
   ungroup() %>%
   mutate(Country = fct_inorder(Country)) %>%
   arrange(desc(rate)) %>%
+  distinct(Country, .keep_all = TRUE) %>%
   droplevels() %>%
   dplyr::slice(1:nCnt) %>%
   ggplot(aes(Country, rate, fill = Country)) +
@@ -1222,6 +1223,7 @@ b <- deaths %>%
   ungroup() %>%
   mutate(Country = fct_inorder(Country)) %>%
   arrange(desc(rate)) %>%
+  distinct(Country, .keep_all = TRUE) %>%
   droplevels() %>%
   dplyr::slice(1:nCnt) %>%
   ggplot(aes(Country, deaths, fill = Country)) +
@@ -1247,6 +1249,79 @@ plot_grid(
   nrow = 1
 )
 ```
+
+## Table of Fatalities
+
+```{r fatalityTable}
+minPop <- 4e6
+minCases <- 1000
+deaths %>%
+  left_join(confirmed) %>%
+  group_by(Country, date) %>%
+  summarise_at(vars(deaths, confirmed), sum) %>%
+  dplyr::filter(deaths > 0) %>%
+  left_join(wikiPops) %>%
+  ungroup() %>%
+  mutate(
+    infectionRate = round(1e6 * confirmed / Population, 1),
+    fatalityRate = deaths / confirmed,
+    Population = round(Population / 1e6, 3)
+  ) %>%
+  arrange(desc(date), fatalityRate) %>%
+  distinct(Country, .keep_all = TRUE) %>%
+  arrange(fatalityRate) %>%
+  dplyr::select(
+    Continent, Region, Country, Population,
+    `Confirmed Cases` = confirmed, 
+    `Infection Rate (per million)` = infectionRate,
+    `Fatalities` = deaths, 
+    `Fatality Rate` = fatalityRate
+  ) %>%
+  datatable(
+    options = list(
+      pageLength = 25, 
+      autoWidth = TRUE,
+      searchCols = list(
+        NULL, NULL, NULL, 
+        list(
+          search = glue(
+            '{minPop/1e6 + 0.001} ... {max(wikiPops$Population/1e6)}'
+          )
+        ),
+        list(
+          search = glue(
+            '{minCases + 0.1} ... {max(.$`Confirmed Cases`)}'
+          )
+        ),
+        NULL, NULL, NULL
+      )
+    ),
+    filter = 'top',
+    class = "stripe",
+    rownames = FALSE,
+    caption = glue(
+      "All countries with recorded fatalities, sorted by default in order of the Fatality Rate.
+      The Fatality Rate simply indicates the number of confirmed cases which end in a fatality.
+      The Infection Rate represents the cumulative number of cases confirmed within the country, per million people.
+      All columns are searchable and filters are set by default to exclude countries with populations below {comma(minPop)} and those with fewer than {minCases} confirmed cases."
+    )
+  ) %>%
+  formatRound(
+    columns = c("Confirmed Cases", "Fatalities"),
+    mark = ",", 
+    digits = 0
+  ) %>%
+  formatRound(
+    columns = "Infection Rate (per million)",
+    mark = ",",
+    digits = 1
+  ) %>%
+  formatPercentage(
+    columns = "Fatality Rate",
+    digits = 2
+  )
+```
+
 
 
 ## Dimensional Reduction
