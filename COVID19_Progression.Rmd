@@ -1290,7 +1290,7 @@ deaths %>%
         ),
         list(
           search = glue(
-            '{minCases + 0.1} ... {max(.$`Confirmed Cases`)}'
+            '{minCases} ... {max(.$`Confirmed Cases`)}'
           )
         ),
         NULL, NULL, NULL
@@ -1306,11 +1306,11 @@ deaths %>%
       All columns are searchable and filters are set by default to exclude countries with populations below {comma(minPop)} and those with fewer than {minCases} confirmed cases."
     )
   ) %>%
-  formatRound(
-    columns = c("Confirmed Cases", "Fatalities"),
-    mark = ",", 
-    digits = 0
-  ) %>%
+  # formatRound(
+  #   columns = c("Confirmed Cases", "Fatalities"),
+  #   mark = ",", 
+  #   digits = 0
+  # ) %>%
   formatRound(
     columns = "Infection Rate (per million)",
     mark = ",",
