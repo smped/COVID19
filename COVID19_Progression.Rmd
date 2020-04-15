@@ -236,7 +236,7 @@ if (url.exists(vicUrl)){
   vicRecov <- vicTxt %>%
     str_subset("recovered") %>%
     str_trim() %>%
-    str_replace_all(".+ ([0-9,]+) people have recovered.", "\\1") %>%
+    str_replace_all(".+ ([0-9,]+) people have recovered..+", "\\1") %>%
     str_remove(",") %>%
     as.numeric()
 }
@@ -281,11 +281,15 @@ saTxt <- saUrl  %>%
   str_trim() %>%
   .[. != ""]
 saTests <- saTxt %>%
-  str_replace_all(".+ ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
+  str_replace_all(".+conducted ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
   str_remove_all("[, ]") %>%
   as.numeric()
-saRecov <- saTxt %>%
-  str_replace(".+\\..+ ([0-9]+) .*recovered.+", "\\1") %>%
+saRecov <- saTxt %>% 
+  str_split("\\.") %>%
+  .[[1]] %>%
+  str_trim %>% 
+  str_subset("recovered") %>%
+  str_replace("[^0-9]*([0-9]+) .+have recovered.+", "\\1") %>%
   as.numeric()
 ```
 
