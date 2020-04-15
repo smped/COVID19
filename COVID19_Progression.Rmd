@@ -456,7 +456,9 @@ latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
       .[length(.)] %>%
       read_tsv() %>%
       dplyr::select(-date)
-  )
+  ) %>%
+  ungroup() %>%
+  mutate(date = max(date))
 ## The API & Govt website seems not to keep on top of NT & TAS cases so well
 ## Future versions of this script may need to manually update these via webscraping
 ## Here, just ensure that we don't have a decrease
@@ -1885,7 +1887,7 @@ confirmed %>%
   ) %>%
   left_join(
     latestAU %>%
-      dplyr::select(`Province/State`, date, deaths, recovered)
+      dplyr::select(`Province/State`, date, deaths, recovered) 
   ) %>%
   mutate(
     FRate = deaths / confirmed,
