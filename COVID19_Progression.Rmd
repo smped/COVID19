@@ -281,7 +281,7 @@ saTxt <- saUrl  %>%
   str_trim() %>%
   .[. != ""]
 saTests <- saTxt %>%
-  str_replace_all(".+conducted ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
+  str_replace_all(".+conducted.* ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
   str_remove_all("[, ]") %>%
   as.numeric()
 saRecov <- saTxt %>% 
