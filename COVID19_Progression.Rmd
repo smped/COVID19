@@ -1055,6 +1055,7 @@ p2 <- confirmed %>%
       group_by(Country, date) %>%
       summarise_at(vars(recovered), sum)
   ) %>%
+  mutate_at(vars(confirmed, deaths, recovered), cummax) %>%
   mutate(
     active = confirmed - deaths - recovered
   ) %>%
