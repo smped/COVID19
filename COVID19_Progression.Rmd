@@ -389,7 +389,10 @@ auRec <- c(
         `Province/State` = auStates[State],
         Country = "Australia"
       ) %>% 
-      dplyr::filter(!is.na(recovered)) 
+      dplyr::filter(
+        !is.na(recovered),
+        !(State == "SA" & date == ymd("2020-04-17")) # This specific record is wrong
+      ) 
   ) %>%
   bind_rows(
     here::here("recovered") %>%
@@ -1993,6 +1996,7 @@ ausStatsPlot <- ggplotly(
     group_by(Country, date) %>%
     summarise_at(vars(confirmed, deaths, recovered), sum) %>%
     ungroup() %>%
+    mutate_at(vars(confirmed, deaths, recovered), cummax) %>%
     mutate(active = confirmed - deaths - recovered) %>%
     pivot_longer(
       cols = c(active, confirmed, deaths, recovered),
