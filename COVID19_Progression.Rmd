@@ -976,10 +976,10 @@ p <- confirmed %>%
   geom_point() +
   geom_line() +
   scale_x_continuous(
-    expand = expand_scale(mult = c(0, 0.05)),
+    expand = expansion(mult = c(0, 0.05)),
   ) +
   scale_y_log10(
-    expand = expand_scale(mult = c(0, 0.05))
+    expand = expansion(mult = c(0, 0.05))
   ) +
   xlab(
     paste(
@@ -1128,10 +1128,10 @@ p2 <- confirmed %>%
   geom_point() +
   geom_line() +
   scale_x_continuous(
-    expand = expand_scale(mult = c(0, 0.05)),
+    expand = expansion(mult = c(0, 0.05)),
   ) +
   scale_y_log10(
-    expand = expand_scale(mult = c(0, 0.05))
+    expand = expansion(mult = c(0, 0.05))
   ) +
   xlab(
     paste(
@@ -1209,7 +1209,7 @@ a <- deaths %>%
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
-  scale_y_continuous(expand = expand_scale(c(0, 0.08))) +
+  scale_y_continuous(expand = expansion(c(0, 0.08))) +
   labs(y = "Fatalities / Million") +
   coord_flip() +
   facet_grid(Continent~., scales = "free_y", space = "free_y") +
@@ -1239,7 +1239,7 @@ b <- deaths %>%
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
-  scale_y_continuous(expand = expand_scale(c(0, 0.08)), labels = comma) +
+  scale_y_continuous(expand = expansion(c(0, 0.08)), labels = comma) +
   labs(y = "Total Fatalities") +
   coord_flip() +
   facet_grid(Continent~., scales= "free_y", space = "free_y") +
@@ -1552,7 +1552,7 @@ p4 <- confirmed %>%
       Fatalities = "red"
       )
   ) +
-  scale_y_continuous(expand = expand_scale(0, 0)) +
+  scale_y_continuous(expand = expansion(0, 0)) +
   coord_flip() +
   labs(x = c()) +
   theme(
@@ -1645,10 +1645,10 @@ plotFr <- mutate(
     breaks = seq(0, 0.15, by = 0.025)
   ) +
   scale_x_continuous(
-    expand = expand_scale(0, 0),
+    expand = expansion(0, 0),
     labels = abs
     ) +
-  scale_y_discrete(expand = expand_scale(0, 0)) +
+  scale_y_discrete(expand = expansion(0, 0)) +
   labs(
     x = glue(
       "Days since passing {startingPoint} cases/million"
@@ -2418,7 +2418,7 @@ tested %>%
     )
   ) %>%
   mutate(
-    `Percent Tested` = Tested / Population,
+    `Tests / '000` = round(1e3 * Tested / Population, 2),
     Positive = confirmed / Tested,
     Negative = 1 - Positive,
     isTotal = grepl("Total", State)
@@ -2427,14 +2427,13 @@ tested %>%
     State, Population,
     Confirmed = confirmed,
     Tested, 
-    contains("Percent"), 
+    contains("000"), 
     ends_with("ive"),
     isTotal
   ) %>%
-  arrange(isTotal, desc(`Percent Tested`)) %>%
+  arrange(isTotal, desc(`Tests / '000`)) %>%
   dplyr::select(-isTotal) %>%
   dplyr::rename(
-    `% Tested` = `Percent Tested`,
     `% Positive Tests` = Positive,
     `% Negative Tests` = Negative
   ) %>%
