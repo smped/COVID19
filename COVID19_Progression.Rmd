@@ -176,70 +176,76 @@ guardTable <- guardianData$`latest totals` %>%
 ```
 
 ```{r nswTests}
-nswTests <- NA_real_
+nswRecov <- nswTests <- NA_real_
 nswUrl <- "https://www.health.nsw.gov.au/Infectious/diseases/Pages/covid-19-latest.aspx"
-nswTests <- nswUrl %>%
+nswTables <- nswUrl %>%
   read_html() %>%
-  html_nodes("body")  %>%
-  xml_find_all("//table[contains(@class, 'moh-rteTable-6')]") %>%
-  html_text() %>%
-  .[[1]] %>%
-  str_split("\r\n") %>%
-  .[[1]] %>%
-  .[which(str_detect(., "Total cases tested$")) + 1] %>%
-  str_extract("^[0-9,]+") %>%
-  str_remove(",") %>%
+  xml_find_all("//table") %>%
+  html_table() %>%
+  .[1:2]
+nswTests <- nswTables[[1]] %>%
+  dplyr::filter(
+    str_detect(Cases, "Total people tested"),
+    !str_detect(Cases, "excluded")
+  ) %>%
+  .[["Count"]] %>%
+  str_remove_all(",") %>%
+  as.numeric()
+nswRecov <- nswTables[[2]] %>%
+  dplyr::filter(Outcome == "Recovered") %>%
+  .[["Number"]] %>%
   as.numeric()
 ```
 
 ```{r qldTests}
-qldTests <- NA_real_
-qldUrl <- "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/current-status-and-contact-tracing-alerts"
-if (url.exists(qldUrl)){
-  qldTests <- qldUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//p") %>%
-    html_text() %>% 
-    str_subset("tested") %>% 
-    str_replace_all(".+: ([0-9,]+).*", "\\1") %>%
-    str_remove_all(",") %>% 
-    as.numeric()
-}
+qldRecov <- qldTests <- NA_real_
+qldUrl <- "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/statistics"
+qldTests <- qldUrl %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all("//div[contains(@class, 'tested')]") %>%
+  html_text() %>%
+  str_extract("[0-9,]+") %>%
+  str_remove_all(",") %>%
+  as.numeric()
+qldRecov <- qldUrl %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all("//table[@id = 'QLD_Cases']") %>%
+  html_table() %>%
+  .[[1]] %>%
+  dplyr::filter(Cases == "Recovered") %>%
+  .[["Total"]] %>%
+  as.numeric()
 ```
 
 ```{r vicTests}
 vicRecov <- vicTests <- NA_real_
-# Might need to revert to the dated url
-# vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-daily-update"
-vicUrl <- glue(
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt, '%d-%B-%Y')}"
-) %>%
-  str_to_lower()
-if (url.exists(vicUrl)){
-  vicTxt <- vicUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//div[contains(@class, 'field field--name-field-dhhs')]") %>%
-    html_text() %>%
-    str_split("\n") %>%
-    .[[1]] 
-  vicTests <- vicTxt %>%
-    str_subset("test(ed|s)") %>%
-    .[[1]] %>%
-    str_replace_all(
-      ".+ ([0-9,]+) .*test(ed|s).+",
-      "\\1"
-    ) %>%
-    str_remove_all(",") %>%
-    as.numeric()
-  vicRecov <- vicTxt %>%
-    str_subset("recovered") %>%
-    str_trim() %>%
-    str_replace_all(".+ ([0-9,]+) people have recovered..+", "\\1") %>%
-    str_remove(",") %>%
-    as.numeric()
-}
+vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-daily-update"
+vicTxt <- vicUrl %>%
+  read_html() %>%
+  html_nodes("body") %>% 
+  html_text() %>% 
+  str_split("\n") %>% 
+  .[[1]] %>% 
+  str_trim() %>% 
+  .[. != ""] %>% 
+    str_subset("(tested|recovered)")
+vicTests <- vicTxt %>%
+  str_subset("test(ed|s)") %>%
+  .[[1]] %>%
+  str_replace_all(
+    ".+ ([0-9,]+) .*test(ed|s).+",
+    "\\1"
+  ) %>%
+  str_remove_all(",") %>%
+  as.numeric()
+vicRecov <- vicTxt %>%
+  str_subset("recovered") %>%
+  str_trim() %>%
+  str_replace_all(".+ ([0-9,]+) people have recovered..+", "\\1") %>%
+  str_remove(",") %>%
+  as.numeric()
 ```
 
 ```{r waTests}
@@ -321,28 +327,22 @@ if (url.exists(actUrl)){
 ```
 
 ```{r tasTests}
-tasTests <- NA_real_
-tasUrl <- glue(
-  "http://health.tas.gov.au/news/2020/coronavirus_update_{str_remove(format(dt, '%d_%B_%Y'), '^0')}"
-) %>%
-  str_to_lower()
-if (url.exists(tasUrl)) {
-  suppressWarnings(
-    tasTests <- tasUrl %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all(
-        "//div[contains(@id, 'content_div_117564')]"
-      ) %>%
-      html_text()%>%
-      str_split("\r\n") %>%
-      .[[1]] %>%
-      str_trim() %>%
-      .[. != ""] %>%
-      str_replace_all(".+Tasmania has conducted ([0-9]+) tests.+", "\\1") %>%
-      as.numeric()
-  )
-} 
+tasRecov <- tasTests <- NA_real_
+tasUrl <- "https://www.coronavirus.tas.gov.au/facts/cases-and-testing-updates"
+tasTables <- tasUrl %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all("//table") %>%
+  html_table()
+tasRecov <- tasTables[[1]] %>%
+  dplyr::filter(`Cases in Tasmania` == "Recovered") %>%
+  .[["Number"]] %>%
+  as.numeric()
+tasTests <- tasTables[[2]] %>%
+  dplyr::filter(`Laboratory tests` == "Total laboratory tests") %>%
+  .[["Number"]] %>%
+  str_remove_all("[, ]") %>%
+  as.numeric()
 ```
 
 ```{r ntTests}
@@ -352,16 +352,22 @@ ntTxt <- ntUrl %>%
   read_html() %>%
   html_nodes("body") %>%
   xml_find_all(
-    "//p[contains(@class, 'mt-2')]"
+    "//div[contains(@class, 'header-widget')]"
   ) %>%
   html_text() %>%
-  .[1] 
+    str_split("\r\n") %>%
+    .[[1]] %>%
+    str_trim() %>%
+    .[. != ""]
 ntTests <- ntTxt %>%
-  str_replace_all("^([0-9,]+) (people|test).+", "\\1") %>%
+  str_subset("test") %>%
+  str_extract("([0-9,]+)") %>%
   str_remove_all(",") %>%
   as.numeric()
 ntRecov <- ntTxt %>%
-  str_replace(".+conducted([0-9,]+) .+recovered", "\\1") %>%
+  str_subset("recovered") %>%
+  str_extract("[0-9,]+") %>%
+  str_remove_all(",") %>%
   as.numeric()
 ```
 
@@ -371,7 +377,10 @@ auRec <- c(
   "Northern Territory" = ntRecov,
   "South Australia" = saRecov,
   "Western Australia" = waRecov,
-  "Victoria" = vicRecov
+  "Victoria" = vicRecov,
+  "Tasmania" = tasRecov,
+  "Queensland" = qldRecov,
+  "New South Wales" = nswRecov
 ) %>%
   enframe("Province/State", "recovered") %>%
   dplyr::filter(!is.na(recovered)) %>%
@@ -379,36 +388,6 @@ auRec <- c(
     date = ymd(Sys.Date()),
     Country = "Australia"
   ) %>%
-  bind_rows(
-    guardianData$updates %>% 
-      as_tibble() %>%
-      dplyr::select(State, Date, recovered = `Recovered (cumulative)`) %>%
-      mutate(
-        date = str_replace_all(Date, "([0-9]+)/([0-9]+)/2020", "2020-\\2-\\1") %>% ymd(),
-        recovered = as.numeric(recovered),
-        `Province/State` = auStates[State],
-        Country = "Australia"
-      ) %>% 
-      dplyr::filter(
-        !is.na(recovered),
-        !(State == "SA" & date == ymd("2020-04-17")) # This specific record is wrong
-      ) 
-  ) %>%
-  bind_rows(
-    here::here("recovered") %>%
-      list.files(full.names = TRUE, pattern = "recovered.+tsv", ) %>%
-      sort() %>%
-      .[[length(.)]] %>%
-      read_tsv()
-  ) %>%
-  group_by(`Province/State`, Country) %>%
-  mutate(
-    recovered = max(recovered, na.rm = TRUE)
-  ) %>%
-  ungroup() %>%
-  arrange(desc(recovered), desc(date)) %>%
-  distinct(`Province/State`, .keep_all = TRUE) %>%
-  mutate(date = max(date)) %>%
   dplyr::select(`Province/State`, Country, date, recovered)
 if (nrow(auRec) > 0 ){
   auRec %>%
@@ -502,7 +481,7 @@ if (updateAU) {
 ```
 
 ```{r auRecTS}
-auRecTS<- list.files(here::here("recovered"), pattern = "rec.*tsv",full.names = TRUE) %>%
+auRecTS <- list.files(here::here("recovered"), pattern = "rec.*tsv",full.names = TRUE) %>%
   lapply(read_tsv) %>%
   bind_rows()
 ```
@@ -758,7 +737,7 @@ confirmed %>%
 
 An alternate viewpoint on the data is to remove time and inspect the relationship between the daily increase in cases and the total number of cases.
 When this relationship ceases it's near linear relationship, this can be a sign the control measures have begun to take effect.
-Whilst this relationship **appears to be breaking down for Australia**, the cases of Hong Kong, Singapore and Iran should be taken as cautionary notes, where after a brief respite the proportional relationship once again resumed.
+Whilst this relationship **appears to have broken down for Australia**, no breakdown has yet occurred for countries such as the Singapore, Canada, the UK, USA and Turkey, with these countries **explicitly still in the exponential growth phase.**
 
 ```{r sma}
 sma <- function(x, n = 7){
@@ -774,9 +753,9 @@ sma <- function(x, n = 7){
 
 
 ```{r plotIncVConf}
-minPop <- 6e6
+minPop <- 10e6
 minDays <- 15
-minRate <- 6
+minRate <- 9
 plotIncVConf <- ggplotly(
 confirmed %>%
   group_by(Country, date) %>%
@@ -903,13 +882,13 @@ nDays <- confirmed %>%
 
 ```{r p}
 refRate <- c(2, 4, 8)
-minPop <- 5e6
+minPop <- 8e6
 p <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
   ungroup() %>%
   inner_join(
-    dplyr::filter(wikiPops, Population > minPop)
+    dplyr::filter(wikiPops, Population > minPop | Country %in% c("Singapore", "Hong Kong"))
   ) %>%
   mutate(
     rate = 1e6*confirmed / Population
@@ -1028,9 +1007,7 @@ In the above plot:
 
 - Only countries are shown where the infection rate has surpassed `r startingPoint` cases/million for more than `r minDays` days.
 This choice seemed to be a useful way of enabling the comparison of COVID-19 progression across countries after scaling for population size
-- Only South Korea,and China appear to have brought the virus under some level of control. The infection rate currently sits around `r confirmed %>% dplyr::filter(Country == "South Korea") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for South Korea and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(rate = sprintf("%.1f", 1e6*confirmed/Population)) %>% .[["rate"]]` per million for Hubei Province. This can also be thought of as `r confirmed %>% dplyr::filter(Country == "South Korea") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` and `r confirmed %>% dplyr::filter(Country == "China (Hubei)") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.0001)) %>% .[["prop"]]` of the total populations respectively. Note that despite these apparently low percentages, the actual numbers of deaths and hospitalisations are extremely non-trivial and the real impacts of these numbers cannot be treated lightly.
-- Japan's early measures also appear to be highly effective, however the recent growth in infections within Singapore and Hong Kong should serve as a caution
-- US numbers may also be unreliable given the low rates of testing and numerous anecdotal stories of suspected infections
+
 
 ## Currently Active Infection Rates
 
@@ -1061,8 +1038,7 @@ p2 <- confirmed %>%
   ) %>%
   dplyr::filter(!is.na(active)) %>%
   inner_join(
-    wikiPops %>%
-      dplyr::filter(Population > minPop)
+    dplyr::filter(wikiPops, Population > minPop | Country %in% c("Singapore", "Hong Kong"))
   ) %>%
   mutate(rate = 1e6 * active / Population) %>%
   dplyr::filter(rate > startingPoint) %>%
@@ -1169,15 +1145,15 @@ ggplotly(p2)
 
 Notable features of this perspective are:
 
-- Active infection rates in South Korea are currently declining 
+- Active infection rates in many countries are currently declining 
 - Active infection rates __appear to be declining in Australia__, Hong Kong, Iran and Switzerland
-- Despite strict control measures, active infection rates are exponentially increasing in both Hong Kong and Singapore
+- Despite strict control measures early on in the pandemic, active infection rates are once again exponentially increasing in Singapore
 
 
 ## Comparison of Total Fatalities
 
 ```{r setScaledFatalPrams}
-minPop <- 1e6
+minPop <- 4e6
 minDeaths <- 200
 nCnt <- 25
 cp <- glue(
@@ -1295,7 +1271,7 @@ deaths %>%
         NULL, NULL, NULL, 
         list(
           search = glue(
-            '{minPop/1e6 + 0.001} ... {max(wikiPops$Population/1e6)}'
+            '{minPop/1e6} ... {max(wikiPops$Population/1e6)}'
           )
         ),
         list(
@@ -1310,17 +1286,12 @@ deaths %>%
     class = "stripe",
     rownames = FALSE,
     caption = glue(
-      "All countries with recorded fatalities, sorted by default in order of the Fatality Rate.
+      "All countries with recorded fatalities, sorted by default in increasing order of the Fatality Rate.
       The Fatality Rate simply indicates the number of confirmed cases which end in a fatality.
       The Infection Rate represents the cumulative number of cases confirmed within the country, per million people.
       All columns are searchable and filters are set by default to exclude countries with populations below {comma(minPop)} and those with fewer than {minCases} confirmed cases."
     )
   ) %>%
-  # formatRound(
-  #   columns = c("Confirmed Cases", "Fatalities"),
-  #   mark = ",", 
-  #   digits = 0
-  # ) %>%
   formatRound(
     columns = "Infection Rate (per million)",
     mark = ",",
@@ -1698,7 +1669,7 @@ ausDays <- deaths %>%
   dplyr::filter(deaths > 10) %>%
   nrow()
 minDays <- ausDays - 2
-minPop <- 5e6
+minPop <- 4e6
 deathPlot <-confirmed %>%
   left_join(deaths) %>%
   group_by(Country, date) %>%
@@ -1769,7 +1740,7 @@ ggplotly(deathPlot)
 
 ```{r dailyVsTotalDeaths}
 minCases <- 10
-minPop <- 10e6
+minPop <- 1e6
 minDays <- 7
 dailyVsTotalDeaths <- deaths %>%
   group_by(Country, date) %>%
@@ -1855,8 +1826,6 @@ ggplotly(dailyVsTotalDeaths)
 
 
 
-
-
 # Australian Specific Data {.tabset}
 
 ```{r ausPops}
@@ -1878,13 +1847,9 @@ The difference with previous estimates used above was within 0.04%, and as such 
 
 A series of complimentary charts regarding the spread of COVID-19 are available from [the ABC website](https://www.abc.net.au/news/2020-03-17/coronavirus-cases-data-reveals-how-covid-19-spreads-in-australia/12060704).
 
-Australia's spread of the virus appears in the previous plots as marginally slower than many other countries, grouping together with countries such as Greece, Israel and the UK.
-
-- This may be a reflection of Australian geography or our tendency to have large personal space requirements
-- This may also be a reflection of the pre-emptive strategies already being taken by the population and government
-- It is now clear that Australia is **no longer in an exponential growth phase** and there are **clear signs of the growth levelling out**. The contribution of the distortions caused by the Ruby Princess to this apparent levelling out is still unclear
-- Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
-- Notably, the proportion of recovered cases is now >50%
+- It is now clear that Australia is **no longer in an exponential growth phase** and there are **clear signs of the growth levelling out**. 
+- Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
+- Notably, the proportion of recovered cases is now >70%
 
 
 ```{r latestAUTable}
@@ -2033,7 +1998,7 @@ ausStatsPlot$x$data[5:8] %<>%
 ```
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ March 2020 as this was the date of the first recorded fatality in Australia. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date, which allowed estimation of the number of recovered cases in NSW. Below this plot, the same figures can be seen broken down by state.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ March 2020 as this was the date of the first recorded fatality in Australia. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date. NSW followed a fornight after this date and as such, only the most recent numbers can be considered as accurate. Below this plot, the same figures can be seen broken down by state.*"
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
@@ -2041,7 +2006,7 @@ ausStatsPlot
 ```
 
 
-```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases are still poorly reported and these estimates are unreliable.*"}
+```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases have only recently begun being reported and up until the most recent dates, recovered/active values were very approximate for these states.*"}
 ggplotly(
   confirmed %>%
     dplyr::filter(Country == "Australia") %>%
@@ -2206,7 +2171,7 @@ lm <- confirmed %>%
     Confirmed = confirmed
   ) %>%
   arrange(State, Date) %>%
-  distinct(State, Confirmed, .keep_all = TRUE) %>%
+  # distinct(State, Confirmed, .keep_all = TRUE) %>%
   with(
     lm(log10(Rate) ~ (State + date)^2)
   ) 
@@ -2219,7 +2184,7 @@ Each State was assigned its own intercept and slope by use of an interaction ter
 Given the potentially larger slope in NSW, this state was set as the baseline, with each other slope (i.e. interaction term) being presented as the difference in slope between each state and NSW. 
 In this way comparisons against NSW were performed, but no comparisons between other states were performed.
 
-Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial time at which cumulative confirmed infection rate exceeded `r minRate` cases / million.
+Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial time at which cumulative confirmed infection rate exceeded `r minRate` cases / million and these are not shown.
 Differences between State-level slopes and NSW however, are of great interest, and as such only the slopes are shown.
 For NSW this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
 Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
@@ -2291,64 +2256,12 @@ lm %>%
         "Heteroscedasticity was tested using the Breusch-Pagan test (p = ",
         sprintf( "%.4f", bp),
         "). ",
-        ifelse(bp < 0.05, "Given that unequal variances were detected, results and predictions from this model __should be taken with caution__* The source of this unequal variance is the spike in cases immediately following the Ruby Princess disembarkation.", "No issues with the assumption of constant variance were noted.*")
+        ifelse(bp < 0.05, "Given that unequal variances were detected, results and predictions from this model __should be taken with caution__* The source of this unequal variance is currently attributable to the outbreak in Tasmania.", "No issues with the assumption of constant variance were noted.*")
       )
     )
   )
 ```
 
-```{r lmPred}
-new <- confirmed %>% 
-  dplyr::filter(Country == "Australia", date == dt) %>%
-  mutate(date = dt + 1) %>%
-  dplyr::select(State = `Province/State`, date, confirmed) %>%
-  droplevels()
-new %>%
-  cbind(
-    predict.lm(
-      lm,
-      newdata = new, 
-      interval = "predict",
-      level = 0.95
-    )
-  ) %>%
-  left_join(ausPops) %>%
-  pivot_longer(
-    cols = c(fit, lwr, upr),
-    names_to = "type",
-    values_to = "value"
-  ) %>%
-  mutate(
-    value = round(Population * 10^value / 1e6, 0)
-  ) %>%
-  pivot_wider(
-    names_from = type,
-    values_from = value
-  ) %>%
-  arrange(desc(Population)) %>%
-  mutate(
-    lwr = case_when(
-      lwr < confirmed ~ confirmed,
-      lwr >= confirmed ~ lwr
-    )
-  ) %>%
-  mutate(PI = glue("[{lwr}, {upr}]")) %>%
-  dplyr::select(State, Confirmed = confirmed, PI) %>%
-  set_names(
-    case_when(
-      names(.) == "Confirmed" ~ as.character(dt),
-      names(.) == "PI" ~ paste0("95% Pred. Interval (", as.character(dt + 1), ")"),
-      names(.) != "Confirmed" ~ names(.)
-    )
-  ) %>%
-  pander(
-    justify = "lrr",
-    caption = glue(
-      "*95% prediction intervals for cumulative confirmed cases in each state on {format(dt + 1, '%B %d, %Y')}.
-      Values were obtained using the above linear model, and as such, any caveats about the appropriateness of the model should be taken into account.*"
-    )
-  )
-```
 
 
 ## Assessment of Testing Within Each State
@@ -2466,8 +2379,3 @@ tested %>%
 pander(sessionInfo())
 ```
 
-<footer>
-  <font color="grey">
-  <p>Report prepared by the University of Adelaide, Bioinformatics Hub. https://www.adelaide.edu.au/bioinformatics-hub/</p>
-  </font>
-</footer>
