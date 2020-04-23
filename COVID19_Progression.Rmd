@@ -182,7 +182,11 @@ nswTables <- nswUrl %>%
   read_html() %>%
   xml_find_all("//table") %>%
   html_table() %>%
-  .[1:2]
+  .[1:2] %>%
+  lapply(function(x){
+    names(x) <- str_extract(names(x), "[A-Za-z]+")
+    x
+  })
 nswTests <- nswTables[[1]] %>%
   dplyr::filter(
     str_detect(Cases, "Total people tested"),
