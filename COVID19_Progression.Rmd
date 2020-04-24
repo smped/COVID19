@@ -41,9 +41,9 @@ theme_set(theme_bw())
 ```
 
 ```{r dt}
-# Handle updates between 12am & 12pm
+# Handle updates between 12am & 9am
 dt <- Sys.Date()
-if (as.numeric(format(Sys.time(), "%H")) <= 12){
+if (as.numeric(format(Sys.time(), "%H")) <= 9){
   dt <- Sys.Date() - 1
 }
 ```
@@ -98,96 +98,19 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
-```{r govTable}
-govTable <- tibble()
-govUrl <- "https://www.health.gov.au/news/health-alerts/novel-coronavirus-2019-ncov-health-alert/coronavirus-covid-19-current-situation-and-case-numbers"
-if (url.exists(govUrl)) {
-  govDate <- govUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//p[contains(@class, 'au-callout')]") %>%
-    html_text() %>%
-    .[[1]] %>% 
-    str_split("\n") %>%
-    .[[1]] %>% 
-    str_trim() %>% 
-    .[. != ""] %>% 
-    str_replace_all(".+ ([0-9]+) (March|April) (2020).+", "\\3-\\2-\\1") %>% 
-    str_replace_all("March", "03") %>%
-    str_replace_all("April", "04") %>%
-    ymd()
-  govLines <- govUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//div[contains(@class, 'health-table')]") %>% 
-    html_text() 
-  govTable <- govLines %>% 
-    str_split("\n") %>% 
-    .[[1]] %>% 
-    str_trim() %>% 
-    .[. != ""] %>% 
-    matrix(ncol = 2, byrow = TRUE) %>%
-    set_colnames(.[1,]) %>% 
-    .[-1,] %>% 
-    as_tibble() %>%
-    dplyr::filter(
-      Location %in% c(
-        "Queensland",
-        "Australian Capital Territory",
-        "New South Wales",
-        "Victoria",
-        "Tasmania",
-        "South Australia",
-        "Western Australia",
-        "Northern Territory"
-      )
-    ) %>% 
-    rename(
-      `Province/State` = Location, 
-      confirmed = `Confirmed cases*`
-    ) %>%
-    mutate(
-      confirmed = str_remove_all(confirmed, ",") %>% as.numeric(),
-      date = govDate,
-      Country = "Australia"
-    )
-}
+```{r initLatestAU}
+latestAU <- list()
 ```
 
-
-```{r guardTable}
-guardianData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")$sheets 
-guardTable <- guardianData$`latest totals` %>%
-  as_tibble() %>%
-  dplyr::select(
-    `Province/State` = `Long name`,
-    confirmed = `Confirmed cases (cumulative)`,
-    date = `Last updated`,
-    deaths = Deaths
-  ) %>%
-  mutate(
-    Country = "Australia",
-    date = ymd(date),
-    confirmed = as.numeric(confirmed),
-    deaths = as.numeric(deaths),
-    deaths = ifelse(is.na(deaths), 0, deaths)
-  ) %>%
-  dplyr::filter(`Province/State` != "National")
-```
-
-```{r nswTests}
+```{r updateNSW}
 nswRecov <- nswTests <- NA_real_
 nswUrl <- "https://www.health.nsw.gov.au/Infectious/diseases/Pages/covid-19-latest.aspx"
 nswTables <- nswUrl %>%
   read_html() %>%
   xml_find_all("//table") %>%
   html_table() %>%
-  .[1:2] %>%
-  lapply(function(x){
-    names(x) <- str_extract(names(x), "[A-Za-z]+")
-    x
-  })
-nswTests <- nswTables[[1]] %>%
+  .[[1]]
+nswTests <- nswTables %>%
   dplyr::filter(
     str_detect(Cases, "Total people tested"),
     !str_detect(Cases, "excluded")
@@ -195,13 +118,33 @@ nswTests <- nswTables[[1]] %>%
   .[["Count"]] %>%
   str_remove_all(",") %>%
   as.numeric()
-nswRecov <- nswTables[[2]] %>%
-  dplyr::filter(Outcome == "Recovered") %>%
-  .[["Number"]] %>%
+nswRecov <- nswTables %>%
+  dplyr::filter(str_detect(Cases, "Recovered")) %>%
+  .[["Count"]] %>%
+  str_remove_all(",") %>%
+  str_extract("[0-9]+") %>%
   as.numeric()
+latestAU$NSW <- tibble(
+  State = "New South Wales",
+  date = dt,
+  confirmed = nswTables %>% 
+    dplyr::filter(str_detect(Cases, "Total confirmed")) %>%
+    .[["Count"]] %>% 
+    str_remove_all(",") %>%
+    str_extract("[0-9]+") %>% 
+    as.numeric(),
+  deaths = nswTables %>% 
+    dplyr::filter(str_detect(Cases, "Total deaths")) %>%
+    .[["Count"]] %>% 
+    str_remove_all(",") %>%
+    str_extract("[0-9]+") %>% 
+    as.numeric(),
+  recovered = nswRecov,
+  tested = nswTests
+)
 ```
 
-```{r qldTests}
+```{r updateQLD}
 qldRecov <- qldTests <- NA_real_
 qldUrl <- "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/statistics"
 qldTests <- qldUrl %>%
@@ -212,18 +155,37 @@ qldTests <- qldUrl %>%
   str_extract("[0-9,]+") %>%
   str_remove_all(",") %>%
   as.numeric()
-qldRecov <- qldUrl %>%
+qldTable <- qldUrl %>%
   read_html() %>%
   html_nodes("body") %>%
   xml_find_all("//table[@id = 'QLD_Cases']") %>%
   html_table() %>%
-  .[[1]] %>%
+  .[[1]] 
+qldRecov <- qldTable %>%
   dplyr::filter(Cases == "Recovered") %>%
   .[["Total"]] %>%
   as.numeric()
+latestAU$QLD <- tibble(
+  State = "Queensland",
+  date = dt,
+  confirmed = qldTable %>% 
+    dplyr::filter(str_detect(Cases, "Number of confirmed")) %>%
+    .[["Total"]] %>% 
+    str_remove_all(",") %>%
+    str_extract("[0-9]+") %>% 
+    as.numeric(),
+  deaths = qldTable %>% 
+    dplyr::filter(str_detect(Cases, "Deaths")) %>%
+    .[["Total"]] %>% 
+    str_remove_all(",") %>%
+    str_extract("[0-9]+") %>% 
+    as.numeric(),
+  recovered = qldRecov,
+  tested = qldTests
+)
 ```
 
-```{r vicTests}
+```{r updateVic}
 vicRecov <- vicTests <- NA_real_
 vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-daily-update"
 vicTxt <- vicUrl %>%
@@ -234,7 +196,7 @@ vicTxt <- vicUrl %>%
   .[[1]] %>% 
   str_trim() %>% 
   .[. != ""] %>% 
-    str_subset("(tested|recovered)")
+    str_subset("(tested|recovered|total|died)")
 vicTests <- vicTxt %>%
   str_subset("test(ed|s)") %>%
   .[[1]] %>%
@@ -250,35 +212,57 @@ vicRecov <- vicTxt %>%
   str_replace_all(".+ ([0-9,]+) people have recovered..+", "\\1") %>%
   str_remove(",") %>%
   as.numeric()
+latestAU$VIC <- tibble(
+  State = "Victoria",
+  date = dt,
+  confirmed = vicTxt %>%
+    str_subset("coronavirus.+cases") %>% 
+    str_replace_all(".+is ([0-9,]+).+", "\\1") %>% 
+    str_remove_all(",") %>%
+    as.numeric(),
+  deaths = vicTxt %>% 
+    str_subset("died") %>% 
+    str_replace_all(".+ ([0-9,]+) people have died.", "\\1") %>%
+    str_remove_all(",") %>% 
+    as.numeric(),
+  recovered = vicRecov,
+  tested = vicTests
+)
 ```
 
-```{r waTests}
+```{r updateWA}
 waTests <- NA_real_
 waRecov <- NA_real_
 waUrl <- "https://ww2.health.wa.gov.au/Articles/A_E/Coronavirus/COVID19-statistics"
-waTxt <- waUrl %>%
+waTable <- waUrl %>%
   read_html() %>%
   xml_find_all("//table") %>%
   .[[1]] %>%
-  html_text() %>%
-  str_split("\n") %>%
-  .[[1]] %>%
-  str_trim() %>%
-  .[. != ""] %>%
-  str_remove(",") %>%
-  matrix(ncol = 2, byrow = TRUE) %>%
-  set_colnames(.[1,]) %>%
-  .[-1,] %>%
-  as_tibble() %>%
-  mutate(Total = as.numeric(Total))
-waTests <- waTxt %>%
+  html_table() %>%
+  mutate(
+    Total = str_remove_all(Total, ","),
+    Total = as.numeric(Total)
+  ) 
+waTests <- waTable %>%
   dplyr::filter(str_detect(Cases, "ive")) %>%
   summarise(n = sum(Total)) %>%
   .[["n"]]
-waRecov <- dplyr::filter(waTxt, Cases == "Recovered")$Total
+waRecov <- dplyr::filter(waTable, Cases == "Recovered")$Total
+latestAU$WA <- tibble(
+  State = "Western Australia",
+  date = dt,
+  confirmed = waTable %>%
+    dplyr::filter(str_detect(Cases, "positive")) %>%
+    .[["Total"]],
+  deaths = waTable %>%
+    dplyr::filter(str_detect(Cases, "Deaths")) %>%
+    .[["Total"]],
+  recovered = waRecov,
+  tested = waTests
+)
 ```
 
-```{r saTests}
+```{r updateSA}
 saRecov <- saTests <- NA_real_
 saUrl <- "https://www.covid-19.sa.gov.au/home/dashboard"
 saTxt <- saUrl  %>%
@@ -294,62 +278,109 @@ saTests <- saTxt %>%
   str_replace_all(".+conducted.* ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
   str_remove_all("[, ]") %>%
   as.numeric()
-saRecov <- saTxt %>% 
-  str_split("\\.") %>%
-  .[[1]] %>%
-  str_trim %>% 
-  str_subset("recovered") %>%
-  str_replace("[^0-9]*([0-9]+) .+have recovered.+", "\\1") %>%
-  as.numeric()
+saTable <- "https://www.covid-19.sa.gov.au/" %>% 
+  read_html() %>% 
+  html_node("body") %>% 
+  xml_find_all("//div[@class = 'focus-boxes']") %>%
+  html_text() %>% 
+  str_split("\r\n") %>% 
+  .[[1]] %>% 
+  str_trim() %>% 
+  .[.!=""] %>% 
+  .[seq(length(.), 1, by = -1)] %>% 
+  .[!str_detect(., "(Data current|View the|See more)")] %>%
+  matrix(ncol = 2, byrow = TRUE) %>% 
+  set_colnames(c("Cases", "Total")) %>% 
+  as.data.frame(stringsAsFactors = FALSE) %>% 
+  mutate(
+    Total = as.numeric(Total),
+    Cases = str_remove_all(Cases, "in South Australia")
+  )
+saRecov <- saTable %>%
+  dplyr::filter(str_detect(Cases, "recovered")) %>%
+  .[["Total"]]
+latestAU$SA <- tibble(
+  State = "South Australia",
+  date = dt,
+  confirmed = saTable %>% 
+    dplyr::filter(str_detect(Cases, "Total cases")) %>% 
+    .[["Total"]],
+  deaths = 4, # Only able to be added manually. Thanks SA Health
+  recovered = saRecov,
+  tested = saTests
+)
 ```
 
-```{r actTests}
+```{r updateACT}
 actRecov <- actTests <- NA_real_
 actUrl <- "https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19"
-if (url.exists(actUrl)){
-  actTxt <- actUrl %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all(
-       "//div[contains(@class, 'spf-article-card--tabular')]"
-    ) %>% 
-    html_text() %>% 
-    str_split("\r\n") %>% 
-    .[[4]] %>% 
-    str_trim() %>% 
-    setdiff(y = "") %>% 
-    str_remove_all("[,*]") %>%
-    matrix(ncol = 2, byrow = TRUE) 
-  actTests <- actTxt %>% 
-    .[!str_detect(.[,1], "recovered"), 2] %>%
-    as.numeric() %>% 
-    sum()
-  actRecov <- actTxt %>%
-    .[str_detect(.[,1], "recov"), 2] %>%
-    as.numeric()
-}
+actTable <- actUrl %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all(
+    "//div[contains(@class, 'spf-article-card--tabular')]"
+  ) %>% 
+  html_text() %>% 
+  str_split("\r\n") %>% 
+  .[[4]] %>% 
+  str_trim() %>% 
+  setdiff(y = "") %>% 
+  str_remove_all("[,*]") %>%
+  matrix(ncol = 2, byrow = TRUE) %>%
+  set_colnames(c("Cases", "Total")) %>%
+  as.data.frame(stringsAsFactors = FALSE) %>%
+  mutate(Total = as.numeric(Total))
+actTests <- actTable %>% 
+  dplyr::filter(!str_detect(Cases, "recovered")) %>%
+  .[["Total"]] %>%
+  sum()
+actRecov <- actTable %>%
+  dplyr::filter(str_detect(Cases, "recov")) %>%
+  .[["Total"]]
+latestAU$ACT <- tibble(
+  State = "Australian Capital Territory",
+  date = dt,
+  confirmed = actTable %>% 
+    dplyr::filter(str_detect(Cases, "Confirmed cases")) %>% 
+    .[["Total"]],
+  deaths = 3, # Only able to be added manually. Thanks SA Health
+  recovered = actRecov,
+  tested = actTests
+)
 ```
 
-```{r tasTests}
-tasRecov <- tasTests <- NA_real_
+```{r updateTAS}
 tasUrl <- "https://www.coronavirus.tas.gov.au/facts/cases-and-testing-updates"
 tasTables <- tasUrl %>%
   read_html() %>%
   html_nodes("body") %>%
   xml_find_all("//table") %>%
-  html_table()
-tasRecov <- tasTables[[1]] %>%
-  dplyr::filter(`Cases in Tasmania` == "Recovered") %>%
-  .[["Number"]] %>%
-  as.numeric()
-tasTests <- tasTables[[2]] %>%
-  dplyr::filter(`Laboratory tests` == "Total laboratory tests") %>%
-  .[["Number"]] %>%
-  str_remove_all("[, ]") %>%
-  as.numeric()
+  html_table() %>%
+  lapply(mutate, Number = str_remove_all(Number, "[^0-9]")) %>%
+  lapply(mutate, Number  = as.numeric(Number))
+latestAU$TAS <- tibble(
+  State = "Tasmania",
+  date = dt,
+  confirmed = dplyr::filter(
+     tasTables[[1]], 
+     str_detect(`Cases in Tasmania`, "Total cases")
+     )$Number,
+  deaths = dplyr::filter(
+     tasTables[[1]], 
+     str_detect(`Cases in Tasmania`, "Deaths")
+     )$Number,
+  recovered = dplyr::filter(
+    tasTables[[1]],
+    `Cases in Tasmania` == "Recovered"
+    )$Number,
+  tested = dplyr::filter(
+    tasTables[[2]],
+    `Laboratory tests` == "Total laboratory tests"
+    )$Number
+)
 ```
 
-```{r ntTests}
+```{r updateNT}
 ntRecov <- ntTests <- NA_real_
 ntUrl <- "https://coronavirus.nt.gov.au/"
 ntTxt <- ntUrl %>%
@@ -373,115 +404,49 @@ ntRecov <- ntTxt %>%
   str_extract("[0-9,]+") %>%
   str_remove_all(",") %>%
   as.numeric()
+latestAU$NT <- tibble(
+  State = "Northern Territory",
+  date = dt,
+  confirmed = ntTxt %>%
+    str_subset("confirmed") %>% 
+    str_extract("[0-9]+") %>% 
+    as.numeric(),
+  deaths = 0,
+  recovered = ntRecov,
+  tested = ntTests
+)
 ```
-
-```{r updateRecovered}
-auRec <- c(
-  "Australian Capital Territory" = actRecov,
-  "Northern Territory" = ntRecov,
-  "South Australia" = saRecov,
-  "Western Australia" = waRecov,
-  "Victoria" = vicRecov,
-  "Tasmania" = tasRecov,
-  "Queensland" = qldRecov,
-  "New South Wales" = nswRecov
-) %>%
-  enframe("Province/State", "recovered") %>%
-  dplyr::filter(!is.na(recovered)) %>%
-  mutate(
-    date = ymd(Sys.Date()),
-    Country = "Australia"
-  ) %>%
-  dplyr::select(`Province/State`, Country, date, recovered)
-if (nrow(auRec) > 0 ){
-  auRec %>%
-    write_tsv(
-      here::here(glue("recovered/recovered_{ymd(Sys.Date())}.tsv"))
-    )
-}
-```
-
 
 ```{r latestAU}
-prevDateAU <- confirmed %>%
-  dplyr::filter(Country == "Australia") %>%
-  summarise_at(vars(date), max) %>%
-  .[["date"]]
-latestAU <- fromJSON("https://api.infotorch.org/api/covid19/totals/") %>%
-  as_tibble() %>%
-  rename(
-    `Province/State` = state_long,
-    date = date_updated
-  ) %>%
-  mutate(
-    date = ymd(date),
-    Country = "Australia",
-    `Province/State` = str_replace_all(
-      `Province/State`, "ACT", "Australian Capital Territory"
-    )
-  ) %>%
-  dplyr::filter(
-    !str_detect(`Province/State`, "Total"),
-    `Province/State` != "Australia"
-  ) %>%
+latestAU %<>% 
+  bind_rows() %>%
+  mutate(Country = "Australia")
+```
+
+
+```{r updateRecovered}
+latestAU %>%
   dplyr::select(
-    `Province/State`, Country, date, 
-    confirmed, deaths
+    `Province/State` = State, Country, date, recovered
   ) %>%
-  bind_rows(govTable) %>% 
-  bind_rows(guardTable) %>%
-  group_by(`Province/State`) %>% 
-  summarise(
-    Country = unique(Country),
-    date = max(date),
-    confirmed = max(confirmed), 
-    deaths = max(deaths, na.rm = TRUE)
-  ) %>% 
-  mutate(
-    deaths = ifelse(is.finite(deaths), deaths, NA)
+  write_tsv(
+    here::here(glue("recovered/recovered_{dt}.tsv"))
+  )
+```
+
+
+```{r updateConfirmed}
+confirmed %<>%
+  bind_rows(
+    dplyr::select(latestAU, any_of(colnames(.)), `Province/State` = State)
   ) %>%
-  left_join(
-    here::here("recovered") %>% 
-      list.files(full.names = TRUE) %>%
-      .[length(.)] %>%
-      read_tsv() %>%
-      dplyr::select(-date)
-  ) %>%
-  ungroup() %>%
-  mutate(date = max(date))
-## The API & Govt website seems not to keep on top of NT & TAS cases so well
-## Future versions of this script may need to manually update these via webscraping
-## Here, just ensure that we don't have a decrease
-oldTas <- max(dplyr::filter(confirmed, `Province/State` == "Tasmania")$confirmed)
-newTas <- max(dplyr::filter(latestAU, `Province/State` == "Tasmania")$confirmed)
-oldNT <- max(dplyr::filter(confirmed, `Province/State` == "Northern Territory")$confirmed)
-newNT <- max(dplyr::filter(latestAU, `Province/State` == "Northern Territory")$confirmed)
-if (newTas < oldTas | newNT < oldNT) {
-  latestAU %<>%
-    mutate(
-      confirmed = case_when(
-        `Province/State` == "Tasmania" ~ max(newTas, oldTas),
-        `Province/State` == "Northern Territory" ~ max(newNT, oldNT),
-        !`Province/State` %in% c("Tasmania", "Northern Territory") ~ confirmed
-      )
-    )
-}
-# Update the AU records if there are any timepoints
-# on days beyond the last value provided by JHU
-updateAU <- max(latestAU$date) > prevDateAU
-if (updateAU) {
-  confirmed %<>%
-    bind_rows(
-      dplyr::select(latestAU, any_of(colnames(.)))
-    )
-  n <- confirmed %>%
-    dplyr::filter(Country == "Australia", date == prevDateAU) %>%
-    bind_rows(latestAU) %>% 
-    group_by(`Province/State`) %>% 
-    summarise(n = length(unique(confirmed))) %>% 
-    dplyr::filter(n > 1) %>%
-    nrow()
-}
+  arrange(date) %>%
+  mutate(f = paste(`Province/State`, Country, sep = "_")) %>%
+  split(f = .$f) %>%
+  lapply(mutate, confirmed = cummax(confirmed)) %>%
+  bind_rows() %>%
+  dplyr::select(-f) %>%
+  dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE)
 ```
 
 ```{r auRecTS}
@@ -552,14 +517,17 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
       !grepl("China", Country) ~ Country
     )
   ) %>%
-  dplyr::select(-Lat, -Long)
-if (updateAU){
-  deaths %<>%
-    bind_rows(
-      dplyr::select(latestAU, any_of(colnames(.)))
-    ) %>%
-    mutate(deaths = zoo::na.locf(deaths))
-}
+  dplyr::select(-Lat, -Long) %>%
+  bind_rows(
+    dplyr::select(latestAU, any_of(colnames(.)), `Province/State` = State)
+  ) %>%
+  arrange(date) %>%
+  mutate(f = paste(`Province/State`, Country, sep = "_")) %>%
+  split(f = .$f) %>%
+  lapply(mutate, deaths = cummax(deaths)) %>%
+  bind_rows() %>%
+  dplyr::select(-f) %>%
+  dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE)
 ```
 
 
@@ -630,10 +598,7 @@ Data for confirmed cases, recoveries and fatalities was primarily sourced from J
 JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 9:30AM in Adelaide.
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
-Numbers used for generation of this page are updated periodically throughout the day using values provided by https://api.infotorch.org/api/covid19/totals/, [The Guardian](https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json) and those at [www.health.gov.au](`r govUrl`).
-The Australian numbers used below **`r ifelse(updateAU, "do contain**", "do not contain** any")` confirmed cases reported since the JHU dataset was updated.
-`r ifelse(updateAU, glue("As of {format(Sys.time(), '%H:%M')}, __{n} of 8 states/territories have released updated COVID-19 figures since the overnight JHU release.__"), "")`
-The current Australia total is `r comma(sum(dplyr::filter(confirmed, date == max(date), Country == "Australia")$confirmed))` using these data sources, and any corrections to these will be made as soon as is possible. 
+Numbers used for generation of this page are updated periodically throughout the day using values provided by individual states at [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
 
 Population sizes were obtained from [2019 UN Estimates](https://en.wikipedia.org/wiki/List_of_countries_by_population_(United_Nations)).
 Given the disparity of infection within China, China was broken into Hubei Province and the rest of China, with Hong Kong and Taiwan already being considered as separate countries in all datasets.
@@ -644,7 +609,8 @@ In this analysis, discussions regarding accurate Chinese reporting are not consi
 
 However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for most countries.
 Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
-Information on *recovered cases is also difficult to accurately obtain* due inconsistent methods for considering a case as recovered, and lack of reporting for these cases in many jurisdictions.
+Information on *recovered cases has been difficult to accurately obtain* due inconsistent methods for considering a case as recovered, and lack of reporting for these cases in many jurisdictions.
+In Australia, some states (e.g. NSW & QLD) have only begun releasing these figures in mid-April, whilst other states such as Victoria were releasing these numbers from mid-March.
 
 # International Data {.tabset}
 
@@ -1160,14 +1126,6 @@ Notable features of this perspective are:
 minPop <- 4e6
 minDeaths <- 200
 nCnt <- 25
-cp <- glue(
-  "*Comparison of the {nCnt} most impacted countries by fatalities per million showing A) the number of fatalities scaled by population size and B) Total Fatalities.
-  Only countries with populations > {comma(minPop)}, and with more than {minDeaths} fatalities are shown.
-  Countries are also grouped by their continent as designated by the UN classifications*"
-)
-```
-
-```{r plotScaledFatal, fig.height=9, fig.width=10, fig.cap=cp}
 a <- deaths %>%
   dplyr::filter(deaths > 0) %>%
   group_by(Country, date) %>%
@@ -1228,6 +1186,18 @@ b <- deaths %>%
   coord_flip() +
   facet_grid(Continent~., scales= "free_y", space = "free_y") +
   theme(legend.position = "none")
+cp <- glue(
+  "*Comparison of the {nCnt} most impacted countries by fatalities per million showing A) the number of fatalities scaled by population size and B) Total Fatalities.
+  For fatality rates presented scaled by population size, it is important to realise that a value of 500 indicates that one in every 2000 people from the total population has died (ignoring demographics).
+  Similarly, a value of 100 indicates that 1 in every 10,000 from the total population has died in that country.
+  Whilst the US currently has the most fatalities, 1 in every {comma(round(1e6 / dplyr::filter(a$data, Country == 'US')$rate, 0))} from the US population have currently been confirmed to have died from COVID19.
+  For {as.character(a$data$Country[which.max(a$data$rate)])}, 1 in every {comma(round(1e6 / max(a$data$rate), 0))} people have died directly from COVID 19.
+  Only countries with populations > {comma(minPop)}, and with more than {minDeaths} fatalities are shown.
+  Countries are also grouped by their continent as designated by the UN classifications*"
+)
+```
+
+```{r plotScaledFatal, fig.height=9, fig.width=10, fig.cap=cp}
 plot_grid(
   a + theme(legend.position = "none"),
   b + 
@@ -1327,7 +1297,7 @@ nDays <- confirmed %>%
   ) %>% 
   dplyr::filter(rate > startingPoint) %>% 
   nrow() %>%
-  subtract(1)
+  subtract(4)
 ```
 
 
@@ -1378,15 +1348,13 @@ k <- 4
 cp3 <- glue(
   "*Dimensional reduction showing which countries infection rates are the most similar to each other __at the {nDays} day time point, after passing {startingPoint} confirmed cases/million__.
   This may or may not be indicative of future spread within the population.
-  The value {nDays} days was simply chosen as this marks how long since Australia passed this threshold.
+  The value {nDays} days was simply chosen as this marks how long since the US passed this threshold.
   Countries which have not progressed beyond {startingPoint} confirmed cases/million for {nDays} days or more are not shown.
   Countries with populations < {comma(minPop)} are also excluded.
   Clusters were generated using k-means, manually specifying k = {k} and are not definitive.
   Principal Component 1, on the x-axis, corresponds to the greatest source of variability within the data 
   ({pcPercent[['PC1']]}), and countries which appear near each other along this axis can be assumed to be showing similar growth in confirmed infection rates at this time point.
-  Separation along the y-axis is less significant, but also worthy of note, as this represents {pcPercent[['PC2']]} of variability within the data.
-  At this early point, Australia's cumulative, confirmed infection rate is diverging from the cluster of countries which have responded well and is becoming more similar to Israel, the UK and other poor responding countries.
-  This is suggestive that the early measures instituted in Australia may have been inadequate.*"
+  Separation along the y-axis is less significant, but also worthy of note, as this represents {pcPercent[['PC2']]} of variability within the data.*"
 )
 ```
 
@@ -1743,7 +1711,7 @@ ggplotly(deathPlot)
 ## Daily Increase in Fatalities Vs Confirmed Fatalities
 
 ```{r dailyVsTotalDeaths}
-minCases <- 10
+minCases <- 50
 minPop <- 1e6
 minDays <- 7
 dailyVsTotalDeaths <- deaths %>%
@@ -1864,7 +1832,7 @@ confirmed %>%
   ) %>%
   left_join(
     latestAU %>%
-      dplyr::select(`Province/State`, date, deaths, recovered) 
+      dplyr::select(`Province/State` = State, date, deaths, recovered) 
   ) %>%
   mutate(
     FRate = deaths / confirmed,
@@ -2185,16 +2153,17 @@ lm <- confirmed %>%
 In order to test whether the infection rates are different between states, a linear regression model was fit.
 $\log_{10}$(Cumulative Confirmed Infection Rate) was assigned as the response variable with predictor variables being the State and Date.
 Each State was assigned its own intercept and slope by use of an interaction term (i.e. State:date).
-Given the potentially larger slope in NSW, this state was set as the baseline, with each other slope (i.e. interaction term) being presented as the difference in slope between each state and NSW. 
+Given the initially larger case numbers in NSW, this state was set as the baseline, with each other slope (i.e. interaction term) being presented as the difference in slope between each state and NSW. 
 In this way comparisons against NSW were performed, but no comparisons between other states were performed.
+**Currently infecton rates have completely stabilised.**
 
-Differences in the State-level intercepts are not particularly relevant, apart from capturing the initial time at which cumulative confirmed infection rate exceeded `r minRate` cases / million and these are not shown.
-Differences between State-level slopes and NSW however, are of great interest, and as such only the slopes are shown.
+Differences in the State-level intercepts are not particularly relevant and these are not shown.
+Differences between State-level slopes and NSW however, are of great interest, and as such, only the slopes fr each state are shown.
 For NSW this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
 Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
 For those States which appear to be of interest, a negative value indicates an infection rate increasing more slowly than NSW, whilst a positive value indicates the opposite.
 If no difference is noted between any state and NSW, it can be considered that these states are all experiencing growth at a similar rate.
-Taking only the last 2 weeks of data, **the infection rate in most states is doubling every `r round(log(2, base = 10^coef(lm)["date"]), 1)` days.**
+
 
 
 ```{r lmSummary}
@@ -2270,37 +2239,12 @@ lm %>%
 
 ## Assessment of Testing Within Each State
 
-```{r tested}
-tested <- list.files("tested", pattern = "tsv", full.names = TRUE) %>%
-  sort() %>%
-  .[length(.)] %>%
-  read_tsv()
-```
-
-
 ```{r updateTested}
-tested <- c(
-  "New South Wales" = nswTests,
-  "Queensland" = qldTests,
-  "Victoria" = vicTests,
-  "Western Australia" = waTests,
-  "South Australia" = saTests,
-  "Australian Capital Territory" = actTests,
-  "Tasmania" = tasTests,
-  "Northern Territory" = ntTests
-) %>%
-  enframe(
-    name = "State", value = "Tested"
-  ) %>%
-  mutate(Tested = as.numeric(Tested)) %>%
-  dplyr::filter(!is.na(Tested)) %>%
-  bind_rows(tested) %>%
-  group_by(State) %>%
-  summarise(Tested = max(Tested, na.rm = TRUE))
-tested %>%
+latestAU %>%
+  dplyr::select(State, tested) %>%
   write_tsv(
     glue(
-      "tested/tested_{format(Sys.Date(), '%Y%m%d')}.tsv"
+      "tested/tested_{format(dt, '%Y%m%d')}.tsv"
     )
   )
 ```
@@ -2312,7 +2256,8 @@ The number of tested individuals in each state was then assessed as a function o
 All results are valid at the time of report generation.
 
 ```{r propTest}
-tested %>%
+latestAU %>%
+  dplyr::select(State, Tested = tested) %>%
   full_join(
     confirmed %>%
       dplyr::filter(
