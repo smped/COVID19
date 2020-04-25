@@ -594,6 +594,10 @@ write_tsv(wikiPops, "wikiPops.tsv")
 wikiPops <- read_tsv("wikiPops.tsv")
 ```
 
+```{r alwaysShow}
+alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland")
+```
+
 
 Data for confirmed cases, recoveries and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
 JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 9:30AM in Adelaide.
@@ -617,7 +621,7 @@ In Australia, some states (e.g. NSW & QLD) have only begun releasing these figur
 
 ```{r setThresholds}
 startingPoint <- 4
-minPop <- 4e6
+minPop <- 5e6
 ```
 
 
@@ -733,7 +737,7 @@ confirmed %>%
   summarise_at(vars(confirmed), sum) %>%
   dplyr::filter(confirmed > 0) %>%
   inner_join(
-    dplyr::filter(wikiPops, Population > minPop | Country == "Singapore")
+    dplyr::filter(wikiPops, Population > minPop | Country %in% alwaysShow)
   ) %>%
   mutate(
     rate = 1e6 * confirmed / Population
@@ -853,13 +857,13 @@ nDays <- confirmed %>%
 
 ```{r p}
 refRate <- c(2, 4, 8)
-minPop <- 8e6
+minPop <- 10e6
 p <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
   ungroup() %>%
   inner_join(
-    dplyr::filter(wikiPops, Population > minPop | Country %in% c("Singapore", "Hong Kong"))
+    dplyr::filter(wikiPops, Population > minPop | Country %in% alwaysShow)
   ) %>%
   mutate(
     rate = 1e6*confirmed / Population
@@ -872,14 +876,14 @@ p <- confirmed %>%
     days = date - min(date)
   ) %>%
   dplyr::filter(
-    max(days) >= minDays
+    max(days) >= minDays | Country %in% alwaysShow
   ) %>%
   ungroup() %>%
   mutate(
     days = as.integer(days),
     rate = round(rate, 2)
   ) %>%
-  dplyr::filter(days <= nDays) %>%
+  dplyr::filter(days <= nDays | Country %in% alwaysShow) %>%
   arrange(date) %>%
   mutate(Country = fct_inorder(Country)) %>%
   rename_all(str_to_title) %>%
@@ -946,7 +950,7 @@ p <- confirmed %>%
 
 ```{r cp, echo=FALSE}
 cp <- glue(
-    "*COVID-19 Confirmed Cumulative Infection Rate  for countries which have exceeded {startingPoint} confirmed cases/million for {minDays} or more days, and with populations greater than {comma(minPop)}.
+    "*COVID-19 Confirmed Cumulative Infection Rate  for countries which have exceeded {startingPoint} confirmed cases/million for {minDays} or more days, and with populations greater than {comma(minPop)}, apart from a small number of specifically included countries.
     Data is only shown for the first {nDays} calendar days since passing {startingPoint} confirmed cases/million.
     Note that from the day records begin in this dataset ({p$data$Date[1]}), the confirmed infection rate in Hubei was {p$data$Rate[1]} confirmed cases/million.
     The blue dashed line indicates Australia's current position on this figure.
@@ -1009,15 +1013,15 @@ p2 <- confirmed %>%
   ) %>%
   dplyr::filter(!is.na(active)) %>%
   inner_join(
-    dplyr::filter(wikiPops, Population > minPop | Country %in% c("Singapore", "Hong Kong"))
+    dplyr::filter(wikiPops, Population > minPop | Country %in% alwaysShow)
   ) %>%
   mutate(rate = 1e6 * active / Population) %>%
   dplyr::filter(rate > startingPoint) %>%
-    group_by(Country) %>%
+  group_by(Country) %>%
   mutate(
     days = date - min(date)
   ) %>%
-  dplyr::filter(max(days) > minDays) %>%
+  dplyr::filter(max(days) > minDays | Country %in% alwaysShow) %>%
   ungroup() %>%
   mutate(
     days = as.integer(days),
@@ -1099,6 +1103,7 @@ cp2 <- glue(
     "*Confirmed __active__ cases of COVID-19 for countries where the confirmed infection rate has exceeded {startingPoint} confirmed active cases/million for more than {nDays} calendar days.
     Only countries with a population greater than {comma(minPop)} are shown for better visualisation.
     Due to difficulties introduced by the currently reported __low active infection rate__ outside Hubei province, data from China has been excluded from this plot, with the exception of Hubei and Hong Kong.
+    __Recovered cases as poorly and irregularly reported by many countries and as such, this plot may be suffer multiple instances of a sudden decline.__
     The blue dashed lines indicates Australia's current position on this figure.
     To hide a country, click on the country in the plot legend.
     Clicking again on the country in the legend will restore the data within the plot.
@@ -1125,7 +1130,7 @@ Notable features of this perspective are:
 
 ```{r setScaledFatalPrams}
 minPop <- 4e6
-minDeaths <- 200
+minDeaths <- 500
 nCnt <- 25
 a <- deaths %>%
   dplyr::filter(deaths > 0) %>%
@@ -1148,7 +1153,7 @@ a <- deaths %>%
   ggplot(aes(Country, rate, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = rate + 18, label = round(rate, 0)),
+    aes(y = rate + 30, label = round(rate, 0)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
@@ -1178,7 +1183,7 @@ b <- deaths %>%
   ggplot(aes(Country, deaths, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = deaths + 1800, label = comma(deaths, accuracy = 1)),
+    aes(y = deaths + 4500, label = comma(deaths, accuracy = 1)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
@@ -1303,7 +1308,7 @@ nDays <- confirmed %>%
 
 
 ```{r pca}
-minPop <- 2e6
+minPop <- 4e6
 pca <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
@@ -1314,7 +1319,7 @@ pca <- confirmed %>%
   ) %>%
   dplyr::filter(
     rate > startingPoint,
-    Population > minPop
+    Population > minPop | Country %in% alwaysShow
   ) %>%
   group_by(Country) %>%
   mutate(
@@ -1439,7 +1444,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 
 
 ```{r p4}
-minPop <- 5e6
+minPop <- 10e6
 p4 <- confirmed %>%
   dplyr::filter(
     confirmed > 0
@@ -1454,7 +1459,7 @@ p4 <- confirmed %>%
   ) %>%
   ungroup() %>%
   inner_join(
-    wikiPops %>% dplyr::filter(Population > minPop)
+    wikiPops %>% dplyr::filter(Population > minPop | Country %in% alwaysShow)
   ) %>%
   mutate(rate = 1e6 * confirmed / Population) %>%
   dplyr::filter(rate > startingPoint) %>% 
@@ -1516,7 +1521,7 @@ ggplotly(p4)
 
 ```{r plotFr}
 minDays <- 12
-minPop <- 5e6
+minPop <- 10e6
 df <- confirmed %>%
   inner_join(deaths) %>%
   group_by(Country, date) %>%
@@ -1525,7 +1530,7 @@ df <- confirmed %>%
     sum
   ) %>%
   inner_join(
-    wikiPops %>% dplyr::filter(Population > minPop)
+    wikiPops %>% dplyr::filter(Population > minPop | Country %in% alwaysShow)
   ) %>%
   ungroup() %>%
   mutate(
@@ -1642,8 +1647,8 @@ ausDays <- deaths %>%
   dplyr::filter(deaths > 10) %>%
   nrow()
 minDays <- ausDays - 2
-minPop <- 4e6
-deathPlot <-confirmed %>%
+minPop <-10e6
+deathPlot <- confirmed %>%
   left_join(deaths) %>%
   group_by(Country, date) %>%
   summarise_at(
@@ -1653,12 +1658,12 @@ deathPlot <-confirmed %>%
   ungroup() %>%
   dplyr::filter(
     deaths >= minDeaths,
-    Country %in% dplyr::filter(wikiPops, Population > minPop)$Country
+    Country %in% c(dplyr::filter(wikiPops, Population > minPop)$Country, alwaysShow)
   ) %>%
   group_by(Country) %>%
   mutate(Days = as.integer(date - min(date))) %>%
   dplyr::filter(
-    max(Days) > minDays
+    max(Days) > minDays | Country %in% alwaysShow
   ) %>%
   ungroup() %>%
   rename_all(str_to_title) %>%
@@ -1713,7 +1718,7 @@ ggplotly(deathPlot)
 
 ```{r dailyVsTotalDeaths}
 minCases <- 50
-minPop <- 1e6
+minPop <- 10e6
 minDays <- 7
 dailyVsTotalDeaths <- deaths %>%
   group_by(Country, date) %>%
@@ -1736,7 +1741,7 @@ dailyVsTotalDeaths <- deaths %>%
   mutate_at(vars(deaths, d), round, 2) %>%
   mutate(n = n()) %>%
   dplyr::filter(
-    n > minDays,
+    n > minDays | Country %in% alwaysShow,
     Population > minPop,
     d > 0
   ) %>%
@@ -2283,6 +2288,72 @@ latestAU %>%
     ),
     emphasize.strong.rows = nrow(.)
   )
+```
+
+## Current Growth Factor
+
+```{r plotGF, fig.width=10, fig.height=8, fig.cap="*Growth factor for each State/Territory. This value becomes very volatile when daily new cases approach zero as is commonly observed in small populations and the end stages of an outbreak. In order to try and minimise volatility a 7 day moving average was used, in contrast to the 5-day average advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478)*"}
+list(
+  confirmed %>%
+    dplyr::filter(Country == "Australia") %>%
+    arrange(date) %>%
+    group_by(
+      `Province/State`
+    ) %>%
+    mutate(
+      new = c(0, diff(confirmed)),
+      new_ma = sma(new, 7)
+    ) %>%
+    dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
+    mutate(
+      R = c(NA, new_ma[-1] / new_ma[-n()]),
+      R = case_when(
+        is.nan(R) ~ 0,
+        !is.nan(R) ~ R
+      )
+    ) %>%
+    ungroup() %>%
+    arrange(`Province/State`),
+  confirmed %>%
+    dplyr::filter(Country == "Australia") %>%
+    arrange(date) %>%
+    group_by(Country, date) %>%
+    summarise_at(vars(confirmed), sum) %>%
+    ungroup() %>%
+    mutate(
+      new = c(0, diff(confirmed)),
+      new_ma = sma(new, 7)
+    ) %>%
+    dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
+    mutate(
+      R = c(NA, new_ma[-1] / new_ma[-n()]),
+      R = case_when(
+        is.nan(R) ~ 0,
+        !is.nan(R) ~ R
+      ),
+      `Province/State` = "All States"
+    ) %>%
+    arrange(`Province/State`)
+) %>%
+  bind_rows() %>%
+  dplyr::filter(date > ymd("2020-03-15")) %>%
+  ggplot(aes(date, R, colour = `Province/State`)) +
+  geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
+  geom_hline(yintercept = 1) +
+  geom_smooth(se = FALSE, linetype = 2, size = 1/3) +
+  geom_label(
+    aes(label = R),
+    data = . %>%
+      dplyr::filter(date == max(date)) %>%
+      mutate(R = round(R, 2), date = date + 1),
+    fill = rgb(1, 1, 1, 0.3),
+    show.legend = FALSE
+  ) +
+  labs(
+    x = "Date", y = "Growth Factor"
+  ) +
+  facet_wrap(~`Province/State`, scales = "free_x") +
+  theme(legend.position = "none")
 ```
 
 
