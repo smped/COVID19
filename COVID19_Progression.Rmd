@@ -98,13 +98,14 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
+
 ```{r initLatestAU}
 latestAU <- list()
 ```
 
 ```{r updateNSW}
 nswRecov <- nswTests <- NA_real_
-nswUrl <- "https://www.health.nsw.gov.au/Infectious/diseases/Pages/covid-19-latest.aspx"
+nswUrl <- "https://www.health.nsw.gov.au/Infectious/covid-19/Pages/stats-nsw.aspx"
 nswTables <- nswUrl %>%
   read_html() %>%
   xml_find_all("//table") %>%
@@ -209,7 +210,7 @@ vicTests <- vicTxt %>%
 vicRecov <- vicTxt %>%
   str_subset("recovered") %>%
   str_trim() %>%
-  str_replace_all(".+ ([0-9,]+) people have recovered..+", "\\1") %>%
+  str_replace_all(".+ ([0-9,]+)[^0-9]people have recovered..+", "\\1") %>%
   str_remove(",") %>%
   as.numeric()
 latestAU$VIC <- tibble(
@@ -1830,93 +1831,58 @@ confirmed %>%
     Country == "Australia", 
     date >= max(date) - 1
   ) %>%
-  left_join(
-    latestAU %>%
-      dplyr::select(`Province/State` = State, date, deaths, recovered) 
-  ) %>%
-  mutate(
-    FRate = deaths / confirmed,
-    RRate = recovered / confirmed
-  ) %>% 
-  group_by(`Province/State`) %>% 
-  mutate(
-    d = c(NA, diff(confirmed)),
-    p = d / min(confirmed)
-  ) %>%
   bind_rows(
     group_by(., date) %>%
       summarise(
-        confirmed = sum(confirmed),
-        deaths = sum(deaths, na.rm = TRUE),
-        recovered = sum(recovered, na.rm = TRUE),
-        FRate = sum(deaths, na.rm = TRUE) / sum(confirmed),
-        d = sum(d),
-        p = d / (confirmed - d)
+        confirmed = sum(confirmed)
       ) %>%
-      ungroup() %>%
       mutate(
-        `Province/State` = "Total",
-        Country = "Australia"
+        `Province/State` = "Total"
       )
   ) %>%
-  ungroup() %>%
-  group_by(date) %>%
+  group_by(`Province/State`) %>%
   mutate(
-    RRate = case_when(
-      `Province/State` != "Total" ~ RRate,
-      `Province/State` == "Total" ~ sum(recovered[`Province/State` != "Total"], na.rm = TRUE) / sum(confirmed[!is.na(recovered) & `Province/State` != "Total"])
-    )
-  ) %>% 
+    `Daily Change` = c(NA, diff(confirmed)),
+    `% Change` = c(NA, diff(confirmed)) / min(confirmed)
+  ) %>%
+  ungroup() %>%
   pivot_wider(
-    id_cols = "Province/State", 
+    id_cols = `Province/State`, 
     names_from = date, 
-    values_from = c(confirmed, d, p, deaths, recovered, FRate, RRate)
-  ) %>% 
-  set_names(
-    str_remove(names(.), "confirmed_")
-  ) %>% 
+    values_from = c(confirmed, `Daily Change`, `% Change`)
+  ) %>%
   dplyr::select_if(function(x){sum(is.na(x)) <= 1}) %>%
-  set_names(
-    str_replace(names(.), "^d_.+", "Daily Change")
+  rename(State = `Province/State`) %>%
+  rename_all(str_remove_all, pattern = "confirmed_") %>%
+  rename_all(str_remove_all, pattern = "_2020.+") %>%
+  left_join(
+    dplyr::select(latestAU, State, confirmed, deaths, recovered)
   ) %>%
-  set_names(
-    str_replace(names(.), "p_.+", "Percent")
-  ) %>%
-  set_names(
-    str_replace(names(.), "deaths.+", "Fatalities")
-  ) %>%
-  set_names(
-    str_replace(names(.), "recov.+", "Recovered")
-  ) %>%
-  set_names(
-    str_replace(names(.), "FRate.+", "Fatality Rate")
-  ) %>%
-  set_names(
-    str_replace(names(.), "RRate.+", "Recovery Rate")
-  ) %>%
-  arrange(desc(Percent)) %>%
-  mutate(isTotal = grepl("Total", `Province/State`)) %>%
-  arrange(isTotal, desc(Percent)) %>%
-  dplyr::select(-isTotal) %>%
   mutate_at(
-    vars(Percent, `Fatality Rate`, `Recovery Rate`),
-    percent,
-    accuracy = 0.1
+    vars(confirmed, deaths, recovered),
+    function(x){
+      x[is.na(x)] <- sum(x, na.rm = TRUE)
+      x
+    }
+  ) %>%
+  mutate(
+    `% Change` = percent(`% Change`, accuracy = 0.01),
+    `Fatality Rate` = percent(deaths / confirmed, accuracy = 0.1),
+    `Recovery Rate` = percent(recovered / confirmed, accuracy = 0.1),
+    `Currently Active` = confirmed - recovered - deaths,
   ) %>%
   rename(
-    `% Change` = Percent,
-    `Recovered^+^` = Recovered
+    Fatalities = deaths,
+    Recovered = recovered
   ) %>%
-  dplyr::select(State = `Province/State`, 2:3, ends_with("Change"), starts_with("Fatal"), starts_with("Recov")) %>%
-  mutate(
-     `Currently Active` = (!!as.name(as.character(dt))) - Fatalities - `Recovered^+^`
+  dplyr::select(
+    State, starts_with("20"), ends_with("Change"), starts_with("Fatal"), starts_with("Recov"), `Currently Active`
   ) %>%
   pander(
     justify = "lrrrrrrrrr",
     caption = paste(
       "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.",
-      "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.",
-      "^+^Recovered cases are not reported by NSW so this value is taken by subtracting all other states from the national total.*"
+      "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
@@ -2241,7 +2207,7 @@ lm %>%
 
 ```{r updateTested}
 latestAU %>%
-  dplyr::select(State, tested) %>%
+  dplyr::select(State, Tested = tested) %>%
   write_tsv(
     glue(
       "tested/tested_{format(dt, '%Y%m%d')}.tsv"
