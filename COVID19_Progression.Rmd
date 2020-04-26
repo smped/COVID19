@@ -630,6 +630,7 @@ JHU data is now updated every 24 hours at approximately 3:30(UTC), which is abou
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by individual states at [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
+Additional Australian data was obtained from https://api.infotorch.org/api/covid19.
 
 Population sizes were obtained from [2019 UN Estimates](https://en.wikipedia.org/wiki/List_of_countries_by_population_(United_Nations)).
 Given the disparity of infection within China, China was broken into Hubei Province and the rest of China, with Hong Kong and Taiwan already being considered as separate countries in all datasets.
@@ -2319,7 +2320,7 @@ latestAU %>%
 
 ## Current Growth Factor
 
-```{r plotGF, fig.width=10, fig.height=8, fig.cap="*Growth factor for each State/Territory. This value becomes very volatile when daily new cases approach zero as is commonly observed in small populations and the end stages of an outbreak. In order to try and minimise volatility a 7 day moving average was used, in contrast to the 5-day average advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478)*"}
+```{r plotGF, fig.width=10, fig.height=8, fig.cap="*Growth factor for each State/Territory. This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. In order to try and minimise volatility a 7 day (i.e. 1 week) moving average was used, in contrast to the 5-day average advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478). Sahed lines are a loess curve*"}
 list(
   confirmed %>%
     dplyr::filter(Country == "Australia") %>%
