@@ -33,6 +33,7 @@ library(pander)
 library(DT)
 library(plotly)
 library(cowplot)
+library(QuantTools)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
 panderOptions("table.style", "rmarkdown")
@@ -740,18 +741,6 @@ confirmed %>%
 An alternate viewpoint on the data is to remove time and inspect the relationship between the daily increase in cases and the total number of cases.
 When this relationship ceases it's near linear relationship, this can be a sign the control measures have begun to take effect.
 Whilst this relationship **appears to have broken down for Australia**, no breakdown has yet occurred for countries such as the Singapore, Canada, the UK, USA and Turkey, with these countries **explicitly still in the exponential growth phase.**
-
-```{r sma}
-sma <- function(x, n = 7){
-    
-    if (length(x) < n) return(rep(NA, length(x)))
-    ind <- vapply(seq(1, length(x) - (n - 1)), seq, numeric(n), length.out = n)
-    c(
-        rep(NA, n - 1),
-        colMeans(matrix(x[ind], nrow = n), na.rm = TRUE)
-    )
-}
-```
 
 
 ```{r plotIncVConf}
@@ -2381,7 +2370,8 @@ list(
     x = "Date", y = "Growth Factor"
   ) +
   facet_wrap(~`Province/State`, scales = "free_x") +
-  theme(legend.position = "none")
+  theme(legend.position = "none") +
+  coord_cartesian(ylim= c(0, 5))
 ```
 
 ## Scaled Transmissions
@@ -2416,17 +2406,15 @@ confirmed %>%
   group_by(`Province/State`) %>%
   mutate(
     new = c(0, diff(confirmed)),
-    new_ma = sma(new, 1),
-    active_ma = sma(active, 1),
-    active_offset = c(rep(NA, offset - 1), active_ma[seq_len(n() - offset + 1)]),
-    trans = new_ma / active_offset
+    active_offset = c(rep(NA, offset - 1), active[seq_len(n() - offset + 1)]),
+    trans = new / active_offset
   ) %>%
   ungroup() %>%
   dplyr::filter(
     date > ymd("2020-03-09"),
     !is.na(trans)
   ) %>%
-  ggplot(aes(date, trans, colour= `Province/State`)) +
+  ggplot(aes(date, trans, colour = `Province/State`)) +
   geom_rect(
     aes(xmin = lockdown, xmax = lockdown + offset, ymin = 0, ymax = Inf),
     data = tibble(
