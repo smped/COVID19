@@ -2384,6 +2384,87 @@ list(
   theme(legend.position = "none")
 ```
 
+## Scaled Transmissions
+
+```{r offset}
+offset <- 6
+```
+
+
+An alternative viewpoint to the growth factor is to simply assess the number of new cases arising from the number of active cases.
+As there is a delay in symptom onset, the number of new cases on a given day is a function of the number of active cases several days in the past, and using an offset value easily allows this to communicated in an informative way.
+Any sustained number below 1 indicates a trajectory which leads to control of the outbreak, whilst values > 1 indicate exponential growth.
+
+```{r, fig.height=8, fig.width=10, fig.cap=glue("*Numbers of new cases arising from existing active cases. The value for active cases was taken using an offset of {offset} days to represent the median incubation period. The introduction of social distancing is indicated in blue, with the delay after which the full effects might be observed highlighted as rectangles. The same pattern is shown in red for the date Australia went into lockdown. Importantly, recovered cases were poorly reported in NSW and QLD until recently, and as such, __active cases from early March to early April are a significant overestimate and the ratio of new cases scaled by active cases makes the initial outbreak appear far more moderate than the reality was.__ Even taking this into account for the actual values, it is clear from the shape of the curves that social distancing, whilst having a clear impact, was insufficient to fully contain the outbreak.*")}
+confirmed %>%
+  dplyr::filter(Country == "Australia") %>%
+  left_join(recovered) %>%
+  left_join(deaths) %>%
+  mutate(active = confirmed - recovered - deaths) %>%
+  bind_rows(
+    group_by(., Country, date) %>%
+      summarise_at(
+        vars(confirmed, recovered, deaths, active),
+        sum
+      ) %>%
+      ungroup() %>%
+      mutate(
+        `Province/State` = "All States"
+      )
+  ) %>%
+  dplyr::filter(active > 0) %>%
+  group_by(`Province/State`) %>%
+  mutate(
+    new = c(0, diff(confirmed)),
+    new_ma = sma(new, 1),
+    active_ma = sma(active, 1),
+    active_offset = c(rep(NA, offset - 1), active_ma[seq_len(n() - offset + 1)]),
+    trans = new_ma / active_offset
+  ) %>%
+  ungroup() %>%
+  dplyr::filter(
+    date > ymd("2020-03-09"),
+    !is.na(trans)
+  ) %>%
+  ggplot(aes(date, trans, colour= `Province/State`)) +
+  geom_rect(
+    aes(xmin = lockdown, xmax = lockdown + offset, ymin = 0, ymax = Inf),
+    data = tibble(
+      lockdown = ymd("2020-03-23")
+    ),
+    fill = "red",
+    alpha = 0.1,
+    inherit.aes = FALSE
+  ) +
+  geom_vline(
+    xintercept = ymd("2020-03-23"), 
+    linetype = 2,
+    colour = "red"
+  ) +
+  geom_rect(
+    aes(xmin = social, xmax = social + offset, ymin = 0, ymax = Inf),
+    data = tibble(
+      social = ymd("2020-03-15")
+    ),
+    fill = "blue",
+    alpha = 0.1,
+    inherit.aes = FALSE
+  ) +
+  geom_vline(
+    xintercept = ymd("2020-03-15"), 
+    linetype = 2,
+    colour = "blue"
+  ) +
+  geom_ribbon(aes(ymax = 1, ymin = trans), alpha = 0.2) +
+  geom_hline(yintercept = 1, colour = "grey20") +
+  facet_wrap(~`Province/State`) +
+  coord_cartesian(ylim = c(0, 5)) +
+  labs(
+    x = "Date",
+    y = "New Cases / Active Case"
+  ) +
+  theme(legend.position = "none")
+```
 
 
 
