@@ -98,6 +98,31 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
+```{r altAU}
+altAU <- fromJSON("https://api.infotorch.org/api/covid19/statlist/?geos=NSW,VIC,QLD,WA,SA,TAS,ACT,NT&stat=confirmed") %>%
+  unnest(data) %>%
+  rename(
+    date = x, confirmed = y, `Province/State` = geo_long
+  ) %>%
+  mutate(
+    date = ymd(date),
+    Country = "Australia",
+    `Province/State` = str_replace(`Province/State`, "ACT", auStates["ACT"])
+  ) %>%
+  dplyr::select(colnames(confirmed))
+# Add the data, with the API being preferentialy selected
+confirmed %<>%
+  mutate(source = "JHU") %>%
+  bind_rows(
+    mutate(altAU, source = "API")
+  ) %>%
+  arrange(
+    date, `Province/State`, source
+  ) %>%
+  distinct(`Province/State`, Country, date, .keep_all = TRUE) %>%
+  dplyr::select(-source)
+```
+
 
 ```{r initLatestAU}
 latestAU <- list()
@@ -600,7 +625,8 @@ alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "
 
 
 Data for confirmed cases, recoveries and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
-JHU data is updated every 24 hours at approximately 23:59(UTC), which is about 9:30AM in Adelaide.
+JHU data is now updated every 24 hours at approximately 3:30(UTC), which is about 1:00PM in Adelaide.
+**As such no accurate, daily updates for international data can be produced until after that time. **
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by individual states at [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
@@ -1827,14 +1853,15 @@ A series of complimentary charts regarding the spread of COVID-19 are available 
 
 - It is now clear that Australia is **no longer in an exponential growth phase** and there are **clear signs of the growth levelling out**. 
 - Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
-- Notably, the proportion of recovered cases is now >70%
+- Notably, the proportion of recovered cases is now >80%
+
 
 
 ```{r latestAUTable}
 confirmed %>% 
   dplyr::filter(
     Country == "Australia", 
-    date >= max(date) - 1
+    date >= sort(unique(date), decreasing = TRUE)[2]
   ) %>%
   bind_rows(
     group_by(., date) %>%
@@ -1847,14 +1874,14 @@ confirmed %>%
   ) %>%
   group_by(`Province/State`) %>%
   mutate(
-    `Daily Change` = c(NA, diff(confirmed)),
-    `% Change` = c(NA, diff(confirmed)) / min(confirmed)
+    Increase = c(NA, diff(confirmed)),
+    `% Increase` = c(NA, diff(confirmed)) / min(confirmed)
   ) %>%
   ungroup() %>%
   pivot_wider(
     id_cols = `Province/State`, 
     names_from = date, 
-    values_from = c(confirmed, `Daily Change`, `% Change`)
+    values_from = c(confirmed, Increase, `% Increase`)
   ) %>%
   dplyr::select_if(function(x){sum(is.na(x)) <= 1}) %>%
   rename(State = `Province/State`) %>%
@@ -1871,7 +1898,7 @@ confirmed %>%
     }
   ) %>%
   mutate(
-    `% Change` = percent(`% Change`, accuracy = 0.01),
+    `% Increase` = percent(`% Increase`, accuracy = 0.01),
     `Fatality Rate` = percent(deaths / confirmed, accuracy = 0.1),
     `Recovery Rate` = percent(recovered / confirmed, accuracy = 0.1),
     `Currently Active` = confirmed - recovered - deaths,
@@ -1881,7 +1908,7 @@ confirmed %>%
     Recovered = recovered
   ) %>%
   dplyr::select(
-    State, starts_with("20"), ends_with("Change"), starts_with("Fatal"), starts_with("Recov"), `Currently Active`
+    State, starts_with("20"), ends_with("Increase"), starts_with("Fatal"), starts_with("Recov"), `Currently Active`
   ) %>%
   pander(
     justify = "lrrrrrrrrr",
