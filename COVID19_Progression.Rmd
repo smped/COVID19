@@ -214,7 +214,7 @@ latestAU$QLD <- tibble(
 
 ```{r updateVic}
 vicRecov <- vicTests <- NA_real_
-vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-daily-update"
+vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-cho-daily-update"
 vicTxt <- vicUrl %>%
   read_html() %>%
   html_nodes("body") %>% 
@@ -236,7 +236,7 @@ vicTests <- vicTxt %>%
 vicRecov <- vicTxt %>%
   str_subset("recovered") %>%
   str_trim() %>%
-  str_replace_all(".+ ([0-9,]+)[^0-9]people have recovered..+", "\\1") %>%
+  str_replace_all("([0-9,]+)[^0-9]people have recovered..+", "\\1") %>%
   str_remove(",") %>%
   as.numeric()
 latestAU$VIC <- tibble(
@@ -2385,7 +2385,7 @@ An alternative viewpoint to the growth factor is to simply assess the number of 
 As there is a delay in symptom onset, the number of new cases on a given day is a function of the number of active cases several days in the past, and using an offset value easily allows this to communicated in an informative way.
 Any sustained number below 1 indicates a trajectory which leads to control of the outbreak, whilst values > 1 indicate exponential growth.
 
-```{r plotScaledTrans, fig.height=8, fig.width=10, fig.cap=glue("*Numbers of new cases arising from existing active cases. The value for active cases was taken using an offset of {offset} days to represent the median incubation period and the approximate transmission date is shown on the x-axis. The introduction of social distancing is indicated in blue as the date these effects will have become visible in the data. The date that the effects of lockdown should have begun appearing is shown in red. Importantly, recovered cases were poorly reported in NSW and QLD until recently, and as such, __active cases from early March to early April are a significant overestimate and the ratio of new cases scaled by active cases makes the initial outbreak appear far more moderate than the reality was.__ Even taking this into account for the actual values, it is clear from the peaks above 1 that social distancing, whilst having a positive impact, was insufficient to fully contain the outbreak.*")}
+```{r plotScaledTrans, fig.height=8, fig.width=10, fig.cap=glue("*Numbers of new cases arising from existing active cases. The value for active cases was taken using an offset of {offset} days to represent the median incubation period and the approximate transmission date is shown on the x-axis. The introduction of social distancing is indicated in blue at the date these effects will have become visible in the data (i.e. {offset} days after introduction). The date that the effects of lockdown should have begun appearing is shown in red. Importantly, recovered cases were poorly reported in NSW and QLD until recently, and as such, __active cases from early March to early April are a significant overestimate and the ratio of new cases scaled by active cases makes the initial outbreak appear far more moderate than the reality was.__ Even taking this into account for the actual values, it is clear from the peaks above 1 that social distancing, whilst having a positive impact, was insufficient to fully contain the outbreak.*")}
 confirmed %>%
   dplyr::filter(Country == "Australia") %>%
   left_join(recovered) %>%
