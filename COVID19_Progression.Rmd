@@ -161,7 +161,7 @@ latestAU$NSW <- tibble(
     str_extract("[0-9]+") %>% 
     as.numeric(),
   deaths = nswTables %>% 
-    dplyr::filter(str_detect(Cases, "Total deaths")) %>%
+    dplyr::filter(str_detect(Cases, "(Total deaths|Lives lost)")) %>%
     .[["Count"]] %>% 
     str_remove_all(",") %>%
     str_extract("[0-9]+") %>% 
@@ -1841,7 +1841,7 @@ The difference with previous estimates used above was within 0.04%, and as such 
 
 A series of complimentary charts regarding the spread of COVID-19 are available from [the ABC website](https://www.abc.net.au/news/2020-03-17/coronavirus-cases-data-reveals-how-covid-19-spreads-in-australia/12060704).
 
-- It is now clear that Australia is **no longer in an exponential growth phase** and there are **clear signs of the growth levelling out**. 
+- It is now clear that Australia is **no longer in an exponential growth phase** and they pandemic may be under control
 - Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
 - Notably, the proportion of recovered cases is now >80%
 
