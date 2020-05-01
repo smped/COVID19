@@ -249,7 +249,7 @@ latestAU$VIC <- tibble(
     as.numeric(),
   deaths = vicTxt %>% 
     str_subset("died") %>% 
-    str_replace_all(".+ ([0-9,]+) people have died.", "\\1") %>%
+    str_replace_all(".+ ([0-9,]+) people have died.+", "\\1") %>%
     str_remove_all(",") %>% 
     as.numeric(),
   recovered = vicRecov,
@@ -334,7 +334,7 @@ latestAU$SA <- tibble(
     .[["Total"]],
   deaths = 4, # Only able to be added manually. Thanks SA Health
   recovered = saRecov,
-  tested = saTests
+  tested = 58670#saTests
 )
 ```
 
@@ -1321,7 +1321,7 @@ nDays <- confirmed %>%
   ) %>% 
   dplyr::filter(rate > startingPoint) %>% 
   nrow() %>%
-  subtract(4)
+  subtract(1)
 ```
 
 
@@ -1372,7 +1372,7 @@ k <- 4
 cp3 <- glue(
   "*Dimensional reduction showing which countries infection rates are the most similar to each other __at the {nDays} day time point, after passing {startingPoint} confirmed cases/million__.
   This may or may not be indicative of future spread within the population.
-  The value {nDays} days was simply chosen as this marks how long since the US passed this threshold.
+  The value {nDays} days was simply chosen as this marks how long since Australia passed this threshold.
   Countries which have not progressed beyond {startingPoint} confirmed cases/million for {nDays} days or more are not shown.
   Countries with populations < {comma(minPop)} are also excluded.
   Clusters were generated using k-means, manually specifying k = {k} and are not definitive.
