@@ -627,7 +627,9 @@ alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "
 
 Data for confirmed cases, recoveries and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
 JHU data is now updated every 24 hours at approximately 3:30(UTC), which is about 1:00PM in Adelaide.
-**As such no accurate, daily updates for international data can be produced until after that time. **
+**As such no accurate, daily updates for international data can be produced until after that time.**
+Importantly, dates associated with confirmed cases from this data source, may differ from dataes associated with confirmed cases from Australian sources.
+For example, cases reported in the morning in Australia may be assigned to the previous day in US data sources.
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by individual states at [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
