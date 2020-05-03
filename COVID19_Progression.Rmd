@@ -228,7 +228,7 @@ vicTests <- vicTxt %>%
   str_subset("[0-9]+.+test(ed|s)") %>%
   .[[1]] %>%
   str_replace_all(
-    ".+ ([0-9,]+) .*test(ed|s).+",
+    ".+ ([0-9,]+).*test(ed|s).+",
     "\\1"
   ) %>%
   str_remove_all(",") %>%
@@ -302,10 +302,20 @@ saTxt <- saUrl  %>%
   str_trim() %>%
   .[. != ""]
 ## The dashboard is unreliable so use SA Health press releases as an additional source
-altSaUrl <- glue(
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{month.abb[month(dt)]}+{day(dt)}+{year(dt)}"
-) %>% str_to_lower()
-altSaTxt <- altSaUrl %>%
+## These don't appear until late afternoon, so this is a pain in the arse quite frankly
+altSaUrl <- c(
+  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{month.abb[month(dt)]}+{day(dt)}+{year(dt)}",
+  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{month.abb[month(dt-1)]}+{day(dt-1)}+{year(dt-1)}"
+  ) %>% 
+  vapply(glue, character(1)) %>% 
+  str_to_lower()
+validSa <- altSaUrl %>%
+  lapply(read_html) %>%
+  lapply(html_node, css = "body") %>%
+  vapply(function(x){!is.na(x)}, logical(1)) %>%
+  which() %>%
+  .[[1]]
+altSaTxt <- altSaUrl[validSa] %>%
   read_html() %>%
   html_node("body") %>%
   xml_find_all("//section[@class = 'main-content']") %>%
@@ -1734,7 +1744,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 ### Active Infections Across All Countries
 
 ```{r p2}
-minDays <- 40
+minDays <- 45
 minPop <- 10e6
 df <- confirmed %>%
   dplyr::filter(
@@ -1765,7 +1775,7 @@ df <- confirmed %>%
   mutate(
     days = date - min(date)
   ) %>%
-  dplyr::filter(max(days) > minDays) %>% 
+  dplyr::filter(max(days) > minDays | Country %in% alwaysShow) %>% 
   ungroup() %>%
   mutate(
     days = as.integer(days),
@@ -1883,6 +1893,7 @@ p4 <- confirmed %>%
   left_join(deaths) %>%
   group_by(Country, date) %>%
   summarise_at(vars(confirmed, deaths), sum) %>%
+  dplyr::filter(date == max(date)) %>%
   left_join(
     recovered %>%
       group_by(Country, date) %>%
@@ -1895,7 +1906,6 @@ p4 <- confirmed %>%
   mutate(rate = 1e6 * confirmed / Population) %>%
   dplyr::filter(rate > startingPoint) %>% 
   group_by(Country) %>%
-  dplyr::filter(date == max(date)) %>%
   mutate(
     active = confirmed - recovered - deaths
   ) %>%
@@ -1904,8 +1914,8 @@ p4 <- confirmed %>%
     recovered = 100*recovered / confirmed,
     fatalities = 100*deaths / confirmed
   ) %>%
-  dplyr::filter(active < 100) %>%
   ungroup() %>%
+  dplyr::filter(active < 100) %>%
   arrange(active) %>% 
   mutate(Country = fct_inorder(Country)) %>%
   pivot_longer(
