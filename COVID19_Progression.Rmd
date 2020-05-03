@@ -258,20 +258,20 @@ latestAU$VIC <- tibble(
 ```
 
 ```{r updateWA}
-waTests <- NA_real_
-waRecov <- NA_real_
+waTests <- waRecov <- NA_real_
 waUrl <- "https://ww2.health.wa.gov.au/Articles/A_E/Coronavirus/COVID19-statistics"
 waTable <- waUrl %>%
   read_html() %>%
   xml_find_all("//table") %>%
   .[[1]] %>%
   html_table() %>%
+  setNames(c("Cases", "Total")) %>%
   mutate(
     Total = str_remove_all(Total, ","),
     Total = as.numeric(Total)
   ) 
 waTests <- waTable %>%
-  dplyr::filter(str_detect(Cases, "ive")) %>%
+  dplyr::filter(str_detect(Cases, "(Test|ive)")) %>%
   summarise(n = sum(Total)) %>%
   .[["n"]]
 waRecov <- dplyr::filter(waTable, Cases == "Recovered")$Total
