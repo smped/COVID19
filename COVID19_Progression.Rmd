@@ -225,7 +225,7 @@ vicTxt <- vicUrl %>%
   .[. != ""] %>% 
     str_subset("(tested|recovered|total|died)")
 vicTests <- vicTxt %>%
-  str_subset("[0-9]+.+test(ed|s)") %>%
+  str_subset("[0-9]+.*people.*test(ed|s)") %>%
   .[[1]] %>%
   str_replace_all(
     ".+ ([0-9,]+).*test(ed|s).+",
