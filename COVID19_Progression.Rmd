@@ -225,10 +225,10 @@ vicTxt <- vicUrl %>%
   .[. != ""] %>% 
     str_subset("(tested|recovered|total|died)")
 vicTests <- vicTxt %>%
-  str_subset("[0-9]+.*people.*test(ed|s)") %>%
+  str_subset("[0-9]+.*(people|samples).*test(ed|s|ing)") %>%
   .[[1]] %>%
   str_replace_all(
-    ".+ ([0-9,]+).*test(ed|s).+",
+    ".+ ([0-9,]+) .*test(ed|s|ing).+",
     "\\1"
   ) %>%
   str_remove_all(",") %>%
@@ -253,7 +253,7 @@ latestAU$VIC <- tibble(
     str_remove_all(",") %>% 
     as.numeric(),
   recovered = vicRecov,
-  tested = vicTests
+  tested = 162077#vicTests
 )
 ```
 
