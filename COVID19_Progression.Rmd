@@ -259,31 +259,34 @@ latestAU$VIC <- tibble(
 
 ```{r updateWA}
 waTests <- waRecov <- NA_real_
-waUrl <- "https://ww2.health.wa.gov.au/Articles/A_E/Coronavirus/COVID19-statistics"
-waTable <- waUrl %>%
+waUrl <- glue(
+  "https://ww2.health.wa.gov.au/Media-releases/2020/COVID19-update-{day(dt)}-{(format(dt, '%B'))}-{year(dt)}"
+)
+waTxt <- waUrl %>%
   read_html() %>%
-  xml_find_all("//table") %>%
+  html_nodes("body") %>%
+  html_text() %>%
+  str_split("\n") %>%
   .[[1]] %>%
-  html_table() %>%
-  setNames(c("Cases", "Total")) %>%
-  mutate(
-    Total = str_remove_all(Total, ","),
-    Total = as.numeric(Total)
-  ) 
-waTests <- waTable %>%
-  dplyr::filter(str_detect(Cases, "(Test|ive)")) %>%
-  summarise(n = sum(Total)) %>%
-  .[["n"]]
-waRecov <- dplyr::filter(waTable, Cases == "Recovered")$Total
+  str_trim() %>%
+  .[. != ""]
+waTests <- waTxt %>%
+  str_subset("test(s|ed)") %>%
+  str_replace_all(".+ ([0-9,]+) COVID.+", "\\1") %>%
+  str_remove_all(",") %>%
+  as.numeric()
+waRecov <- waTxt %>%
+  str_subset("recovered") %>%
+  str_replace_all(".+ ([0-9]+) .+recovered.+", "\\1") %>%
+  as.numeric()
 latestAU$WA <- tibble(
   State = "Western Australia",
   date = dt,
-  confirmed = waTable %>%
-    dplyr::filter(str_detect(Cases, "positive")) %>%
-    .[["Total"]],
-  deaths = waTable %>%
-    dplyr::filter(str_detect(Cases, "Deaths")) %>%
-    .[["Total"]],
+  confirmed = waTxt %>% 
+    str_subset("total") %>% 
+    str_extract("[0-9]+") %>%
+    as.numeric(),
+  deaths = 9, # Needs to be done manually again
   recovered = waRecov,
   tested = waTests
 )
