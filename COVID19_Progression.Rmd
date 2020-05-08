@@ -223,7 +223,7 @@ vicTxt <- vicUrl %>%
   .[[1]] %>% 
   str_trim() %>% 
   .[. != ""] %>% 
-    str_subset("(tested|recovered|total|died)")
+    str_subset("(test|recovered|total|died)")
 vicTests <- vicTxt %>%
   str_subset("[0-9]+.*(people|samples).*test(ed|s|ing)") %>%
   .[[1]] %>%
@@ -236,7 +236,7 @@ vicTests <- vicTxt %>%
 vicRecov <- vicTxt %>%
   str_subset("recovered") %>%
   str_trim() %>%
-  str_replace_all("([0-9,]+)[^0-9]people have recovered..+", "\\1") %>%
+  str_replace_all(".* ([0-9,]+)[^0-9]people have recovered.*", "\\1") %>%
   str_remove(",") %>%
   as.numeric()
 latestAU$VIC <- tibble(
@@ -244,6 +244,7 @@ latestAU$VIC <- tibble(
   date = dt,
   confirmed = vicTxt %>%
     str_subset("coronavirus.+cases") %>% 
+    str_subset("Victoria") %>%
     str_replace_all(".+is ([0-9,]+).+", "\\1") %>% 
     str_remove_all(",") %>%
     as.numeric(),
