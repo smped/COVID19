@@ -284,7 +284,7 @@ latestAU$WA <- tibble(
   date = dt,
   confirmed = waTxt %>% 
     str_subset("total") %>% 
-    str_extract("[0-9]+") %>%
+    str_replace_all(".+total.+ ([0-9,]+).*", "\\1") %>%
     as.numeric(),
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
