@@ -191,6 +191,7 @@ qldTable <- qldUrl %>%
 qldRecov <- qldTable %>%
   dplyr::filter(Cases == "Recovered") %>%
   .[["Total"]] %>%
+  str_remove_all(",") %>%
   as.numeric()
 latestAU$QLD <- tibble(
   State = "Queensland",
@@ -260,9 +261,13 @@ latestAU$VIC <- tibble(
 
 ```{r updateWA}
 waTests <- waRecov <- NA_real_
-waUrl <- glue(
-  "https://ww2.health.wa.gov.au/Media-releases/2020/COVID19-update-{day(dt)}-{(format(dt, '%B'))}-{year(dt)}"
-)
+waMedia <- "https://ww2.health.wa.gov.au/News/Media-releases-listing-page" %>%
+  read_html() %>% 
+  html_nodes("body") %>% 
+  xml_find_all("//a[contains(@title, 'COVID-19 update')]") %>%
+  .[[1]] %>%
+  html_attr("href")
+waUrl <- glue("https://ww2.health.wa.gov.au{waMedia}")
 waTxt <- waUrl %>%
   read_html() %>%
   html_nodes("body") %>%
