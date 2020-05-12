@@ -671,7 +671,7 @@ wikiPops <- read_tsv("wikiPops.tsv")
 ```
 
 ```{r alwaysShow}
-alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland")
+alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland", "Russia", "Brazil")
 ```
 
 
@@ -1535,7 +1535,7 @@ a <- deaths %>%
   ggplot(aes(Country, rate, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = rate + 30, label = round(rate, 0)),
+    aes(y = rate + 50, label = round(rate, 0)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
@@ -1565,7 +1565,7 @@ b <- deaths %>%
   ggplot(aes(Country, deaths, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = deaths + 4500, label = comma(deaths, accuracy = 1)),
+    aes(y = deaths + 10000, label = comma(deaths, accuracy = 1)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
