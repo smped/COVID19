@@ -99,7 +99,8 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
-```{r altAU}
+```{r altAU, eval=FALSE}
+# API has stopped updating from 7th May
 altAU <- fromJSON("https://api.infotorch.org/api/covid19/statlist/?geos=NSW,VIC,QLD,WA,SA,TAS,ACT,NT&stat=confirmed") %>%
   unnest(data) %>%
   rename(
@@ -390,7 +391,7 @@ latestAU$SA <- tibble(
 
 ```{r updateACT}
 actRecov <- actTests <- NA_real_
-actUrl <- "https://www.health.act.gov.au/about-our-health-system/novel-coronavirus-covid-19"
+actUrl <- "https://www.covid19.act.gov.au/home"
 actTable <- actUrl %>%
   read_html() %>%
   html_nodes("body") %>%
