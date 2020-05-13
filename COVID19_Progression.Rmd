@@ -256,7 +256,7 @@ latestAU$VIC <- tibble(
     str_remove_all(",") %>% 
     as.numeric(),
   recovered = vicRecov,
-  tested = 162077#vicTests
+  tested = vicTests
 )
 ```
 
@@ -667,6 +667,11 @@ wikiPops <- "https://en.wikipedia.org/wiki/List_of_countries_by_population_(Unit
 write_tsv(wikiPops, "wikiPops.tsv")
 ```
 
+```{r}
+rarelyShow <- c("Slovakia", "Paraguay", "Azerbaijan", "Liberia", "Burkina Faso", "Belarus", "Panama", "Hungary", "Bulgaria", "Tunisia", "Moldova")
+```
+
+
 ```{r loadWikiPops}
 wikiPops <- read_tsv("wikiPops.tsv")
 ```
@@ -806,7 +811,7 @@ ausDays <- confirmed %>%
 minDays <- ausDays - 5
 # Use Singapore as that has the longest dataset besides Hubei
 nDays <- confirmed %>%
-  dplyr::filter(Country == "Singapore") %>% 
+  dplyr::filter(Country == "South Korea") %>% 
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
   ungroup() %>%
@@ -822,13 +827,16 @@ nDays <- confirmed %>%
 
 ```{r p}
 refRate <- c(2, 4, 8)
-minPop <- 10e6
+minPop <- 4e6
 p <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
   ungroup() %>%
   inner_join(
-    dplyr::filter(wikiPops, Population > minPop | Country %in% alwaysShow)
+    dplyr::filter(
+      wikiPops, Population > minPop | Country %in% alwaysShow
+      # !Country %in% rarelyShow
+    )
   ) %>%
   mutate(
     rate = 1e6*confirmed / Population
@@ -910,7 +918,8 @@ p <- confirmed %>%
       "confirmed cases/million"
     )
   ) +
-  ylab("Confirmed Cumulative Infection Rate (cases/million)")
+  ylab("Confirmed Cumulative Infection Rate (cases/million)") +
+  facet_wrap(~Continent, scales = "free_x")
 ```
 
 ```{r cp, echo=FALSE}
@@ -960,8 +969,7 @@ Whilst this relationship **appears to have broken down for Australia**, no break
 minPop <- 10e6
 minDays <- 15
 minRate <- 9
-plotIncVConf <- ggplotly(
-confirmed %>%
+plotIncVConf <- confirmed %>%
   group_by(Country, date) %>%
   summarise_at(vars(confirmed), sum) %>%
   dplyr::filter(confirmed > 0) %>%
@@ -1026,7 +1034,7 @@ confirmed %>%
     colour = "blue",
     size = 1/3
   ) +
-    # geom_point() +
+  # geom_point() +
   geom_line() +
   scale_y_log10(
     name = "Average Daily Increase (Cases / Million)",
@@ -1034,7 +1042,6 @@ confirmed %>%
   scale_x_log10(
     name = "Cumulative Confirmed Infection Rate (Cases / Million)"
   )
-)
 ```
 
 ```{r capIncVConf}
@@ -1074,7 +1081,7 @@ nDays <- confirmed %>%
   ) %>% 
   dplyr::filter(rate > startingPoint) %>% 
   nrow() %>%
-  subtract(1)
+  subtract(4)
 ```
 
 
@@ -1121,11 +1128,11 @@ pca <- confirmed %>%
 ```{r cp3, echo=FALSE}
 pcPercent <- summary(pca)$importance["Proportion of Variance",] %>%
   percent(accuracy = 0.1)
-k <- 4
+k <- 3
 cp3 <- glue(
   "*Dimensional reduction showing which countries infection rates are the most similar to each other __at the {nDays} day time point, after passing {startingPoint} confirmed cases/million__.
   This may or may not be indicative of future spread within the population.
-  The value {nDays} days was simply chosen as this marks how long since Australia passed this threshold.
+  The value {nDays} days was simply chosen as this marks how long since the US passed this threshold.
   Countries which have not progressed beyond {startingPoint} confirmed cases/million for {nDays} days or more are not shown.
   Countries with populations < {comma(minPop)} are also excluded.
   Clusters were generated using k-means, manually specifying k = {k} and are not definitive.
@@ -1860,7 +1867,8 @@ p2 <- df %>%
       "confirmed active cases/million"
     )
   ) +
-  ylab("Confirmed Active Infection Rate (cases/million)")
+  ylab("Confirmed Active Infection Rate (cases/million)") + 
+  facet_wrap(~Continent)
 ```
 
 ```{r cp2, echo=FALSE}
