@@ -99,7 +99,7 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
-```{r altAU, eval=FALSE}
+```{r altAU, eval=FALSE, echo=FALSE}
 # API has stopped updating from 7th May
 altAU <- fromJSON("https://api.infotorch.org/api/covid19/statlist/?geos=NSW,VIC,QLD,WA,SA,TAS,ACT,NT&stat=confirmed") %>%
   unnest(data) %>%
