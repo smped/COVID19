@@ -125,6 +125,36 @@ confirmed %<>%
   dplyr::select(-source)
 ```
 
+```{r guardData}
+guardData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")
+altAU <- guardData$sheets$updates %>% 
+  as_tibble() %>% 
+  mutate(
+    `Province/State` = auStates[State], 
+    Country = "Australia", 
+    Date = parse_date_time(Date, orders = "%d/%m/%Y") %>% ymd()
+  ) %>% 
+  dplyr::select(`Province/State`, Country, date = Date, confirmed = `Cumulative case count`) %>% 
+  mutate(confirmed = as.numeric(confirmed)) %>%
+  arrange(`Province/State`, date) %>%
+  tidyr::complete(`Province/State`, Country, date) %>%
+  group_by(`Province/State`) %>%
+  fill(confirmed)  %>%
+  dplyr::filter(!is.na(confirmed))  %>%
+  ungroup()
+# Add the data, with the Guardian API being preferentialy selected
+confirmed %<>%
+  mutate(source = "JHU") %>%
+  bind_rows(
+    mutate(altAU, source = "API")
+  ) %>%
+  arrange(
+    date, `Province/State`, source
+  ) %>%
+  distinct(`Province/State`, Country, date, .keep_all = TRUE) %>%
+  dplyr::select(-source)
+```
+
 
 ```{r initLatestAU}
 latestAU <- list()
@@ -677,7 +707,7 @@ alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "
 ```
 
 
-Data for confirmed cases, recoveries and fatalities was primarily sourced from Johns Hopkins University (https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
+Data for confirmed cases, recoveries and fatalities was primarily sourced from [Johns Hopkins University](https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
 JHU data is now updated every 24 hours at approximately 3:30(UTC), which is about 1:00PM in Adelaide.
 **As such no accurate, daily updates for international data can be produced until after that time.**
 Importantly, dates associated with confirmed cases from this data source, may differ from dates associated with confirmed cases from Australian sources.
@@ -685,7 +715,8 @@ For example, cases reported in the morning in Australia may be assigned to the p
 
 Live hourly updates for Australia are available from https://covid-19-au.github.io/ for those who would like an up to the minute breakdown of confirmed cases.
 Numbers used for generation of this page are updated periodically throughout the day using values provided by individual states at [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
-Additional Australian data was obtained from https://api.infotorch.org/api/covid19.
+Additional Australian data was obtained from [The Guardian](https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json).
+Whilst dates from the Guardian are likely to be reported using the UK as a reference, this is still closer to Australian time zones than USA-based data.
 
 Population sizes were obtained from [2019 UN Estimates](https://en.wikipedia.org/wiki/List_of_countries_by_population_(United_Nations)).
 Given the disparity of infection within China, China was broken into Hubei Province and the rest of China, with Hong Kong and Taiwan already being considered as separate countries in all datasets.
@@ -1401,23 +1432,6 @@ dailyVsTotalDeaths <- deaths %>%
     Region = fct_lump(Region, n = 15)
     ) %>%
   ggplot(aes(`Average Total Fatalities`, `Average Daily Fatalities`, colour = Country, label = Date, key = Population)) +
-  # geom_hline(
-  #   aes(yintercept = `Average Daily Fatalities`),
-  #   data = . %>%
-  #     dplyr::filter(Country == "Australia", Date == max(Date)),
-  #   linetype = 3,
-  #   colour = "blue",
-  #   size = 1/3
-  # ) +
-  # geom_vline(
-  #   aes(xintercept = `Average Total Fatalities`),
-  #   data = . %>%
-  #     dplyr::filter(Country == "Australia", Date == max(Date)),
-  #   linetype = 3,
-  #   colour = "blue",
-  #   size = 1/3
-  # ) +
-  # geom_point() +
   geom_line() +
   scale_x_log10(labels = comma) +
   scale_y_log10(labels = comma) +
@@ -1994,7 +2008,8 @@ confirmed %>%
     justify = "lrrrrrrrrr",
     caption = paste(
       "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.",
-      "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.*"
+      "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.", 
+      "Please note that some discrepancy with dates may occur due to automated data sources obtained different time zones, such as the USA, the UK and Australia.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
