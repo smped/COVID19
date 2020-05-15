@@ -257,7 +257,7 @@ vicTxt <- vicUrl %>%
   .[. != ""] %>% 
     str_subset("(test|recovered|total|died)")
 vicTests <- vicTxt %>%
-  str_subset("[0-9]+.*tests*") %>%
+  str_subset("[0-9]+.*tests") %>%
   .[[1]] %>%
   str_replace_all(
     ".+ ([0-9,]+) .*test(ed|s|ing).+",
@@ -464,6 +464,7 @@ tasTables <- tasUrl %>%
   html_nodes("body") %>%
   xml_find_all("//table") %>%
   html_table() %>%
+  .[1:2] %>%
   lapply(mutate, Number = str_remove_all(Number, "[^0-9]")) %>%
   lapply(mutate, Number  = as.numeric(Number))
 latestAU$TAS <- tibble(
