@@ -99,33 +99,8 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
-```{r altAU, eval=FALSE, echo=FALSE}
-# API has stopped updating from 7th May
-altAU <- fromJSON("https://api.infotorch.org/api/covid19/statlist/?geos=NSW,VIC,QLD,WA,SA,TAS,ACT,NT&stat=confirmed") %>%
-  unnest(data) %>%
-  rename(
-    date = x, confirmed = y, `Province/State` = geo_long
-  ) %>%
-  mutate(
-    date = ymd(date),
-    Country = "Australia",
-    `Province/State` = str_replace(`Province/State`, "ACT", auStates["ACT"])
-  ) %>%
-  dplyr::select(colnames(confirmed))
-# Add the data, with the API being preferentialy selected
-confirmed %<>%
-  mutate(source = "JHU") %>%
-  bind_rows(
-    mutate(altAU, source = "API")
-  ) %>%
-  arrange(
-    date, `Province/State`, source
-  ) %>%
-  distinct(`Province/State`, Country, date, .keep_all = TRUE) %>%
-  dplyr::select(-source)
-```
-
-```{r guardData}
+```{r guardData, eval=FALSE}
+# THis dataset currently switches SA & TAS counts on 14/15 May
 guardData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")
 altAU <- guardData$sheets$updates %>% 
   as_tibble() %>% 
