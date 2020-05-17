@@ -100,7 +100,6 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
 ```
 
 ```{r guardData}
-# THis dataset currently switches SA & TAS counts on 14/15 May
 guardData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")
 altAU <- guardData$sheets$updates %>% 
   as_tibble() %>% 
@@ -283,7 +282,7 @@ waTxt <- waUrl %>%
   str_trim() %>%
   .[. != ""]
 waTests <- waTxt %>%
-  str_subset("test(s|ed)") %>%
+  str_subset("test(s|ed).*performed") %>%
   str_replace_all(".+ ([0-9,]+) COVID.+", "\\1") %>%
   str_remove_all(",") %>%
   as.numeric()
