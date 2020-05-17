@@ -99,7 +99,7 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
-```{r guardData, eval=FALSE}
+```{r guardData}
 # THis dataset currently switches SA & TAS counts on 14/15 May
 guardData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")
 altAU <- guardData$sheets$updates %>% 
@@ -831,7 +831,7 @@ nDays <- confirmed %>%
 
 ```{r p}
 refRate <- c(2, 4, 8)
-minPop <- 4e6
+minPop <- 5e6
 p <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
@@ -863,7 +863,7 @@ p <- confirmed %>%
   arrange(date) %>%
   mutate(
     Country = fct_inorder(Country),
-    Region = fct_lump(Region, n = 15)
+    Region = fct_lump(Region, n = 11)
     ) %>%
   rename_all(str_to_title) %>%
   ggplot(
@@ -896,7 +896,7 @@ p <- confirmed %>%
     )
   ) +
   ylab("Confirmed Cumulative Infection Rate (cases/million)") +
-  facet_wrap(~Region, ncol = 4)
+  facet_wrap(~Region, ncol = 3)
 ```
 
 ```{r cp, echo=FALSE}
@@ -916,7 +916,7 @@ cp <- glue(
 )
 ```
 
-```{r plotly, fig.width=10, fig.height=9, fig.cap = cp}
+```{r plotly, fig.width=10, fig.height=10, fig.cap = cp}
 ggplotly(
   p, 
   tooltip = c(
@@ -986,7 +986,7 @@ plotIncVConf <- confirmed %>%
     rate = round(rate, 2),
     d = round(d, 3),
     Population = comma(round(Population, -3)),
-    Region = fct_lump(Region, n = 15)
+    Region = fct_lump(Region, n = 11)
   ) %>%
   rename(
     Rate = rate,
@@ -1002,7 +1002,8 @@ plotIncVConf <- confirmed %>%
     label = label_comma(accuracy = 0.01)) +
   scale_x_log10(
     name = "Cumulative Confirmed Infection Rate (Cases / Million)"
-  )
+  ) +
+  facet_wrap(~Region, ncol = 3)
 ```
 
 ```{r capIncVConf}
@@ -1019,8 +1020,8 @@ capIncVConf <- glue(
 ```
 
 
-```{r showIncVConf, fig.cap=capIncVConf, fig.height=9, fig.width=10}
-ggplotly(plotIncVConf + facet_wrap(~Region, ncol = 4))
+```{r showIncVConf, fig.cap=capIncVConf, fig.height=10, fig.width=10}
+ggplotly(plotIncVConf )
 ```
 
 
@@ -1265,7 +1266,7 @@ deathPlot <- confirmed %>%
   ) %>%
   mutate(
     Country = fct_inorder(Country),
-    Region = fct_lump(Region, n = 15)
+    Region = fct_lump(Region, n = 11)
   ) %>%
   ggplot(
     aes(
@@ -1278,7 +1279,7 @@ deathPlot <- confirmed %>%
     x = glue("Days Since Passing {minDeaths} Deaths"),
     y = "Cumulative Fatalities"
   ) + 
-  facet_wrap(~Region, ncol = 4)
+  facet_wrap(~Region, ncol = 3)
 ```
 
 ```{r cpDeath, echo=FALSE}
@@ -1301,7 +1302,7 @@ ggplotly(deathPlot)
 ```{r scaledDeathPlot}
 minRate <- 1
 minDays <- 24
-minPop <- 2e6
+minPop <- 4e6
 scaledDeathPlot <- deaths %>% 
   group_by(Country, date) %>% 
   summarise_at(vars(deaths), sum) %>%
@@ -1324,7 +1325,7 @@ scaledDeathPlot <- deaths %>%
   ungroup() %>%
   mutate(
     Country = fct_inorder(Country),
-    Region = fct_lump(Region, n = 15),
+    Region = fct_lump(Region, n = 11),
     `One Death Every` = round(Population / deaths, 0),
     deaths = comma(deaths),
     `Population (millions)` = round(Population / 1e6, 1)
@@ -1344,7 +1345,7 @@ scaledDeathPlot <- deaths %>%
     x = glue("Days Since Passing {minRate} Deaths / Million"),
     y = "Deaths / Million"
   ) +
-  facet_wrap(~Region, ncol = 4)
+  facet_wrap(~Region, ncol = 3)
 ```
 
 
@@ -1357,7 +1358,7 @@ cp <- glue(
 ```
 
 
-```{r showScaledDeaths, fig.cap=cp, fig.width=10, fig.height=9}
+```{r showScaledDeaths, fig.cap=cp, fig.width=10, fig.height=10}
 scaledDeathPlot %>%
   ggplotly(
     tooltip = c("Country", "Date", "Rate", "Deaths", "One Death Every", "Population (millions)")
@@ -1406,7 +1407,7 @@ dailyVsTotalDeaths <- deaths %>%
   mutate(
     Population = comma(round(Population, -3)),
     Country = fct_inorder(Country),
-    Region = fct_lump(Region, n = 15)
+    Region = fct_lump(Region, n = 11)
     ) %>%
   ggplot(aes(`Average Total Fatalities`, `Average Daily Fatalities`, colour = Country, label = Date, key = Population)) +
   geom_line() +
@@ -1416,7 +1417,8 @@ dailyVsTotalDeaths <- deaths %>%
     x = "Total Confirmed Fatalities",
     y = 'Daily Fatalities'
   ) +
-  coord_cartesian(ylim = c(0.05, 2e3))
+  coord_cartesian(ylim = c(0.05, 2e3)) + 
+  facet_wrap(~Region, ncol = 3)
 ```
 
 
@@ -1434,7 +1436,7 @@ capDailyVsTotal <- glue(
 ```
 
 ```{r showDailyVsTotalDeaths, fig.width=10, fig.height=9, fig.cap = capDailyVsTotal}
-ggplotly(dailyVsTotalDeaths + facet_wrap(~Region))
+ggplotly(dailyVsTotalDeaths )
 ```
 
 
@@ -1723,7 +1725,7 @@ df <- confirmed %>%
   arrange(date) %>%
   mutate(
     Country = fct_inorder(Country),
-    Region = fct_lump(Region, n = 15)
+    Region = fct_lump(Region, n = 11)
   ) %>%
   rename_all(str_to_title)
 nDays <- max(df$Days)
@@ -1793,7 +1795,7 @@ p2 <- df %>%
     )
   ) +
   ylab("Confirmed Active Infection Rate (cases/million)") + 
-  facet_wrap(~Region, ncol = 4)
+  facet_wrap(~Region, ncol = 3)
 ```
 
 ```{r cp2, echo=FALSE}
@@ -1812,7 +1814,7 @@ cp2 <- glue(
 )
 ```
 
-```{r plotly2, fig.width=10, fig.height=9, fig.cap = cp2}
+```{r plotly2, fig.width=10, fig.height=10, fig.cap = cp2}
 ggplotly(p2) 
 ```
 
