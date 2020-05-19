@@ -220,7 +220,16 @@ latestAU$QLD <- tibble(
 
 ```{r updateVic}
 vicRecov <- vicTests <- NA_real_
-vicUrl <- "https://www.dhhs.vic.gov.au/coronavirus-covid-19-cho-daily-update"
+vicUrl <- c(
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt)}-{month.abb[month(dt)]}-{year(dt)}",
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt-1)}-{month.abb[month(dt-1)]}-{year(dt-1)}"
+  ) %>% 
+  vapply(glue, character(1)) %>%
+  str_to_lower() %>%
+  vapply(url.exists, logical(1)) %>%
+  which() %>%
+  names() %>%
+  .[[1]] 
 vicTxt <- vicUrl %>%
   read_html() %>%
   html_nodes("body") %>% 
@@ -228,8 +237,8 @@ vicTxt <- vicUrl %>%
   str_split("\n") %>% 
   .[[1]] %>% 
   str_trim() %>% 
-  .[. != ""] %>% 
-    str_subset("(test|recovered|total|died)")
+  .[. != ""] %>%
+  str_subset("(test|recovered|total|died)")
 vicTests <- vicTxt %>%
   str_subset(".*[0-9]+.*tests") %>%
   .[[1]] %>%
@@ -240,12 +249,11 @@ vicTests <- vicTxt %>%
   str_remove_all(",") %>%
   as.numeric()
 vicRecov <- vicTxt %>%
-  str_subset("recovered") %>%
+  str_subset("[0-9]+.+recovered") %>%
   str_trim() %>%
   str_replace_all(".* ([0-9,]+)[^0-9]people have recovered.*", "\\1") %>%
   str_remove(",") %>%
-  as.numeric() %>%
-  max(1439) # Recovered data was not provided on 18/5
+  as.numeric() 
 latestAU$VIC <- tibble(
   State = "Victoria",
   date = dt,
