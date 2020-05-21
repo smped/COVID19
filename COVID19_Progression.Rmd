@@ -1453,8 +1453,8 @@ ggplotly(dailyVsTotalDeaths )
 ### Comparison of Total Fatalities
 
 ```{r setScaledFatalPrams}
-minPop <- 4e6
-minDeaths <- 500
+minPop <- 5e6
+minRate <- 40
 nCnt <- 25
 a <- deaths %>%
   dplyr::filter(deaths > 0) %>%
@@ -1465,7 +1465,7 @@ a <- deaths %>%
   dplyr::filter(
     Population > minPop,
     rate == max(rate),
-    deaths > minDeaths
+    rate > minRate
   ) %>%
   arrange(rate, desc(date)) %>%
   ungroup() %>%
@@ -1495,7 +1495,7 @@ b <- deaths %>%
   dplyr::filter(
     Population > minPop,
     rate == max(rate),
-    deaths > minDeaths
+    rate > minRate
   ) %>%
   arrange(rate, desc(date)) %>%
   ungroup() %>%
@@ -1517,12 +1517,13 @@ b <- deaths %>%
   facet_grid(Continent~., scales= "free_y", space = "free_y") +
   theme(legend.position = "none")
 cp <- glue(
-  "*Comparison of the {nCnt} most impacted countries by fatalities per million showing A) the number of fatalities scaled by population size and B) Total Fatalities.
+  "*Comparison of the {nrow(a$data)} most impacted countries by fatalities per million showing A) the number of fatalities scaled by population size and B) Total Fatalities.
   For fatality rates presented scaled by population size, it is important to realise that a value of 500 indicates that one in every 2000 people from the total population has died (ignoring demographics).
   Similarly, a value of 100 indicates that 1 in every 10,000 from the total population has died in that country.
   Whilst the US currently has the most fatalities, 1 in every {comma(round(1e6 / dplyr::filter(a$data, Country == 'US')$rate, 0))} from the US population have currently been confirmed to have died from COVID19.
   For {as.character(a$data$Country[which.max(a$data$rate)])}, 1 in every {comma(round(1e6 / max(a$data$rate), 0))} people have died directly from COVID 19.
-  Only countries with populations > {comma(minPop)}, and with more than {minDeaths} fatalities are shown.
+  Importantly, whilst the fatality count in countries like the US and the UK are far below the 'excess deaths' observed throughout these countries, this is not true for Belgium and this country is more likely to reflect an accurate assessment of the true fatalities due to COVID-19, whilst the values for the US and the UK are considerable under-estimates.
+  Only countries with populations > {comma(minPop)}, and with more than {minRate} fatalities/million are shown.
   Countries are also grouped by their continent as designated by the UN classifications*"
 )
 ```
