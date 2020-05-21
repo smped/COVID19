@@ -243,7 +243,7 @@ vicTests <- vicTxt %>%
   str_subset(".*[0-9]+.*tests") %>%
   .[[1]] %>%
   str_replace_all(
-    "[^0-9]*([0-9,]+) .*test(ed|s|ing).+",
+    "[^0-9]*([0-9,]+)[^0-9]*.*test(ed|s|ing).+",
     "\\1"
   ) %>%
   str_remove_all(",") %>%
@@ -251,7 +251,7 @@ vicTests <- vicTxt %>%
 vicRecov <- vicTxt %>%
   str_subset("[0-9]+.+recovered") %>%
   str_trim() %>%
-  str_replace_all(".* ([0-9,]+)[^0-9]people have recovered.*", "\\1") %>%
+  str_replace_all(".*[^0-9]([0-9,]+)[^0-9]*people have recovered.*", "\\1") %>%
   str_remove(",") %>%
   as.numeric() 
 latestAU$VIC <- tibble(
@@ -262,12 +262,14 @@ latestAU$VIC <- tibble(
     str_subset("Victoria") %>%
     str_replace_all(".+is[^0-9]*([0-9,]+).+", "\\1") %>% 
     str_remove_all(",") %>%
-    as.numeric(),
+    as.numeric() %>%
+    unique(),
   deaths = vicTxt %>% 
     str_subset("died") %>% 
     str_replace_all(".+[^0-9]([0-9,]+)[^0-9]*people have died.+", "\\1") %>%
     str_remove_all(",") %>% 
-    as.numeric(),
+    as.numeric() %>%
+    unique(),
   recovered = vicRecov,
   tested = vicTests
 )
@@ -499,10 +501,10 @@ ntRecov <- ntTxt %>%
 latestAU$NT <- tibble(
   State = "Northern Territory",
   date = dt,
-  confirmed = ntTxt %>%
-    str_subset("confirmed") %>% 
-    str_extract("[0-9]+") %>% 
-    as.numeric(),
+  confirmed = 30,# ntTxt %>%
+    # str_subset("confirmed") %>% 
+    # str_extract("[0-9]+") %>% 
+    # as.numeric(),
   deaths = 0,
   recovered = ntRecov,
   tested = ntTests
