@@ -243,7 +243,7 @@ vicTests <- vicTxt %>%
   str_subset(".*[0-9]+.*tests") %>%
   .[[1]] %>%
   str_replace_all(
-    "[^0-9]*([0-9,]+)[^0-9]*.*test(ed|s|ing).+",
+    ".* ([0-9,]+)[^0-9]test(ed|s|ing).+",
     "\\1"
   ) %>%
   str_remove_all(",") %>%
