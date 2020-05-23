@@ -251,7 +251,7 @@ vicTests <- vicTxt %>%
 vicRecov <- vicTxt %>%
   str_subset("[0-9]+.+recovered") %>%
   str_trim() %>%
-  str_replace_all(".*[^0-9]([0-9,]+)[^0-9]*people have recovered.*", "\\1") %>%
+  str_replace_all(".*[^0-9,]([0-9,]+)[^0-9]*people have recovered.*", "\\1") %>%
   str_remove(",") %>%
   as.numeric() 
 latestAU$VIC <- tibble(
@@ -299,6 +299,7 @@ waTests <- waTxt %>%
   as.numeric()
 waRecov <- waTxt %>%
   str_subset("recovered") %>%
+  str_subset("[0-9]..") %>%
   str_replace_all(".+ ([0-9]+) .+recovered.+", "\\1") %>%
   as.numeric()
 latestAU$WA <- tibble(
