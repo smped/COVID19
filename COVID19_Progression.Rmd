@@ -90,6 +90,8 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
             `Province/State` == "Hong Kong" ~ "Hong Kong",
             grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
             Country == "Korea, South" ~ "South Korea",
+            Country == "Congo (Kinshasa)" ~ "DR Congo",
+            Country == "Congo (Brazzaville)" ~ "Congo",
             !grepl("China", Country) ~ Country
         )
     ) %>%
@@ -575,6 +577,8 @@ recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
       `Province/State` == "Hong Kong" ~ "Hong Kong",
       grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
       grepl("Korea, South", Country) ~ "South Korea",
+      Country == "Congo (Kinshasa)" ~ "DR Congo",
+      Country == "Congo (Brazzaville)" ~ "Congo",
       !grepl("China", Country) ~ Country
     )
   ) %>%
@@ -610,6 +614,8 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
       `Province/State` == "Hong Kong" ~ "Hong Kong",
       grepl("China", Country) & !`Province/State` %in% c("Hubei", "Hong Kong") ~ "China (Other)",
       Country == "Korea, South" ~ "South Korea",
+      Country == "Congo (Kinshasa)" ~ "DR Congo",
+      Country == "Congo (Brazzaville)" ~ "Congo",      
       !grepl("China", Country) ~ Country
     )
   ) %>%
@@ -1455,26 +1461,33 @@ ggplotly(dailyVsTotalDeaths )
 
 ```{r setScaledFatalPrams}
 minPop <- 5e6
-minRate <- 40
 nCnt <- 25
-a <- deaths %>%
+topDeaths <- deaths %>%
   dplyr::filter(deaths > 0) %>%
   group_by(Country, date) %>%
   summarise_at(vars(deaths), sum) %>%
-  left_join(wikiPops) %>%
-  mutate(rate = 1e6*deaths / Population) %>%
   dplyr::filter(
-    Population > minPop,
-    rate == max(rate),
-    rate > minRate
+    deaths == max(deaths),
+    date == max(date)
   ) %>%
-  arrange(rate, desc(date)) %>%
   ungroup() %>%
-  mutate(Country = fct_inorder(Country)) %>%
-  arrange(desc(rate)) %>%
-  distinct(Country, .keep_all = TRUE) %>%
-  droplevels() %>%
+  inner_join(wikiPops) %>%
+  # dplyr::filter(
+  #   Population > minPop | Country %in% alwaysShow
+  # ) %>%
+  mutate(
+    rate = 1e6*deaths / Population,
+    totalRank = nrow(.) - rank(deaths) + 1,
+    rateRank = nrow(.) - rank(rate) + 1,
+    aveRank = (totalRank + rateRank)/2
+    ) %>%
+  arrange(aveRank, desc(Population)) %>%
   dplyr::slice(1:nCnt) %>%
+  arrange(desc(rateRank)) %>%
+  mutate(Country = fct_inorder(Country)) %>%
+  arrange(rateRank) %>%
+  mutate(Continent = fct_inorder(as.character(Continent)))
+a <- topDeaths %>%
   ggplot(aes(Country, rate, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
@@ -1487,24 +1500,7 @@ a <- deaths %>%
   coord_flip() +
   facet_grid(Continent~., scales = "free_y", space = "free_y") +
   theme(legend.position = "none")
-b <- deaths %>%
-  dplyr::filter(deaths > 0) %>%
-  group_by(Country, date) %>%
-  summarise_at(vars(deaths), sum) %>%
-  left_join(wikiPops) %>%
-  mutate(rate = 1e6*deaths / Population) %>%
-  dplyr::filter(
-    Population > minPop,
-    rate == max(rate),
-    rate > minRate
-  ) %>%
-  arrange(rate, desc(date)) %>%
-  ungroup() %>%
-  mutate(Country = fct_inorder(Country)) %>%
-  arrange(desc(rate)) %>%
-  distinct(Country, .keep_all = TRUE) %>%
-  droplevels() %>%
-  dplyr::slice(1:nCnt) %>%
+b <- topDeaths %>%
   ggplot(aes(Country, deaths, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
@@ -1518,14 +1514,16 @@ b <- deaths %>%
   facet_grid(Continent~., scales= "free_y", space = "free_y") +
   theme(legend.position = "none")
 cp <- glue(
-  "*Comparison of the {nrow(a$data)} most impacted countries by fatalities per million showing A) the number of fatalities scaled by population size and B) Total Fatalities.
-  For fatality rates presented scaled by population size, it is important to realise that a value of 500 indicates that one in every 2000 people from the total population has died (ignoring demographics).
+  "*Comparison of the {nrow(a$data)} most impacted countries.
+  Countries were ranked by total fatalities and by fatalities / million, with the {nrow(a$data)} most highly ranked across both methods are shown.
+  Fatalities are shown using A) the number of fatalities scaled by population size (Fatalities / Million) and B) Total Fatalities.
+  Countries are also grouped by their continent as designated by the UN classifications, and within each continent each country is ordered by Fatalities / Million.
+  For fatality rates scaled by population size, it is important to realise that a value of 500 indicates that one in every 2000 people from the total population has died (ignoring demographics).
   Similarly, a value of 100 indicates that 1 in every 10,000 from the total population has died in that country.
   Whilst the US currently has the most fatalities, 1 in every {comma(round(1e6 / dplyr::filter(a$data, Country == 'US')$rate, 0))} from the US population have currently been confirmed to have died from COVID19.
-  For {as.character(a$data$Country[which.max(a$data$rate)])}, 1 in every {comma(round(1e6 / max(a$data$rate), 0))} people have died directly from COVID 19.
-  Importantly, whilst the fatality count in countries like the US and the UK are far below the 'excess deaths' observed throughout these countries, this is not true for Belgium and this country is more likely to reflect an accurate assessment of the true fatalities due to COVID-19, whilst the values for the US and the UK are considerable under-estimates.
-  Only countries with populations > {comma(minPop)}, and with more than {minRate} fatalities/million are shown.
-  Countries are also grouped by their continent as designated by the UN classifications*"
+  For {as.character(a$data$Country[which.max(a$data$rate)])}, 1 in every {comma(round(1e6 / max(a$data$rate), 0))} people are recorded as having died from COVID 19.
+  Importantly, whilst the fatality count in countries like the US and the UK are below the statistical value of 'excess deaths' observed throughout these countries, this is not true for Belgium and the fataility rate for Belgium is more likely to reflect an accurate assessment of the true fatalities due to COVID-19.
+  In contrast, the values for the US and the UK are likely to be under-estimates of the true fatalities.*"
 )
 ```
 
