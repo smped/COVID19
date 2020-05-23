@@ -728,7 +728,7 @@ In Australia, some states (e.g. NSW & QLD) have only begun releasing these figur
 
 ```{r setThresholds}
 startingPoint <- 4
-minPop <- 5e6
+minPop <- 2e6
 ```
 
 
