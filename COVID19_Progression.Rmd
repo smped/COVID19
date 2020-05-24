@@ -660,6 +660,8 @@ wikiPops <- "https://en.wikipedia.org/wiki/List_of_countries_by_population_(Unit
   mutate(
     Population = str_remove_all(Population, ",") %>% as.integer, 
     Country = str_remove_all(Country, "\\[.\\]"),
+    Country = stringi::stri_trans_general(Country, "latin-ascii") %>% 
+      str_replace_all(" +", " "),
     Country = case_when(
       Country == "China" ~ "China (Other)",
       Country == "Taiwan" ~ "Taiwan*",
