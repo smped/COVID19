@@ -282,7 +282,7 @@ waTests <- waRecov <- NA_real_
 waMedia <- "https://ww2.health.wa.gov.au/News/Media-releases-listing-page" %>%
   read_html() %>% 
   html_nodes("body") %>% 
-  xml_find_all("//a[contains(@title, 'COVID-19 update')]") %>%
+  xml_find_all("//a[contains(@title, '19 update')]") %>%
   .[[1]] %>%
   html_attr("href")
 waUrl <- glue("https://ww2.health.wa.gov.au{waMedia}")
@@ -308,7 +308,7 @@ latestAU$WA <- tibble(
   State = "Western Australia",
   date = dt,
   confirmed = waTxt %>% 
-    str_subset("total") %>% 
+    str_subset("cases.+total") %>% 
     str_replace_all(".+total.+ ([0-9,]+).*", "\\1") %>%
     as.numeric(),
   deaths = 9, # Needs to be done manually again
