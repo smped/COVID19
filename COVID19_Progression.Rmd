@@ -138,41 +138,43 @@ latestAU <- list()
 
 ```{r updateNSW}
 nswRecov <- nswTests <- NA_real_
-nswUrl <- "https://www.health.nsw.gov.au/Infectious/covid-19/Pages/stats-nsw.aspx"
-nswTables <- nswUrl %>%
-  read_html() %>%
-  xml_find_all("//table") %>%
+nswUrl <- "https://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page=4ac47e14-04a9-4016-b501-65a23280e841&wp=baabf81e-a904-44f1-8d59-5f6d56519965&pageurl=/news/Pages/rss-nsw-health.aspx" %>%
+  read_xml() %>% 
+  xml_find_all("//item") %>% 
+  .[[1]] %>%
+  as.character() %>% 
+  str_split("\n") %>% 
+  .[[1]] %>% 
+  str_subset("https") %>% 
+  str_extract("https[^<]+")
+nswTable <- nswUrl %>% 
+  read_html() %>% 
+  html_nodes("body") %>% 
+  xml_find_all("//table") %>% 
+  .[[1]] %>% 
   html_table() %>%
-  .[[1]]
-nswTests <- nswTables %>%
-  dplyr::filter(
-    str_detect(Cases, "Total people tested"),
-    !str_detect(Cases, "excluded")
+  set_colnames(
+     str_replace_all(colnames(.), "\\u200b", "")
   ) %>%
-  .[["Count"]] %>%
-  str_remove_all(",") %>%
-  as.numeric()
-nswRecov <- nswTables %>%
-  dplyr::filter(str_detect(Cases, "Recovered")) %>%
-  .[["Count"]] %>%
-  str_remove_all(",") %>%
-  str_extract("[0-9]+") %>%
-  as.numeric()
+  mutate_all(str_replace_all, pattern = "\\u200b", replacement = "") %>%
+  mutate(Count = str_remove_all(Count, ",") %>% as.numeric)
+nswTests <- nswTable %>%
+  dplyr::filter(
+    str_detect(Cases, "Total tests carried out")
+  ) %>%
+  .[["Count"]]
+nswRecov <- nswTable %>%
+  dplyr::filter(str_detect(Cases, "recovered")) %>%
+  .[["Count"]] 
 latestAU$NSW <- tibble(
   State = "New South Wales",
   date = dt,
-  confirmed = nswTables %>% 
-    dplyr::filter(str_detect(Cases, "Total confirmed")) %>%
-    .[["Count"]] %>% 
-    str_remove_all(",") %>%
-    str_extract("[0-9]+") %>% 
-    as.numeric(),
-  deaths = nswTables %>% 
-    dplyr::filter(str_detect(Cases, "(Total deaths|Lives lost)")) %>%
-    .[["Count"]] %>% 
-    str_remove_all(",") %>%
-    str_extract("[0-9]+") %>% 
-    as.numeric(),
+  confirmed = nswTable %>% 
+    dplyr::filter(str_detect(Cases, "Confirmed cases")) %>%
+    .[["Count"]],
+  deaths = nswTable %>% 
+    dplyr::filter(str_detect(Cases, "Deaths")) %>%
+    .[["Count"]],
   recovered = nswRecov,
   tested = nswTests
 )
@@ -308,9 +310,10 @@ latestAU$WA <- tibble(
   State = "Western Australia",
   date = dt,
   confirmed = waTxt %>% 
-    str_subset("cases.+total") %>% 
+    str_subset("(cases|total).+(total|cases)") %>% 
     str_replace_all(".+total.+ ([0-9,]+).*", "\\1") %>%
-    as.numeric(),
+    as.numeric() %>%
+    .[!is.na(.)],
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
   tested = waTests
@@ -2480,6 +2483,8 @@ offset <- 6
 An alternative viewpoint to the growth factor is to simply assess the number of new cases arising from the number of active cases.
 As there is a delay in symptom onset, the number of new cases on a given day is a function of the number of active cases several days in the past, and using an offset value easily allows this to communicated in an informative way.
 Any sustained number below 1 indicates a trajectory which leads to control of the outbreak, whilst values > 1 indicate exponential growth.
+This visualisation **fails to account for imported cases** and assumes that all cases were transmitted within each state.
+Recent patterns in both WA and SA have shown many cases are still being imported from overseas.
 
 ```{r plotScaledTrans, fig.height=8, fig.width=10, fig.cap=glue("*Numbers of new cases arising from existing active cases. The value for active cases was taken using an offset of {offset} days to represent the median incubation period and the approximate transmission date is shown on the x-axis. The introduction of social distancing is indicated in blue at the date these effects will have become visible in the data (i.e. {offset} days after introduction). The date that the effects of lockdown should have begun appearing is shown in red. Importantly, recovered cases were poorly reported in NSW and QLD until recently, and as such, __active cases from early March to early April are a significant overestimate and the ratio of new cases scaled by active cases makes the initial outbreak appear far more moderate than the reality was.__ Even taking this into account for the actual values, it is clear from the peaks above that social distancing, whilst having a positive impact, was insufficient to fully contain the outbreak.*")}
 confirmed %>%
@@ -2498,7 +2503,6 @@ confirmed %>%
         `Province/State` = "All States"
       )
   ) %>%
-  dplyr::filter(active > 0) %>%
   group_by(`Province/State`) %>%
   mutate(
     new = c(0, diff(confirmed)),
