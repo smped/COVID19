@@ -2061,7 +2061,7 @@ ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities fo
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
-ausStatsPlot
+ausStatsPlot 
 ```
 
 
@@ -2127,7 +2127,7 @@ ggplotly(
 
 
 ```{r p5}
-minRate <- 5
+minRate <- 10
 p5 <- confirmed %>%
   dplyr::filter(
     Country == "Australia"
@@ -2156,14 +2156,14 @@ p5 <- confirmed %>%
       )
   ) +
   geom_point() +
-  geom_smooth(
-    data = . %>%
-      dplyr::filter(date >= dt - 14),
-    method = "lm",
-    se = FALSE,
-    show.legend = FALSE,
-    size = 1/2
-  ) +
+  # geom_smooth(
+  #   data = . %>%
+  #     dplyr::filter(date >= dt - 14),
+  #   method = "lm",
+  #   se = FALSE,
+  #   show.legend = FALSE,
+  #   size = 1/2
+  # ) +
   geom_smooth(
     method = "loess",
     se = FALSE,
@@ -2190,8 +2190,6 @@ p5$x$data[regIndex] <- lapply(
 ```{r cp5, echo=FALSE}
 cp5 <- glue(
 "*Infection rates for each state with data beginning for each state once {minRate} confirmed cases /million was exceeded.
-Regression lines for the last 2 weeks are shown for each state as solid lines, with loess curves through the complete set of daily points shown as dashed lines.
-The y-axis is on a logarithmic scale indicating exponential growth is occurring.
 States are shown in order of the initial date they passed {minRate} cases/million.
 Most states show a strong upward curve during the week following 19^th^ March, clearly showing the impact of the Ruby Princess, however the consistent deviation below regression lines for all states is strongly suggestive of a slowing in the recent infection rate.
 The hypothetical growth in the infection rate without that event occurring is not calculated here, however it is clear that the spread of COVID-19 has not continued at the same pace after that event initially occurred.*
@@ -2203,125 +2201,6 @@ The hypothetical growth in the infection rate without that event occurring is no
 ```{r plotP5, fig.cap=cp5, fig.width=10, fig.height=7}
 p5
 ```
-
-
-```{r lm}
-lm <- confirmed %>%
-  dplyr::filter(
-    Country == "Australia"
-  ) %>%
-  dplyr::rename(State = `Province/State`) %>%
-  left_join(ausPops) %>%
-  mutate(
-    Rate = round(1e6*confirmed / Population, 2),
-    Date = format.Date(date, "%d-%B")
-  ) %>%
-  dplyr::filter(
-    !is.na(Population),
-    Rate > minRate,
-    date <= dt,
-    date >= dt - 13
-  ) %>%
-  arrange(desc(confirmed)) %>%
-  mutate(
-    State = fct_inorder(State)
-  ) %>%
-  dplyr::rename(
-    Confirmed = confirmed
-  ) %>%
-  arrange(State, Date) %>%
-  # distinct(State, Confirmed, .keep_all = TRUE) %>%
-  with(
-    lm(log10(Rate) ~ (State + date)^2)
-  ) 
-```
-
-
-In order to test whether the infection rates are different between states, a linear regression model was fit.
-$\log_{10}$(Cumulative Confirmed Infection Rate) was assigned as the response variable with predictor variables being the State and Date.
-Each State was assigned its own intercept and slope by use of an interaction term (i.e. State:date).
-Given the initially larger case numbers in NSW, this state was set as the baseline, with each other slope (i.e. interaction term) being presented as the difference in slope between each state and NSW. 
-In this way comparisons against NSW were performed, but no comparisons between other states were performed.
-**Currently infection rates have completely stabilised.**
-
-Differences in the State-level intercepts are not particularly relevant and these are not shown.
-Differences between State-level slopes and NSW however, are of great interest, and as such, only the slopes fr each state are shown.
-For NSW this captures the actual slope of the daily change in infection rate, whilst for all other States, this represents the difference between the daily change in infection rate for that State in comparison to NSW.
-Only differences in slope with an Bonferroni-adjusted p-value < 0.05 are of particular interest.
-For those States which appear to be of interest, a negative value indicates an infection rate increasing more slowly than NSW, whilst a positive value indicates the opposite.
-If no difference is noted between any state and NSW, it can be considered that these states are all experiencing growth at a similar rate.
-
-
-
-```{r lmSummary}
-st <- shapiro.test(resid(lm))$p.value
-bp <- olsrr::ols_test_breusch_pagan(lm)$p
-lm %>%
-  tidy() %>%
-  mutate(
-    term = str_remove_all(term, "State")
-  ) %>%
-  rename(
-    Term = term,
-    Estimate = estimate,
-    SE = std.error,
-    `T` = statistic,
-    p = p.value
-  ) %>%
-  dplyr::filter(
-    str_detect(Term, "date")
-  ) %>%
-  mutate(
-    Term = str_remove(Term, ":date"),
-    Term = str_replace_all(Term, "date", "NSW Daily Increase"),
-    adjP = p.adjust(p, method = "bonf"),
-    Estimate = sprintf("%.4f", Estimate),
-    SE = sprintf("%.3f", SE),
-    `T` = sprintf("%.2f", `T`),
-    p = case_when(
-      p < 1e-4 ~ sprintf("%.2e", p),
-      p >= 1e-4 ~ sprintf("%.4f", p)
-    ),
-    adjP = case_when(
-      adjP < 1e-4 ~ sprintf("%.2e", adjP),
-      adjP >= 1e-4 ~ sprintf("%.4f", adjP)
-    )
-  ) %>%
-  rename(
-    `p~bonf~` = adjP
-  ) %>%
-  pander(
-    justify = "lrrrrr",
-    emphasize.strong.rows = which(
-      as.numeric(.$`p~bonf~`) < 0.1 & .$Term != "date"
-    ),
-    caption = paste(
-      "*Results of linear regression analysis for the last 14 days only,",
-      "comparing the slopes of lines which track __daily",
-      "change in cumulative confirmed infection rates__,",
-      "scaled for population size in each state.",
-      "Intercept terms are not shown.",
-      "The daily slope of the NSW regression line is given as the first value, with any differences between this line and other states shown as the subsequent rows.",
-      "All slopes and differences in slopes are given on the log~10~ scale.",
-      "Any highlighted state indicates an infection rate which is increasing at a different daily rate to NSW.",
-      "Positive values in the Estimate column indicate a greater rate the NSW, whilst a negative value in the Estimate column indicates a slower growth rate than NSW.",
-      "The fitted model was also checked using the Shapiro-Wilk Test for normality",
-      paste0(
-        "(p = ",
-        sprintf( "%.4f", st),
-        "). ",
-        ifelse(st < 0.05, "The current results indicate potential violations of the assumption of normality and results in this table __should be taken with caution__.", "No issues with the assumption of normality were noted.")
-      ),
-      paste0(
-        "Heteroscedasticity was tested using the Breusch-Pagan test (p = ",
-        sprintf( "%.4f", bp),
-        "). ",
-        ifelse(bp < 0.05, "Given that unequal variances were detected, results and predictions from this model __should be taken with caution__* The source of this unequal variance is currently attributable to the outbreak in Tasmania.", "No issues with the assumption of constant variance were noted.*")
-      )
-    )
-  )
-```
-
 
 
 ## Assessment of Testing Within Each State
