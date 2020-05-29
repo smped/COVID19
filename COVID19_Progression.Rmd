@@ -854,7 +854,7 @@ nDays <- confirmed %>%
 
 ```{r p}
 refRate <- c(2, 4, 8)
-minPop <- 5e6
+minPop <- 4e6
 p <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
@@ -889,17 +889,21 @@ p <- confirmed %>%
     Region = fct_lump(Region, n = 11)
     ) %>%
   rename_all(str_to_title) %>%
+  mutate(ymax = max(Rate)) %>%
   ggplot(
     aes(Days, Rate, colour = Country, Date = Date, Confirmed = Confirmed)
   ) +
   geom_segment(
     aes(x, y, xend = xmax, yend = ymax),
-    data = tibble(
-      x = 0,
-      y = startingPoint,
-      xmax = ceiling(nDays / c(4, 2, 1)),
-      ymax = startingPoint*2^(xmax / refRate)
-    ),
+    data = . %>%
+      dplyr::slice(seq_along(refRate)) %>%
+      dplyr::select(ymax) %>%
+      mutate(
+        ymax = ymax*1.2,
+        x = 0,
+        y = startingPoint,
+        xmax =  refRate*log2(ymax / startingPoint)
+      ),
     inherit.aes = FALSE,
     colour = "grey80",
     linetype = 2
@@ -909,7 +913,8 @@ p <- confirmed %>%
     expand = expansion(mult = c(0, 0.05)),
   ) +
   scale_y_log10(
-    expand = expansion(mult = c(0, 0.05))
+    expand = expansion(mult = c(0, 0.05)),
+    label = comma
   ) +
   xlab(
     paste(
@@ -1022,11 +1027,11 @@ plotIncVConf <- confirmed %>%
   geom_line() +
   scale_y_log10(
     name = "Average Daily Increase (Cases / Million)",
-    label = label_comma(accuracy = 0.01)) +
+    label = label_comma(accuracy = 0.1)) +
   scale_x_log10(
     name = "Cumulative Confirmed Infection Rate (Cases / Million)"
   ) +
-  facet_wrap(~Region, ncol = 3)
+  facet_wrap(~Region, ncol = 3) 
 ```
 
 ```{r capIncVConf}
@@ -1044,7 +1049,10 @@ capIncVConf <- glue(
 
 
 ```{r showIncVConf, fig.cap=capIncVConf, fig.height=10, fig.width=10}
-ggplotly(plotIncVConf )
+ggplotly(plotIncVConf +
+  coord_cartesian(
+    ylim = c(0.1, max(plotIncVConf$data$`Average Daily Increase`)))
+)
 ```
 
 
@@ -1435,12 +1443,11 @@ dailyVsTotalDeaths <- deaths %>%
   ggplot(aes(`Average Total Fatalities`, `Average Daily Fatalities`, colour = Country, label = Date, key = Population)) +
   geom_line() +
   scale_x_log10(labels = comma) +
-  scale_y_log10(labels = comma) +
+  scale_y_log10(labels = label_comma(accuracy = 0.1)) +
   labs(
     x = "Total Confirmed Fatalities",
     y = 'Daily Fatalities'
   ) +
-  coord_cartesian(ylim = c(0.05, 2e3)) + 
   facet_wrap(~Region, ncol = 3)
 ```
 
@@ -1459,7 +1466,12 @@ capDailyVsTotal <- glue(
 ```
 
 ```{r showDailyVsTotalDeaths, fig.width=10, fig.height=9, fig.cap = capDailyVsTotal}
-ggplotly(dailyVsTotalDeaths )
+ggplotly(
+  dailyVsTotalDeaths +
+    coord_cartesian(
+      ylim = c(0.1, max(dailyVsTotalDeaths$data$`Average Daily Fatalities`))
+    )
+)
 ```
 
 
@@ -1702,7 +1714,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 
 ```{r p2}
 minDays <- 25
-minPop <- 5e6
+minPop <- 4e6
 df <- confirmed %>%
   dplyr::filter(
     confirmed > 0,
@@ -1801,7 +1813,10 @@ cp2 <- glue(
 ```
 
 ```{r plotly2, fig.width=10, fig.height=10, fig.cap = cp2}
-ggplotly(p2) 
+ggplotly(
+  p2 +
+    coord_cartesian(ylim = range(p2$data$Rate))
+) 
 ```
 
 Notable features of this perspective are:
