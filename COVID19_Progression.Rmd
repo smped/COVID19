@@ -742,6 +742,33 @@ For this section, most data is presented *relative to population size*.
 Growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
 This equates to about `r round(startingPoint*dplyr::filter(wikiPops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
 
+## Regional Cumulative Infection Rates
+
+Before exploring individual countries, a regional perspective may be helpful.
+Importantly, **only Oceania, Eastern Asia, Western Europe and Southern Europe** have successfully controlled the infection rate.
+Most other regions are still experiencing exponential growth.
+The time period for the most recent doubling of global cases was `r confirmed %>% group_by(date) %>%summarise(confirmed = sum(confirmed)) %>% dplyr::filter(date < dt,confirmed > max(confirmed / 2)) %>% nrow()` days.
+
+
+```{r, fig.height=8, fig.width=10, fig.cap = "*Current regional cumulative infection rates. Lines are shown from the point that local cases exceed 1 confirmed case / million*"}
+ggplotly(
+  confirmed %>% 
+    inner_join(wikiPops) %>%
+    group_by(Continent, Region, Country, Population, date) %>% 
+    summarise(confirmed = sum(confirmed)) %>% 
+    ungroup() %>%
+    group_by(Continent, Region, date) %>% 
+    summarise(rate = round(1e6*sum(confirmed)/sum(Population), 2)) %>% 
+    dplyr::filter(date < dt, date > "2020-02-18", rate > 1) %>%
+    ggplot(aes(date, rate, colour = Region)) +  
+    geom_line() +
+    scale_y_log10(label = comma_format(1)) + 
+    facet_wrap(~Continent, ncol = 2) +
+    labs(x = "Date", y = "Cumulative Infection Rate (Confirmed Cases / Million)")
+)
+```
+
+
 ## Cumulative Infection Rates {.tabset}
 
 ### Table of Most Impacted Countries
@@ -1540,7 +1567,7 @@ cp <- glue(
   Similarly, a value of 100 indicates that 1 in every 10,000 from the total population has died in that country.
   Whilst the US currently has the most fatalities, 1 in every {comma(round(1e6 / dplyr::filter(a$data, Country == 'US')$rate, 0))} from the US population have currently been confirmed to have died from COVID19.
   For {as.character(a$data$Country[which.max(a$data$rate)])}, 1 in every {comma(round(1e6 / max(a$data$rate), 0))} people are recorded as having died from COVID 19.
-  Importantly, whilst the fatality count in countries like the US and the UK are below the statistical value of 'excess deaths' observed throughout these countries, this is not true for Belgium and the fataility rate for Belgium is more likely to reflect an accurate assessment of the true fatalities due to COVID-19.
+  Importantly, whilst the fatality count in countries like the US and the UK are below the statistical value of 'excess deaths' observed throughout these countries, this is not true for Belgium and the fatality rate for Belgium is more likely to reflect an accurate assessment of the true fatalities due to COVID-19.
   In contrast, the values for the US and the UK are likely to be under-estimates of the true fatalities.*"
 )
 ```
