@@ -101,7 +101,7 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
-```{r guardData, eval = TRUE}
+```{r guardData, eval = FALSE}
 guardData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")
 altAU <- guardData$sheets$updates %>% 
   as_tibble() %>% 
