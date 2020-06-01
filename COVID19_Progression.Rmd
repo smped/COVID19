@@ -305,16 +305,18 @@ waTests <- waTxt %>%
 waRecov <- waTxt %>%
   str_subset("recovered") %>%
   str_subset("[0-9]..") %>%
-  str_replace_all(".+ ([0-9]+) .+recovered.+", "\\1") %>%
+  str_remove_all("COVID.*19") %>% 
+  str_replace_all("[^0-9]*([0-9]*)[^0-9]*", "\\1") %>%
   as.numeric()
 latestAU$WA <- tibble(
   State = "Western Australia",
   date = dt,
-  confirmed = waTxt %>% 
-    str_subset("(cases|total).+(total|cases)") %>% 
-    str_replace_all(".+total.+ ([0-9,]+).*", "\\1") %>%
-    as.numeric() %>%
-    .[!is.na(.)],
+  confirmed =waTxt %>% 
+    stringi::stri_trans_general("latin-ascii") %>% 
+    str_subset("State's") %>% 
+    str_remove_all("COVID.*19") %>% 
+    str_replace_all("[^0-9]*([0-9]+)[^0-9]*", "\\1") %>% 
+    as.numeric(),
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
   tested = waTests
@@ -748,6 +750,7 @@ Before exploring individual countries, a regional perspective may be helpful.
 Importantly, **only Oceania, Eastern Asia, Western Europe and Southern Europe** have successfully controlled the infection rate.
 Most other regions are still experiencing exponential growth.
 The time period for the most recent doubling of global cases was `r confirmed %>% group_by(date) %>%summarise(confirmed = sum(confirmed)) %>% dplyr::filter(date < dt,confirmed > max(confirmed / 2)) %>% nrow()` days.
+At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
 
 
 ```{r, fig.height=8, fig.width=10, fig.cap = "*Current regional cumulative infection rates. Lines are shown from the point that local cases exceed 1 confirmed case / million*"}
@@ -775,7 +778,6 @@ ggplotly(
 
 Confirmed cases in this table are effectively the cumulative, confirmed incidence rate.
 Recovered patients and those who have passed away are still included in these numbers.
-At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
 
 ```{r tabMostInfected}
 confirmed %>%
