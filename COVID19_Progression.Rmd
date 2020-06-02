@@ -157,7 +157,10 @@ nswTable <- nswUrl %>%
      str_replace_all(colnames(.), "\\u200b", "")
   ) %>%
   mutate_all(str_replace_all, pattern = "\\u200b", replacement = "") %>%
-  mutate(Count = str_remove_all(Count, "[\\*,]") %>% as.numeric)
+  mutate(
+    Count = str_remove_all(Count, "[\\*,]") %>% as.numeric,
+    Cases = str_replace_all(Cases, " +", " ")
+  )
 nswTests <- nswTable %>%
   dplyr::filter(
     str_detect(Cases, "Total tests carried out")
@@ -338,7 +341,6 @@ saTxt <- saUrl  %>%
   .[. != ""]
 ## The dashboard is unreliable so use SA Health press releases as an additional source
 ## These don't appear until late afternoon, so this is a pain in the arse quite frankly
-"https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}"
 altSaUrl <- c(
   "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}",
   "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}"
