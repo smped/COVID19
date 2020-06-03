@@ -101,7 +101,7 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
   dplyr::select(-Lat, -Long)
 ```
 
-```{r guardData, eval = FALSE}
+```{r guardData}
 guardData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")
 altAU <- guardData$sheets$updates %>% 
   as_tibble() %>% 
@@ -228,8 +228,8 @@ latestAU$QLD <- tibble(
 ```{r updateVic}
 vicRecov <- vicTests <- NA_real_
 vicUrl <- c(
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt)}-{format.Date(dt, '%B')}-{year(dt)}",
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt-1)}-{format.Date(dt - 1, '%B')}-{year(dt-1)}"
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt, '%d')}-{format.Date(dt, '%B')}-{year(dt)}",
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt - 1, '%d')}-{format.Date(dt - 1, '%B')}-{year(dt-1)}"
   ) %>% 
   vapply(glue, character(1)) %>%
   str_to_lower() %>%
