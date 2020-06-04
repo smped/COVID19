@@ -209,7 +209,7 @@ latestAU$QLD <- tibble(
   State = "Queensland",
   date = dt,
   confirmed = qldTable %>% 
-    dplyr::filter(str_detect(Cases, "Number of confirmed")) %>%
+    dplyr::filter(str_detect(Cases, "Number of (cases|confirmed)")) %>%
     .[["Total"]] %>% 
     str_remove_all(",") %>%
     str_extract("[0-9]+") %>% 
