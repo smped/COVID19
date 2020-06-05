@@ -342,7 +342,7 @@ saTxt <- saUrl  %>%
 ## The dashboard is unreliable so use SA Health press releases as an additional source
 ## These don't appear until late afternoon, so this is a pain in the arse quite frankly
 altSaUrl <- c(
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}",
+  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}+{year(dt)}",
   "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}"
   ) %>% 
   vapply(glue, character(1)) %>% 
@@ -364,7 +364,7 @@ altSaTxt <- altSaUrl[validSa] %>%
   .[. != ""]
 saTests <- c(
   saTxt %>%
-    str_replace_all(".+conducted.* ([0-9, ]+) COVID-19 laboratory tests.+", "\\1") %>%
+    str_replace_all(".+(conducted|undertaken).*[^0-9,]([0-9, ]+)[^0-9,]+tests.+", "\\2") %>%
     str_remove_all("[, ]") %>%
     as.numeric(),
   altSaTxt %>% 
