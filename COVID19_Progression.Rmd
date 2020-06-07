@@ -247,15 +247,16 @@ vicTxt <- vicUrl %>%
   .[. != ""] %>%
   str_subset("(test|recovered|total|died)") %>% 
   stringi::stri_trans_general("latin-ascii")
-vicTests <- vicTxt %>%
-  str_subset(".*[0-9]+.*tests") %>%
-  .[[1]] %>%
-  str_replace_all(
-    ".* ([0-9,]+)[^0-9]test(ed|s|ing).+",
-    "\\1"
-  ) %>%
-  str_remove_all(",") %>%
-  as.numeric()
+vicTests <- 539956
+# vicTests <- vicTxt %>%
+#   str_subset(".*[0-9]+.*tests") %>%
+#   .[[1]] %>%
+#   str_replace_all(
+#     ".* ([0-9,]+)[^0-9]test(ed|s|ing).+",
+#     "\\1"
+#   ) %>%
+#   str_remove_all(",") %>%
+#   as.numeric()
 vicRecov <- vicTxt %>%
   str_subset("[0-9]+.+recovered") %>%
   str_trim() %>%
