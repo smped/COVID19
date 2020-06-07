@@ -710,7 +710,7 @@ wikiPops <- read_tsv("wikiPops.tsv") %>%
 ```
 
 ```{r alwaysShow}
-alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland", "Russia", "Brazil")
+alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland", "Russia", "Brazil", "Kuwait", "Finland", "Norway")
 ```
 
 
@@ -737,6 +737,8 @@ Similarly, reporting in many countries may have features that cause concerns reg
 Information on *recovered cases has been difficult to accurately obtain* due inconsistent methods for considering a case as recovered, and lack of reporting for these cases in many jurisdictions.
 In Australia, some states (e.g. NSW & QLD) have only begun releasing these figures in mid-April, whilst other states such as Victoria were releasing these numbers from mid-March.
 
+**As of June 6th, Brazil has stopped releasing any figures related to COVID-19. All values related to Brazil will be extremely outdated and inaccurate.**
+
 # International Data 
 
 ```{r setThresholds}
@@ -758,7 +760,7 @@ The time period for the most recent doubling of global cases was `r confirmed %>
 At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
 
 
-```{r, fig.height=8, fig.width=10, fig.cap = "*Current regional cumulative infection rates. Lines are shown from the point that local cases exceed 1 confirmed case / million*"}
+```{r plotRegions, fig.height=8, fig.width=10, fig.cap = glue("*Current regional cumulative infection rates. Lines are shown from the point that local cases exceeded {startingPoint} confirmed cases / million. Given the lack of growth in Oceania and Eastern Asia these regions have been omitted.*")}
 ggplotly(
   confirmed %>% 
     inner_join(wikiPops) %>%
@@ -767,7 +769,13 @@ ggplotly(
     ungroup() %>%
     group_by(Continent, Region, date) %>% 
     summarise(rate = round(1e6*sum(confirmed)/sum(Population), 2)) %>% 
-    dplyr::filter(date < dt, date > "2020-02-18", rate > 1) %>%
+    dplyr::filter(
+      date < dt, 
+      date > "2020-02-18", 
+      rate > startingPoint,
+      Continent != "Oceania",
+      Region != "Eastern Asia"
+    ) %>%
     ggplot(aes(date, rate, colour = Region)) +  
     geom_line() +
     scale_y_log10(label = comma_format(1)) + 
@@ -888,7 +896,7 @@ nDays <- confirmed %>%
 
 ```{r p}
 refRate <- c(2, 4, 8)
-minPop <- 4e6
+minPop <- 8e6
 p <- confirmed %>%
   group_by(Country, date) %>%
   summarise(confirmed = sum(confirmed)) %>%
@@ -919,6 +927,18 @@ p <- confirmed %>%
   dplyr::filter(days <= nDays | Country %in% alwaysShow) %>%
   arrange(date) %>%
   mutate(
+    Region = str_replace_all(
+      Region, "(Southern|Western) Europe", "Southern & Western Europe"
+    ),
+    Region = str_replace_all(
+      Region, "(Central|Southern) Asia", "Central & Southern Asia"
+    ),
+    Region = str_replace_all(
+      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+    ),
+    Region = str_replace_all(
+      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+    ),
     Country = fct_inorder(Country),
     Region = fct_lump(Region, n = 11)
     ) %>%
@@ -1005,9 +1025,9 @@ Whilst this relationship **appears to have broken down for Australia**, no break
 
 
 ```{r plotIncVConf}
-minPop <- 4e6
-minDays <- 15
-minRate <- 9
+minPop <- 8e6
+minDays <- 10
+minRate <- 50
 plotIncVConf <- confirmed %>%
   group_by(Country, date) %>%
   summarise_at(vars(confirmed), sum) %>%
@@ -1044,6 +1064,18 @@ plotIncVConf <- confirmed %>%
   ) %>%
   arrange(date) %>%
   mutate(
+    Region = str_replace_all(
+      Region, "(Southern|Western) Europe", "Southern & Western Europe"
+    ),
+    Region = str_replace_all(
+      Region, "(Central|Southern) Asia", "Central & Southern Asia"
+    ),
+    Region = str_replace_all(
+      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+    ),
+    Region = str_replace_all(
+      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+    ),
     Country = fct_inorder(Country),
     rate = round(rate, 2),
     d = round(d, 3),
@@ -1085,7 +1117,7 @@ capIncVConf <- glue(
 ```{r showIncVConf, fig.cap=capIncVConf, fig.height=10, fig.width=10}
 ggplotly(plotIncVConf +
   coord_cartesian(
-    ylim = c(0.1, max(plotIncVConf$data$`Average Daily Increase`)))
+    ylim = c(0.3, max(plotIncVConf$data$`Average Daily Increase`)))
 )
 ```
 
@@ -1297,7 +1329,7 @@ deaths %>%
 ### Cumulative Fatalities (Unscaled)
 
 ```{r deathPlot}
-minDeaths <- 10
+minDeaths <- 50
 ausDays <- deaths %>%
   dplyr::filter(Country == "Australia") %>% 
   group_by(date) %>%
@@ -1305,7 +1337,7 @@ ausDays <- deaths %>%
   dplyr::filter(deaths > 10) %>%
   nrow()
 minDays <- 2
-minPop <- 2e6
+minPop <- 5e6
 deathPlot <- confirmed %>%
   left_join(deaths) %>%
   group_by(Country, date) %>%
@@ -1330,6 +1362,18 @@ deathPlot <- confirmed %>%
     wikiPops %>% dplyr::select(Country, Continent, Region)
   ) %>%
   mutate(
+    Region = str_replace_all(
+      Region, "(Southern|Western) Europe", "Southern & Western Europe"
+    ),
+    Region = str_replace_all(
+      Region, "(Central|Southern) Asia", "Central & Southern Asia"
+    ),
+    Region = str_replace_all(
+      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+    ),
+    Region = str_replace_all(
+      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+    ),
     Country = fct_inorder(Country),
     Region = fct_lump(Region, n = 11)
   ) %>%
@@ -1365,9 +1409,9 @@ ggplotly(deathPlot)
 ### Cumulative Fatalities (Scaled)
 
 ```{r scaledDeathPlot}
-minRate <- 1
+minRate <- 2
 minDays <- 24
-minPop <- 4e6
+minPop <- 5e6
 scaledDeathPlot <- deaths %>% 
   group_by(Country, date) %>% 
   summarise_at(vars(deaths), sum) %>%
@@ -1389,6 +1433,18 @@ scaledDeathPlot <- deaths %>%
   arrange(desc(Days)) %>%
   ungroup() %>%
   mutate(
+    Region = str_replace_all(
+      Region, "(Southern|Western) Europe", "Southern & Western Europe"
+    ),
+    Region = str_replace_all(
+      Region, "(Central|Southern) Asia", "Central & Southern Asia"
+    ),
+    Region = str_replace_all(
+      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+    ),
+    Region = str_replace_all(
+      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+    ),
     Country = fct_inorder(Country),
     Region = fct_lump(Region, n = 11),
     `One Death Every` = round(Population / deaths, 0),
@@ -1434,9 +1490,9 @@ scaledDeathPlot %>%
 ### Daily Increase in Fatalities Vs Confirmed Fatalities
 
 ```{r dailyVsTotalDeaths}
-minCases <- 10
-minPop <- 4e6
-minDays <- 14
+minCases <- 40
+minPop <- 5e6
+minDays <- 15
 dailyVsTotalDeaths <- deaths %>%
   group_by(Country, date) %>%
   summarise_at(vars(deaths), sum) %>%
@@ -1470,6 +1526,18 @@ dailyVsTotalDeaths <- deaths %>%
   arrange(Date) %>%
   ungroup() %>%
   mutate(
+    Region = str_replace_all(
+      Region, "(Southern|Western) Europe", "Southern & Western Europe"
+    ),
+    Region = str_replace_all(
+      Region, "(Central|Southern) Asia", "Central & Southern Asia"
+    ),
+    Region = str_replace_all(
+      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+    ),
+    Region = str_replace_all(
+      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+    ),
     Population = comma(round(Population, -3)),
     Country = fct_inorder(Country),
     Region = fct_lump(Region, n = 11)
@@ -1503,7 +1571,7 @@ capDailyVsTotal <- glue(
 ggplotly(
   dailyVsTotalDeaths +
     coord_cartesian(
-      ylim = c(0.1, max(dailyVsTotalDeaths$data$`Average Daily Fatalities`))
+      ylim = c(0.2, max(dailyVsTotalDeaths$data$`Average Daily Fatalities`))
     )
 )
 ```
@@ -1746,8 +1814,8 @@ Given the level of under-reporting this may also be highly inaccurate.
 ### Active Infections Across All Countries
 
 ```{r p2}
-minDays <- 25
-minPop <- 4e6
+minDays <- 30
+minPop <- 8e6
 df <- confirmed %>%
   dplyr::filter(
     confirmed > 0,
@@ -1785,6 +1853,18 @@ df <- confirmed %>%
   ) %>%
   arrange(date) %>%
   mutate(
+    Region = str_replace_all(
+      Region, "(Southern|Western) Europe", "Southern & Western Europe"
+    ),
+    Region = str_replace_all(
+      Region, "(Central|Southern) Asia", "Central & Southern Asia"
+    ),
+    Region = str_replace_all(
+      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+    ),
+    Region = str_replace_all(
+      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+    ),
     Country = fct_inorder(Country),
     Region = fct_lump(Region, n = 11)
   ) %>%
@@ -1862,7 +1942,7 @@ Notable features of this perspective are:
 
 
 ```{r p4}
-minPop <- 10e6
+minPop <- 8e6
 p4 <- confirmed %>%
   dplyr::filter(
     confirmed > 0
@@ -2370,70 +2450,6 @@ list(
   theme(legend.position = "none") +
   coord_cartesian(ylim= c(0, 5))
 ```
-
-## Scaled Transmissions
-
-```{r offset}
-offset <- 6
-```
-
-
-An alternative viewpoint to the growth factor is to simply assess the number of new cases arising from the number of active cases.
-As there is a delay in symptom onset, the number of new cases on a given day is a function of the number of active cases several days in the past, and using an offset value easily allows this to communicated in an informative way.
-Any sustained number below 1 indicates a trajectory which leads to control of the outbreak, whilst values > 1 indicate exponential growth.
-This visualisation **fails to account for imported cases** and assumes that all cases were transmitted within each state.
-Recent patterns in both WA and SA have shown many cases are still being imported from overseas.
-
-```{r plotScaledTrans, fig.height=8, fig.width=10, fig.cap=glue("*Numbers of new cases arising from existing active cases. The value for active cases was taken using an offset of {offset} days to represent the median incubation period and the approximate transmission date is shown on the x-axis. The introduction of social distancing is indicated in blue at the date these effects will have become visible in the data (i.e. {offset} days after introduction). The date that the effects of lockdown should have begun appearing is shown in red. Importantly, recovered cases were poorly reported in NSW and QLD until recently, and as such, __active cases from early March to early April are a significant overestimate and the ratio of new cases scaled by active cases makes the initial outbreak appear far more moderate than the reality was.__ Even taking this into account for the actual values, it is clear from the peaks above that social distancing, whilst having a positive impact, was insufficient to fully contain the outbreak.*")}
-confirmed %>%
-  dplyr::filter(Country == "Australia") %>%
-  left_join(recovered) %>%
-  left_join(deaths) %>%
-  mutate(active = confirmed - recovered - deaths) %>%
-  bind_rows(
-    group_by(., Country, date) %>%
-      summarise_at(
-        vars(confirmed, recovered, deaths, active),
-        sum
-      ) %>%
-      ungroup() %>%
-      mutate(
-        `Province/State` = "All States"
-      )
-  ) %>%
-  group_by(`Province/State`) %>%
-  mutate(
-    new = c(0, diff(confirmed)),
-    active_offset = c(rep(NA, offset - 1), active[seq_len(n() - offset + 1)]),
-    trans = new / active_offset
-  ) %>%
-  ungroup() %>%
-  dplyr::filter(
-    date > ymd("2020-03-09"),
-    !is.na(trans)
-  ) %>%
-  ggplot(aes(date - offset, trans, colour = `Province/State`)) +
-  geom_point(aes(x = ymd("2020-04-01"), y = 2.1), colour = NA) +
-  geom_vline(
-    xintercept = ymd("2020-03-23"), 
-    linetype = 2,
-    colour = "red"
-  ) +
-  geom_vline(
-    xintercept = ymd("2020-03-15"), 
-    linetype = 2,
-    colour = "blue"
-  ) +
-  geom_ribbon(aes(ymax = 1, ymin = trans), alpha = 0.2) +
-  geom_hline(yintercept = 1, colour = "grey20") +
-  facet_wrap(~`Province/State`, scales = "free_y") +
-  labs(
-    x = "Transmission Date",
-    y = "New Cases / Active Case"
-  ) +
-  theme(legend.position = "none")
-```
-
 
 
 # R Session Information
