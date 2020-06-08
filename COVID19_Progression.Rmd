@@ -1275,17 +1275,19 @@ deaths %>%
   mutate(
     infectionRate = round(1e6 * confirmed / Population, 1),
     fatalityRate = deaths / confirmed,
+    fpm = round(1e6 * deaths / Population, 1),
     Population = round(Population / 1e6, 3)
   ) %>%
   arrange(desc(date), fatalityRate) %>%
   distinct(Country, .keep_all = TRUE) %>%
-  arrange(desc(fatalityRate)) %>%
+  arrange(desc(fpm)) %>%
   dplyr::select(
     Continent, Region, Country, Population,
     `Confirmed Cases` = confirmed, 
-    `Infection Rate (per million)` = infectionRate,
-    `Fatalities` = deaths, 
-    `Fatality Rate` = fatalityRate
+    `Cases / Million` = infectionRate,
+    `Total Fatalities` = deaths, 
+    `Fatalities / Million` = fpm,
+    `% Fatal Infections` = fatalityRate
   ) %>%
   datatable(
     options = list(
@@ -1317,12 +1319,17 @@ deaths %>%
     )
   ) %>%
   formatRound(
-    columns = "Infection Rate (per million)",
+    columns = "Cases / Million",
     mark = ",",
     digits = 1
   ) %>%
+  formatRound(
+    columns = "Total Fatalities",
+    mark = ",",
+    digits = 0
+  ) %>%
   formatPercentage(
-    columns = "Fatality Rate",
+    columns = "% Fatal Infections",
     digits = 2
   )
 ```
