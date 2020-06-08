@@ -229,7 +229,9 @@ latestAU$QLD <- tibble(
 vicRecov <- vicTests <- NA_real_
 vicUrl <- c(
   "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt, '%d')}-{format.Date(dt, '%B')}-{year(dt)}",
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt - 1, '%d')}-{format.Date(dt - 1, '%B')}-{year(dt-1)}"
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt)}-{format.Date(dt, '%B')}-{year(dt)}",
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt - 1, '%d')}-{format.Date(dt - 1, '%B')}-{year(dt-1)}",
+    "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt - 1)}-{format.Date(dt - 1, '%B')}-{year(dt-1)}"
   ) %>% 
   vapply(glue, character(1)) %>%
   str_to_lower() %>%
@@ -247,16 +249,15 @@ vicTxt <- vicUrl %>%
   .[. != ""] %>%
   str_subset("(test|recovered|total|died)") %>% 
   stringi::stri_trans_general("latin-ascii")
-vicTests <- 539956
-# vicTests <- vicTxt %>%
-#   str_subset(".*[0-9]+.*tests") %>%
-#   .[[1]] %>%
-#   str_replace_all(
-#     ".* ([0-9,]+)[^0-9]test(ed|s|ing).+",
-#     "\\1"
-#   ) %>%
-#   str_remove_all(",") %>%
-#   as.numeric()
+vicTests <- vicTxt %>%
+  str_subset(".*[0-9]+.*tests") %>%
+  .[[1]] %>%
+  str_replace_all(
+    ".* ([0-9,]+)[^0-9]test(ed|s|ing).+",
+    "\\1"
+  ) %>%
+  str_remove_all(",") %>%
+  as.numeric()
 vicRecov <- vicTxt %>%
   str_subset("[0-9]+.+recovered") %>%
   str_trim() %>%
@@ -291,8 +292,9 @@ waMedia <- "https://ww2.health.wa.gov.au/News/Media-releases-listing-page" %>%
   read_html() %>% 
   html_nodes("body") %>% 
   xml_find_all("//a[contains(@title, '19 update')]") %>%
-  .[[1]] %>%
-  html_attr("href")
+  html_attr("href") %>%
+  str_subset("2020$") %>%
+  .[[1]] 
 waUrl <- glue("https://ww2.health.wa.gov.au{waMedia}")
 waTxt <- waUrl %>%
   read_html() %>%
@@ -301,7 +303,8 @@ waTxt <- waUrl %>%
   str_split("\n") %>%
   .[[1]] %>%
   str_trim() %>%
-  .[. != ""]
+  .[. != ""] %>%
+  stringi::stri_trans_general("latin-ascii") 
 waTests <- waTxt %>%
   str_subset("test(s|ed).*performed") %>%
   str_replace_all(".+ ([0-9,]+) COVID.+", "\\1") %>%
@@ -316,9 +319,8 @@ waRecov <- waTxt %>%
 latestAU$WA <- tibble(
   State = "Western Australia",
   date = dt,
-  confirmed =waTxt %>% 
-    stringi::stri_trans_general("latin-ascii") %>% 
-    str_subset("State's") %>% 
+  confirmed = waTxt %>% 
+    str_subset("State") %>% 
     str_remove_all("COVID.*19") %>% 
     str_replace_all("[^0-9]*([0-9]+)[^0-9]*", "\\1") %>% 
     as.numeric(),
@@ -1326,86 +1328,6 @@ deaths %>%
 ```
 
 
-### Cumulative Fatalities (Unscaled)
-
-```{r deathPlot}
-minDeaths <- 50
-ausDays <- deaths %>%
-  dplyr::filter(Country == "Australia") %>% 
-  group_by(date) %>%
-  summarise_at(vars(deaths), sum) %>% 
-  dplyr::filter(deaths > 10) %>%
-  nrow()
-minDays <- 2
-minPop <- 5e6
-deathPlot <- confirmed %>%
-  left_join(deaths) %>%
-  group_by(Country, date) %>%
-  summarise_at(
-    vars(confirmed, deaths),
-    sum
-  ) %>%
-  ungroup() %>%
-  dplyr::filter(
-    deaths >= minDeaths,
-    Country %in% c(dplyr::filter(wikiPops, Population > minPop)$Country, alwaysShow)
-  ) %>%
-  group_by(Country) %>%
-  mutate(Days = as.integer(date - min(date))) %>%
-  dplyr::filter(
-    max(Days) > minDays | Country %in% alwaysShow
-  ) %>%
-  ungroup() %>%
-  rename_all(str_to_title) %>%
-  arrange(desc(Days)) %>%
-  left_join(
-    wikiPops %>% dplyr::select(Country, Continent, Region)
-  ) %>%
-  mutate(
-    Region = str_replace_all(
-      Region, "(Southern|Western) Europe", "Southern & Western Europe"
-    ),
-    Region = str_replace_all(
-      Region, "(Central|Southern) Asia", "Central & Southern Asia"
-    ),
-    Region = str_replace_all(
-      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
-    ),
-    Region = str_replace_all(
-      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
-    ),
-    Country = fct_inorder(Country),
-    Region = fct_lump(Region, n = 11)
-  ) %>%
-  ggplot(
-    aes(
-      x = Days, y = Deaths, colour = Country,
-      label = Date, conf = Confirmed)
-  ) +
-  geom_line() +
-  scale_y_log10(labels = comma) +
-  labs(
-    x = glue("Days Since Passing {minDeaths} Deaths"),
-    y = "Cumulative Fatalities"
-  ) + 
-  facet_wrap(~Region, ncol = 3)
-```
-
-```{r cpDeath, echo=FALSE}
-cpDeath <- glue(
-  "*As with the spread of the virus, fatalities also grow at an exponential rate.
-  Any slowing in the growth of fatalities is an accurate marker for when the spread of the virus has definitively slowed, despite being a significantly lagging marker.
-  Cumulative fatalities are only shown for countries which have seen {minDeaths} or more fatalities for a period beyond {minDays} days, and for countries with a population > {comma(minPop)}.
-  Regions are shown as defined by the UN, however some with fewer points were merged for convenience.*"
-)
-```
-
-
-```{r plotDeath, fig.cap=cpDeath, fig.width=10, fig.height=10}
-ggplotly(deathPlot)
-```
-
-
 ### Cumulative Fatalities (Scaled)
 
 ```{r scaledDeathPlot}
@@ -1490,9 +1412,10 @@ scaledDeathPlot %>%
 ### Daily Increase in Fatalities Vs Confirmed Fatalities
 
 ```{r dailyVsTotalDeaths}
-minCases <- 40
-minPop <- 5e6
-minDays <- 15
+minPop <- 4e6
+minDays <- 14
+minRate <- 1
+minD <- 0.45
 dailyVsTotalDeaths <- deaths %>%
   group_by(Country, date) %>%
   summarise_at(vars(deaths), sum) %>%
@@ -1510,58 +1433,55 @@ dailyVsTotalDeaths <- deaths %>%
   ) %>%
   bind_rows() %>%
   inner_join(wikiPops) %>%
-  dplyr::filter(deaths > minCases) %>%
+  mutate(
+    deaths = 1e6 * deaths / Population,
+    d = 1e6 * d / Population,
+    max_d = max(d, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  dplyr::filter(!is.na(deaths), !is.na(d)) %>%
   mutate_at(vars(deaths, d), round, 2) %>%
-  mutate(n = n()) %>%
   dplyr::filter(
-    n > minDays | Country %in% alwaysShow,
-    Population > minPop,
+    Population > minPop | Country %in% alwaysShow,
+    max_d > minD | Country %in% alwaysShow,
+    deaths > minRate,
     d > 0
   ) %>%
+  group_by(Country) %>%
+  mutate(n = n()) %>%
+  ungroup() %>%
+  dplyr::filter(n > minDays | Country %in% alwaysShow) %>%
   rename_all(str_to_title) %>%
   rename(
-    `Average Daily Fatalities` = D,
-    `Average Total Fatalities` = Deaths
+    `Daily Fatalities` = D,
+    `Total Fatalities` = Deaths
   ) %>%
   arrange(Date) %>%
-  ungroup() %>%
   mutate(
-    Region = str_replace_all(
-      Region, "(Southern|Western) Europe", "Southern & Western Europe"
-    ),
-    Region = str_replace_all(
-      Region, "(Central|Southern) Asia", "Central & Southern Asia"
-    ),
-    Region = str_replace_all(
-      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
-    ),
-    Region = str_replace_all(
-      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
-    ),
     Population = comma(round(Population, -3)),
     Country = fct_inorder(Country),
     Region = fct_lump(Region, n = 11)
     ) %>%
-  ggplot(aes(`Average Total Fatalities`, `Average Daily Fatalities`, colour = Country, label = Date, key = Population)) +
+  ggplot(aes(`Total Fatalities`, `Daily Fatalities`, colour = Country, label = Date, key = Population)) +
   geom_line() +
-  scale_x_log10(labels = comma) +
-  scale_y_log10(labels = label_comma(accuracy = 0.1)) +
+  scale_x_log10(labels = label_comma(accuracy = 1)) +
+  scale_y_log10(labels = label_comma(accuracy = 0.01)) +
+  facet_wrap(~Region, ncol = 3) +
   labs(
-    x = "Total Confirmed Fatalities",
-    y = 'Daily Fatalities'
-  ) +
-  facet_wrap(~Region, ncol = 3)
+    x = "Total Fatalities (per million)",
+    y = "Daily Fatalities (per million)"
+  )
 ```
 
 
 
 ```{r capDailyVsTotalDeaths}
 capDailyVsTotal <- glue(
-  "*Daily Fatalities plotted against Total Fatalities.
+  "*Daily Fatalities plotted against Total Fatalities, scaled by population size using Fatalities / Million.
   These two values are directly proportional until interventions are successful, at which point the proportional relationship changes, as evidenced by a sudden downwards turn.
   Values shown are 7-day exponential moving averages in order to minimise the impact of day-to-day variation.
-  Countries are only shown from the point at which the moving average exceeds {minCases} cases, and have exceeded this value for > {minDays} days.
-  Data is additionally restricted to countries with a population > {comma(minPop)}, for greater clarity.
+  Countries are only shown from the point at which the moving average exceeds {minRate} fatality per million people, and has exceeded this value for > {minDays} days.
+  Data is additionally restricted to countries with a population > {comma(minPop)}, and those who at one point were recording > {minD} daily fatalities / million.
   Importantly, __due to the time taken from the initial infection to the day of death, this is a lag indicator of the control of infection__.*
   "
 )
@@ -1571,7 +1491,7 @@ capDailyVsTotal <- glue(
 ggplotly(
   dailyVsTotalDeaths +
     coord_cartesian(
-      ylim = c(0.2, max(dailyVsTotalDeaths$data$`Average Daily Fatalities`))
+      ylim = c(0.01, max(dailyVsTotalDeaths$data$`Daily Fatalities`))
     )
 )
 ```
@@ -1580,7 +1500,6 @@ ggplotly(
 ### Comparison of Total Fatalities
 
 ```{r setScaledFatalPrams}
-minPop <- 5e6
 nCnt <- 25
 topDeaths <- deaths %>%
   dplyr::filter(deaths > 0) %>%
@@ -1592,9 +1511,6 @@ topDeaths <- deaths %>%
   ) %>%
   ungroup() %>%
   inner_join(wikiPops) %>%
-  # dplyr::filter(
-  #   Population > minPop | Country %in% alwaysShow
-  # ) %>%
   mutate(
     rate = 1e6*deaths / Population,
     totalRank = nrow(.) - rank(deaths) + 1,
@@ -1665,7 +1581,7 @@ plot_grid(
 ### Fatality Rate Vs Time
 
 ```{r plotFr}
-minDays <- 30
+minDays <- 40
 minPop <- 10e6
 df <- confirmed %>%
   inner_join(deaths) %>%
@@ -1914,7 +1830,8 @@ cp2 <- glue(
     "*Confirmed __active__ cases of COVID-19 for countries where the confirmed infection rate has exceeded {startingPoint} confirmed active cases/million for more than {nDays} calendar days.
     Only countries with a population greater than {comma(minPop)} are shown for better visualisation.
     Due to difficulties introduced by the currently reported __low active infection rate__ outside Hubei province, data from China has been excluded from this plot, with the exception of Hubei and Hong Kong.
-    __Recovered cases as poorly and irregularly reported by many countries and as such, this plot may be suffer multiple instances of a sudden decline.__
+    __Recovered cases as poorly and irregularly reported by many countries (e.g. Ireland & Norway).
+    As a resul, this plot may indicate multiple instances of a sudden decline which are a simple artefact of data release schedules.__
     To hide a country, click on the country in the plot legend.
     Clicking again on the country in the legend will restore the data within the plot.
     Countries are shown in order of the date at which they passed the {startingPoint} confirmed __active__ case/million mark.
