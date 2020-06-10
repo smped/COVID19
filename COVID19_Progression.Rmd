@@ -642,8 +642,7 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
   lapply(mutate, deaths = cummax(deaths)) %>%
   bind_rows() %>%
   dplyr::select(-f) %>%
-  dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE) %>%
-  dplyr::filter(!(date == "2020-06-09" & Country == "Peru"))
+  dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE) 
 ```
 
 
