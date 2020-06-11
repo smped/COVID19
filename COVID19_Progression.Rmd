@@ -274,6 +274,7 @@ latestAU$VIC <- tibble(
     str_replace_all(".+[^0-9,]+([0-9,]+)[^0-9,].+", "\\1") %>% 
     str_remove_all(",") %>%
     as.numeric() %>%
+    .[!is.na(.)] %>%
     unique(),
   deaths = vicTxt %>% 
     str_subset("died") %>% 
@@ -320,10 +321,11 @@ latestAU$WA <- tibble(
   State = "Western Australia",
   date = dt,
   confirmed = waTxt %>% 
-    str_subset("State") %>% 
+    str_subset("(State|Western)") %>% 
     str_remove_all("COVID.*19") %>% 
-    str_replace_all("[^0-9]*([0-9]+)[^0-9]*", "\\1") %>% 
-    as.numeric(),
+    str_replace_all("[^0-9]+([0-9]+)[^0-9]+", "\\1") %>% 
+    as.numeric() %>%
+    .[!is.na(.)],
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
   tested = waTests
