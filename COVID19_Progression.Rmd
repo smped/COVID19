@@ -1086,24 +1086,25 @@ This choice seemed to be a useful way of enabling the comparison of COVID-19 pro
 
 ### Daily New Cases
 
-```{r plotNewDailyCountry, fig.width=10, fig.height=15, fig.cap = "*Daily New Confirmed Cases (per million) using each country's population to calculate the case rate.*"}
-minPop <- 10e6
+```{r plotNewDailyCountry, fig.width=10, fig.height=10, fig.cap = "*Daily New Confirmed Cases (per million) using each country's population to calculate the case rate. 7 day Exponential Moving Averages are used to plot daily case rates in order to minimise the impact of single-day spikes and irregular reporting. Daily Totals provided when hovering are the reported number of cases for that specific day, without smoothing or scaling.*"}
+minPop <- 4e6
 ggplotly(
   confirmed %>%
     group_by(Country, date) %>%
     summarise(confirmed = sum(confirmed)) %>%
-    mutate(daily = c(0, diff(confirmed))) %>%
+    mutate(
+      `daily total` = c(0, diff(confirmed)),
+      daily_ma = ema(`daily total`, 7)
+    ) %>%
     ungroup() %>%
-    dplyr::filter(daily > 0) %>%
+    dplyr::filter(`daily total` > 0 | confirmed > 0) %>%
     inner_join(
       dplyr::filter(
         wikiPops, Population > minPop | Country %in% alwaysShow
       )
     ) %>%
     mutate(
-      `Daily Cases` = round(1e6 * daily / Population, 2)
-    ) %>%
-    mutate(
+      `Daily Rate` = round(1e6 * daily_ma / Population, 2),
       Region = str_replace_all(
         Region, "(Southern|Western) Europe", "Southern & Western Europe"
       ),
@@ -1126,12 +1127,15 @@ ggplotly(
       date < dt
     ) %>%
     rename_all(str_to_title) %>%
+    mutate(
+      `Population (millions)` = round(Population / 1e6, 2)
+    ) %>%
     ggplot(
-      aes(Date, `Daily Cases`, fill = Country)
+      aes(Date, `Daily Rate`, colour = Country, label = `Daily Total`, key = `Population (millions)`)
     ) +
-    geom_bar(stat = "identity") +
+    geom_line() +
     facet_wrap(
-      ~Region, ncol = 2, scales = "free_y"
+      ~Region, ncol = 3
     ) +
     labs(
       y = "Daily New Confirmed Cases (per million)"
