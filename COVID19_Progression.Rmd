@@ -756,7 +756,9 @@ For this section, most data is presented *relative to population size*.
 Growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
 This equates to about `r round(startingPoint*dplyr::filter(wikiPops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
 
-## Regional Cumulative Infection Rates
+## Regional Data {.tabset}
+
+### Cumulative Infection Rates
 
 Before exploring individual countries, a regional perspective may be helpful.
 Importantly, **only Oceania, Eastern Asia, Western Europe and Southern Europe** have successfully controlled the infection rate.
@@ -765,10 +767,13 @@ The time period for the most recent doubling of global cases was `r confirmed %>
 At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
 
 
-```{r plotRegions, fig.height=8, fig.width=10, fig.cap = glue("*Current regional cumulative infection rates. Lines are shown from the point that local cases exceeded {startingPoint} confirmed cases / million. Given the lack of growth in Oceania and Eastern Asia these regions have been omitted.*")}
+```{r plotRegions, fig.height=8, fig.width=10, fig.cap = glue("*Current regional cumulative infection rates. Lines are shown from the point that regional cases exceeded {startingPoint} confirmed cases / million. Rates are calculated within each region using regional populations.*")}
 ggplotly(
   confirmed %>% 
     inner_join(wikiPops) %>%
+    mutate(
+      Continent = str_replace_all(Continent, "(Oceania|Asia)", "Asia & Oceania")
+    ) %>%
     group_by(Continent, Region, Country, Population, date) %>% 
     summarise(confirmed = sum(confirmed)) %>% 
     ungroup() %>%
@@ -777,9 +782,8 @@ ggplotly(
     dplyr::filter(
       date < dt, 
       date > "2020-02-18", 
-      rate > startingPoint,
-      Continent != "Oceania",
-      Region != "Eastern Asia"
+      rate > startingPoint
+      # Region != "Eastern Asia"
     ) %>%
     ggplot(aes(date, rate, colour = Region)) +  
     geom_line() +
@@ -790,7 +794,66 @@ ggplotly(
 ```
 
 
-## Cumulative Infection Rates {.tabset}
+### Daily New Infection Rates
+
+```{r plotRegionDailyCases, fig.height=8, fig.width=10, fig.cap = "*Daily new confirmed infections, shown as cases / million. Values are calculated within the total population for each continent. The solid black line is the 7-day exponential moving average calculated within each continent*"}
+ggplotly(
+  confirmed %>% 
+    inner_join(wikiPops) %>%
+    mutate(
+      Continent = str_replace_all(Continent, "(Oceania|Asia)", "Asia & Oceania")
+    ) %>%
+    group_by(Continent, Region, Country, Population, date) %>% 
+    summarise(confirmed = sum(confirmed)) %>% 
+    ungroup() %>%
+    group_by(Continent, date) %>%
+    mutate(Population = sum(Population)) %>%
+    ungroup() %>%
+    group_by(Continent, Region, date) %>%
+    summarise(
+      confirmed = sum(confirmed),
+      Population = unique(Population)
+    ) %>%
+    mutate(
+      daily = c(0, diff(confirmed))
+    ) %>%
+    ungroup() %>%
+    dplyr::filter(
+      daily > 0 | confirmed > 0,
+      date < dt
+    ) %>%
+    mutate(
+      `Daily Rate` = round(1e6 * daily / Population, 2)
+    ) %>%
+    rename(Date = date) %>%
+    ggplot(
+      aes(Date, `Daily Rate`, fill = Region)
+    ) +
+    geom_bar(stat = "identity") +
+    geom_line(
+      aes(Date, EMA),
+      data = . %>%
+        group_by(Continent, Date) %>%
+        summarise(
+          `Daily Rate` = sum(`Daily Rate`)
+        ) %>%
+        mutate(EMA = ema(`Daily Rate`, 7)),
+      inherit.aes = FALSE
+    ) +
+  scale_colour_manual(values = c(NA, "black")) +
+    scale_x_date(expand = expansion(c(0, 0.03))) +
+    scale_y_continuous(expand = expansion(c(0, 0.05))) +
+    facet_wrap(~Continent, ncol = 2, scales = "free") +
+    labs(
+      x = "Date",
+      y = "Daily New Infection Rate (cases / million)"
+    ),
+  tooltip  = c("Date", "Daily Rate", "Region")
+)
+```
+
+
+## Individual Countries {.tabset}
 
 ### Table of Most Impacted Countries
 
@@ -1021,6 +1084,63 @@ In the above plot:
 - Only countries are shown where the infection rate has surpassed `r startingPoint` cases/million for more than `r minDays` days.
 This choice seemed to be a useful way of enabling the comparison of COVID-19 progression across countries after scaling for population size
 
+### Daily New Cases
+
+```{r plotNewDailyCountry, fig.width=10, fig.height=15, fig.cap = "*Daily New Confirmed Cases (per million) using each country's population to calculate the case rate.*"}
+minPop <- 10e6
+ggplotly(
+  confirmed %>%
+    group_by(Country, date) %>%
+    summarise(confirmed = sum(confirmed)) %>%
+    mutate(daily = c(0, diff(confirmed))) %>%
+    ungroup() %>%
+    dplyr::filter(daily > 0) %>%
+    inner_join(
+      dplyr::filter(
+        wikiPops, Population > minPop | Country %in% alwaysShow
+      )
+    ) %>%
+    mutate(
+      `Daily Cases` = round(1e6 * daily / Population, 2)
+    ) %>%
+    mutate(
+      Region = str_replace_all(
+        Region, "(Southern|Western) Europe", "Southern & Western Europe"
+      ),
+      Region = str_replace_all(
+        Region, "(Central|Southern) Asia", "Central & Southern Asia"
+      ),
+      Region = str_replace_all(
+        Region, "(Eastern|South-eastern) Asia", "Eastern & South-Eastern Asia"
+      ),
+      Region = str_replace_all(
+        Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+      ),
+      Region = str_replace_all(
+        Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+      ),
+      Region = fct_lump(Region, n = 11)
+    ) %>%
+    dplyr::filter(
+      date > "2020-03-01",
+      date < dt
+    ) %>%
+    rename_all(str_to_title) %>%
+    ggplot(
+      aes(Date, `Daily Cases`, fill = Country)
+    ) +
+    geom_bar(stat = "identity") +
+    facet_wrap(
+      ~Region, ncol = 2, scales = "free_y"
+    ) +
+    labs(
+      y = "Daily New Confirmed Cases (per million)"
+    ) +
+    scale_x_date(expand = expansion(c(0, 0.03))) +
+    scale_y_continuous(expand = expansion(c(0, 0.05)))
+)
+```
+
 
 ### Daily Increase Vs Confirmed Cases
 
@@ -1124,127 +1244,6 @@ ggplotly(plotIncVConf +
   coord_cartesian(
     ylim = c(0.3, max(plotIncVConf$data$`Average Daily Increase`)))
 )
-```
-
-
-### Dimensional Reduction
-
-In order to summarise which countries are the most similar to each other, a Principal Component Analysis was performed.
-This enables the multi-dimensional data of the above plots to summarised in two dimensions.
-As missing data cannot be included in this analysis, several countries which are at earlier comparative time-points than Australia were omitted from this analysis.
-
-```{r nDaysForPCA}
-nDays <- confirmed %>% 
-  dplyr::filter(Country == "Australia") %>% 
-  group_by(Country, date) %>%
-  summarise(confirmed = sum(confirmed)) %>%
-  ungroup() %>%
-  inner_join(wikiPops) %>%
-  mutate(
-    rate = 1e6*confirmed / Population
-  ) %>% 
-  dplyr::filter(rate > startingPoint) %>% 
-  nrow() %>%
-  subtract(4)
-```
-
-
-```{r pca}
-minPop <- 4e6
-pca <- confirmed %>%
-  group_by(Country, date) %>%
-  summarise(confirmed = sum(confirmed)) %>%
-  ungroup() %>%
-  inner_join(wikiPops) %>%
-  mutate(
-    rate = 1e6*confirmed / Population
-  ) %>%
-  dplyr::filter(
-    rate > startingPoint,
-    Population > minPop | Country %in% alwaysShow
-  ) %>%
-  group_by(Country) %>%
-  mutate(
-    days = date - min(date)
-  ) %>%
-  dplyr::filter(
-    max(days) >= nDays
-  ) %>%
-  ungroup() %>%
-  mutate(
-    days = as.integer(days),
-    rate = round(rate, 2)
-  ) %>%
-  dplyr::filter(days <= nDays) %>%
-  dplyr::select(Country, rate, days) %>%
-  pivot_wider(
-    values_from = rate,
-    names_from = days
-  ) %>%
-  as.data.frame() %>%
-  column_to_rownames("Country") %>%
-  as.matrix() %>%
-  .[!rowAnyNAs(.),] %>%
-  log() %>%
-  prcomp() 
-```
-
-```{r cp3, echo=FALSE}
-pcPercent <- summary(pca)$importance["Proportion of Variance",] %>%
-  percent(accuracy = 0.1)
-k <- 3
-cp3 <- glue(
-  "*Dimensional reduction showing which countries infection rates are the most similar to each other __at the {nDays} day time point, after passing {startingPoint} confirmed cases/million__.
-  This may or may not be indicative of future spread within the population.
-  The value {nDays} days was simply chosen as this marks how long since the US passed this threshold.
-  Countries which have not progressed beyond {startingPoint} confirmed cases/million for {nDays} days or more are not shown.
-  Countries with populations < {comma(minPop)} are also excluded.
-  Clusters were generated using k-means, manually specifying k = {k} and are not definitive.
-  Principal Component 1, on the x-axis, corresponds to the greatest source of variability within the data 
-  ({pcPercent[['PC1']]}), and countries which appear near each other along this axis can be assumed to be showing similar growth in confirmed infection rates at this time point.
-  Separation along the y-axis is less significant, but also worthy of note, as this represents {pcPercent[['PC2']]} of variability within the data.*"
-)
-```
-
-
-```{r plotPCA, fig.cap = cp3, fig.width=7, fig.height=7}
-set.seed(101)
-pca$x %>%
-  as.data.frame() %>%
-  rownames_to_column("Country") %>%
-  mutate(
-    Cluster = cbind(PC1, PC2) %>%
-      apply(2, function(x){
-        (x - mean(x)) / sd(x)
-      }) %>%
-      kmeans(centers = k, nstart = 10) %>%
-      .[["cluster"]] %>%
-      as.factor()
-  ) %>%
-  ggplot(aes(PC1, PC2, label = Country, colour = Cluster)) +
-  geom_point() +
-  geom_text_repel(
-    show.legend = FALSE
-  ) +
-  stat_ellipse(
-    aes(fill = Cluster),
-    colour = NA,
-    geom = "polygon",
-    alpha = 0.1
-    ) +
-  xlab(
-    paste0(
-      "PC1 (", pcPercent[['PC1']],")"
-      )
-  ) +
-    ylab(
-    paste0(
-      "PC2 (", pcPercent[['PC2']], ")"
-      )
-  ) +
-  theme(
-    legend.position = "none"
-  )
 ```
 
 
@@ -1841,7 +1840,7 @@ cp2 <- glue(
     Only countries with a population greater than {comma(minPop)} are shown for better visualisation.
     Due to difficulties introduced by the currently reported __low active infection rate__ outside Hubei province, data from China has been excluded from this plot, with the exception of Hubei and Hong Kong.
     __Recovered cases as poorly and irregularly reported by many countries (e.g. Ireland & Norway).
-    As a resul, this plot may indicate multiple instances of a sudden decline which are a simple artefact of data release schedules.__
+    As a result, this plot may indicate multiple instances of a sudden decline which are a simple artefact of data release schedules.__
     To hide a country, click on the country in the plot legend.
     Clicking again on the country in the legend will restore the data within the plot.
     Countries are shown in order of the date at which they passed the {startingPoint} confirmed __active__ case/million mark.
@@ -2037,9 +2036,12 @@ confirmed %>%
 
 ## Plot of Current Australian Values
 
+```{r ausStatsCap}
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ March 2020 as this was the date of the first recorded fatality in Australia. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date. NSW followed a fortnight after this date and as such, only the most recent numbers can be considered as accurate. Below this plot, the same figures can be seen broken down by state.*"
+```
 
-```{r ausStatsPlot}
-ausStatsPlot <- ggplotly(
+```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
+ggplotly(
   confirmed %>%
     dplyr::filter(Country == "Australia", confirmed > 0) %>%
     left_join(deaths) %>%
@@ -2051,44 +2053,44 @@ ausStatsPlot <- ggplotly(
     mutate(active = confirmed - deaths - recovered) %>%
     pivot_longer(
       cols = c(active, confirmed, deaths, recovered),
-      names_to = "Type",
+      names_to = "Status",
       values_to = "Total"
     ) %>%
-    arrange(Type, date) %>%
+    arrange(Status, date) %>%
     dplyr::filter(date > ymd("2020-02-29")) %>%
     mutate(
-      Type = str_to_title(Type),
-      Type = str_replace_all(Type, "Deaths", "Fatalities"),
+      Status = str_to_title(Status),
+      Status = str_replace_all(Status, "Deaths", "Fatal"),
+      Status = factor(Status, levels = c("Recovered", "Active", "Fatal"))
     ) %>%
     dplyr::filter(Total > 0) %>%
     rename_all(str_to_title) %>%
-    ggplot(aes(Date, Total, colour = Type)) +
-    geom_point() +
-    geom_smooth(method = "loess", se = FALSE, size = 1/2) +
-    scale_y_log10() +
-    scale_colour_manual(
+    dplyr::filter(Status != "Confirmed") %>%
+    ggplot(aes(Date, Total, fill = Status)) +
+    geom_col() +
+    geom_line(
+      data = . %>%
+        group_by(Date) %>%
+        summarise(
+          Total = sum(Total)
+        ) %>%
+        mutate(Status = "Confirmed"),
+      colour = "blue"
+    ) +
+    scale_fill_manual(
       values = c(
         Active = rgb(0, 0, 0),
         Confirmed = rgb(0, 0.3, 0.7),
-        Fatalities = rgb(0.8, 0.2, 0.2),
+        Fatal = rgb(0.8, 0.2, 0.2),
         Recovered = rgb(0.2, 0.7, 0.4)
       )
-    )
+    ) +
+    scale_x_date(expand = expansion(c(0, 0.03))) +
+    scale_y_continuous(expand = expansion(c(0, 0.05))) +
+    labs("Total Cases")
 )
-ausStatsPlot$x$data[5:8] %<>%
-  lapply(function(x){
-    x$hoverinfo <- "none"
-    x
-  })
 ```
 
-```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ March 2020 as this was the date of the first recorded fatality in Australia. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date. NSW followed a fortnight after this date and as such, only the most recent numbers can be considered as accurate. Below this plot, the same figures can be seen broken down by state.*"
-```
-
-```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
-ausStatsPlot 
-```
 
 
 ```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases have only recently begun being reported and up until the most recent dates, recovered/active values were very approximate for these states.*"}
@@ -2120,18 +2122,28 @@ ggplotly(
       !(State %in% c("South Australia") & status == "recovered" & date < ymd("2020-04-01")),    
       !(State %in% c("Tasmania") & status == "recovered" & date < ymd("2020-04-02")),
     ) %>%
+    dplyr::filter(status != "confirmed") %>%
     mutate(
       rate = 1e6*count/Population,
       rate = round(rate, 2),
       status = str_replace(status, "deaths", "fatal") %>% str_to_title(),
-      status = factor(status, levels = c("Confirmed", "Active", "Recovered", "Fatal"))
+      status = factor(status, levels = c("Recovered", "Active", "Fatal"))
     ) %>%
     rename_all(str_to_title) %>%
-    ggplot(aes(Date, Rate, colour = Status, label = Count)) +
-    geom_point() +
-    geom_smooth(method = "loess", se = FALSE, size = 1/2) +
-    scale_y_log10() +
-    scale_colour_manual(
+    ggplot(aes(Date, Rate, fill = Status, label = Count)) +
+    geom_col() +
+    geom_line(
+      data = . %>%
+        group_by(State, Date) %>%
+        summarise(
+          Rate = sum(Rate),
+          Count = sum(Count)
+        ) %>%
+        mutate(Status = "Confirmed"),
+      colour = "blue"
+    ) +
+    facet_wrap(~State, ncol = 4) + 
+    scale_fill_manual(
       values = c(
         Active = rgb(0, 0, 0),
         Confirmed = rgb(0, 0.3, 0.7),
@@ -2139,12 +2151,8 @@ ggplotly(
         Recovered = rgb(0.2, 0.7, 0.4)
       )
     ) +
-    facet_wrap(~State, ncol = 4) +
-    labs(
-      x = "Date",
-      y = "Cases / Million",
-      colour = "Case Status"
-    )
+    scale_x_date(expand = expansion(c(0, 0.03))) +
+    labs(y = "Rate (Cases / Million)")
 )
 ```
 
