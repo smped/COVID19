@@ -347,37 +347,37 @@ saTxt <- saUrl  %>%
   .[. != ""]
 ## The dashboard is unreliable so use SA Health press releases as an additional source
 ## These don't appear until late afternoon, so this is a pain in the arse quite frankly
-altSaUrl <- c(
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}",
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}"
-  ) %>% 
-  vapply(glue, character(1)) %>% 
-  str_to_lower()
-validSa <- altSaUrl %>%
-  lapply(read_html) %>%
-  lapply(html_node, css = "body") %>%
-  vapply(function(x){!is.na(x)}, logical(1)) %>%
-  which() %>%
-  .[[1]]
-altSaTxt <- altSaUrl[validSa] %>%
-  read_html() %>%
-  html_node("body") %>%
-  xml_find_all("//section[@class = 'main-content']") %>%
-  html_text() %>%
-  str_split("\n") %>%
-  .[[1]] %>%
-  str_trim() %>%
-  .[. != ""]
+# altSaUrl <- c(
+#   "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}",
+#   "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}"
+#   ) %>% 
+#   vapply(glue, character(1)) %>% 
+#   str_to_lower()
+# validSa <- altSaUrl %>%
+#   lapply(read_html) %>%
+#   lapply(html_node, css = "body") %>%
+#   vapply(function(x){!is.na(x)}, logical(1)) %>%
+#   which() %>%
+#   .[[1]]
+# altSaTxt <- altSaUrl[validSa] %>%
+#   read_html() %>%
+#   html_node("body") %>%
+#   xml_find_all("//section[@class = 'main-content']") %>%
+#   html_text() %>%
+#   str_split("\n") %>%
+#   .[[1]] %>%
+#   str_trim() %>%
+#   .[. != ""]
 saTests <- c(
   saTxt %>%
-    str_replace_all(".+(conducted|undertaken).*[^0-9,]([0-9, ]+)[^0-9,]+tests.+", "\\2") %>%
+    str_replace_all(".+[^0-9,]([0-9,]+)[^0-9,]+tests.+", "\\1") %>%
     str_remove_all("[, ]") %>%
-    as.numeric(),
-  altSaTxt %>% 
-    str_subset("tests") %>% 
-    str_replace_all(".+ ([0-9,]+) test.+", "\\1") %>% 
-    str_remove_all(",") %>% 
-    as.numeric()
+    as.numeric()#,
+  # altSaTxt %>% 
+  #   str_subset("tests") %>% 
+  #   str_replace_all(".+ ([0-9,]+) test.+", "\\1") %>% 
+  #   str_remove_all(",") %>% 
+  #   as.numeric()
 ) %>%
   max(na.rm = TRUE)
 saTable <- "https://www.covid-19.sa.gov.au/" %>% 
@@ -401,11 +401,11 @@ saTable <- "https://www.covid-19.sa.gov.au/" %>%
 saRecov <- c(
   saTable %>%
     dplyr::filter(str_detect(Cases, "recovered")) %>%
-    .[["Total"]],
-  altSaTxt %>% 
-    str_subset("(cleared|recovered)") %>% 
-    str_replace_all(".+ ([0-9]+) people have.+", "\\1") %>% 
-    as.numeric()
+    .[["Total"]]#,
+  # altSaTxt %>% 
+  #   str_subset("(cleared|recovered)") %>% 
+  #   str_replace_all(".+ ([0-9]+) people have.+", "\\1") %>% 
+  #   as.numeric()
 ) %>%
   max(na.rm = TRUE)
 latestAU$SA <- tibble(
@@ -716,6 +716,38 @@ wikiPops <- read_tsv("wikiPops.tsv") %>%
 
 ```{r alwaysShow}
 alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland", "Russia", "Brazil", "Kuwait", "Finland", "Norway")
+```
+
+
+```{r countryCols}
+countryCols <- confirmed %>% 
+  dplyr::filter(confirmed > 0) %>% 
+  arrange(date) %>% 
+  distinct(Country) %>% 
+  left_join(wikiPops) %>%
+  mutate(
+    Region = str_replace_all(
+      Region, "(Southern|Western) Europe", "Southern & Western Europe"
+    ),
+    Region = str_replace_all(
+      Region, "(Central|Southern) Asia", "Central & Southern Asia"
+    ),
+    Region = str_replace_all(
+      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+    ),
+    Region = str_replace_all(
+      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+    )
+  ) %>%
+  droplevels() %>%
+  split(f = .$Region) %>%
+  lapply(
+    function(x){
+      mutate(x, rgb = hue_pal()(nrow(x)))
+      }
+    ) %>%
+  bind_rows() %>%
+  with(structure(rgb, names = Country)) 
 ```
 
 
@@ -1038,6 +1070,7 @@ p <- confirmed %>%
     expand = expansion(mult = c(0, 0.05)),
     label = comma
   ) +
+  scale_colour_manual(values = countryCols) +
   xlab(
     paste(
       "Days since passing", 
@@ -1086,7 +1119,7 @@ This choice seemed to be a useful way of enabling the comparison of COVID-19 pro
 
 ### Daily New Cases
 
-```{r plotNewDailyCountry, fig.width=10, fig.height=10, fig.cap = "*Daily New Confirmed Cases (per million) using each country's population to calculate the case rate. 7 day Exponential Moving Averages are used to plot daily case rates in order to minimise the impact of single-day spikes and irregular reporting. Daily Totals provided when hovering are the reported number of cases for that specific day, without smoothing or scaling.*"}
+```{r plotNewDailyCountry, fig.width=10, fig.height=10, fig.cap = "*Daily New Confirmed Cases (per million) using each country's population to calculate the case rate. 7 day Simple Moving Averages are used to plot daily case rates in order to minimise the impact of single-day spikes and irregular reporting. Daily Totals provided when hovering are the reported number of cases for that specific day, without smoothing or scaling.*"}
 minPop <- 4e6
 ggplotly(
   confirmed %>%
@@ -1094,7 +1127,7 @@ ggplotly(
     summarise(confirmed = sum(confirmed)) %>%
     mutate(
       `daily total` = c(0, diff(confirmed)),
-      daily_ma = ema(`daily total`, 7)
+      daily_ma = sma(`daily total`, 7)
     ) %>%
     ungroup() %>%
     dplyr::filter(`daily total` > 0 | confirmed > 0) %>%
@@ -1141,7 +1174,8 @@ ggplotly(
       y = "Daily New Confirmed Cases (per million)"
     ) +
     scale_x_date(expand = expansion(c(0, 0.03))) +
-    scale_y_continuous(expand = expansion(c(0, 0.05)))
+    scale_y_continuous(expand = expansion(c(0, 0.05))) +
+    scale_colour_manual(values = countryCols)
 )
 ```
 
@@ -1174,7 +1208,7 @@ plotIncVConf <- confirmed %>%
         d = c(0, diff(rate))
       ) %>%
       mutate_at(
-        vars(d), ema, n = n
+        vars(d), sma, n = n
       ) %>%
       dplyr::filter(
         !is.na(d),
@@ -1226,6 +1260,7 @@ plotIncVConf <- confirmed %>%
   scale_x_log10(
     name = "Cumulative Confirmed Infection Rate (Cases / Million)"
   ) +
+  scale_colour_manual(values = countryCols) +
   facet_wrap(~Region, ncol = 3) 
 ```
 
@@ -1234,7 +1269,7 @@ capIncVConf <- glue(
   "*Daily Increase in Cases plotted against Confirmed Cases, using confirmed cases / million.
   These two values are directly proportional until interventions are successful, at which point the proportional relationship changes, as evidenced by a sudden downwards turn.
   Scaling by population aids in the visualisation of where in the relative infection trajectory each country's control measures have begun to take effect.
-  Daily increases are shown using a 7-day exponential moving average in order to minimise the impact of day-to-day variation.
+  Daily increases are shown using a 7-day simple moving average in order to minimise the impact of day-to-day variation.
   Countries are only shown from the point at which the moving average exceeds {minRate} cases/million, and have exceeded this value for > {minDays} days.
   Regions are as defined by the UN with some combined for convenience if only a small number of countries were available.
   Data is additionally restricted to countries with a population > {comma(minPop)}.*
@@ -1337,7 +1372,7 @@ deaths %>%
   formatPercentage(
     columns = "% Fatal Infections",
     digits = 2
-  )
+  ) 
 ```
 
 
@@ -1397,6 +1432,7 @@ scaledDeathPlot <- deaths %>%
   ) +
   geom_line() +
   scale_y_log10() +
+  scale_colour_manual(values = countryCols) +
   labs(
     x = glue("Days Since Passing {minRate} Deaths / Million"),
     y = "Deaths / Million"
@@ -1440,7 +1476,7 @@ dailyVsTotalDeaths <- deaths %>%
         d = c(0, diff(deaths))
       ) %>%
       mutate_at(
-        vars(deaths, d), ema, n = n
+        vars(deaths, d), sma, n = n
       )
   }
   ) %>%
@@ -1479,6 +1515,7 @@ dailyVsTotalDeaths <- deaths %>%
   geom_line() +
   scale_x_log10(labels = label_comma(accuracy = 1)) +
   scale_y_log10(labels = label_comma(accuracy = 0.01)) +
+  scale_colour_manual(values = countryCols) +
   facet_wrap(~Region, ncol = 3) +
   labs(
     x = "Total Fatalities (per million)",
@@ -1492,7 +1529,7 @@ dailyVsTotalDeaths <- deaths %>%
 capDailyVsTotal <- glue(
   "*Daily Fatalities plotted against Total Fatalities, scaled by population size using Fatalities / Million.
   These two values are directly proportional until interventions are successful, at which point the proportional relationship changes, as evidenced by a sudden downwards turn.
-  Values shown are 7-day exponential moving averages in order to minimise the impact of day-to-day variation.
+  Values shown are 7-day simple moving averages in order to minimise the impact of day-to-day variation.
   Countries are only shown from the point at which the moving average exceeds {minRate} fatality per million people, and has exceeded this value for > {minDays} days.
   Data is additionally restricted to countries with a population > {comma(minPop)}, and those who at one point were recording > {minD} daily fatalities / million.
   Importantly, __due to the time taken from the initial infection to the day of death, this is a lag indicator of the control of infection__.*
@@ -1827,6 +1864,7 @@ p2 <- df %>%
   scale_y_log10(
     expand = expansion(mult = c(0, 0.05))
   ) +
+  scale_colour_manual(values = countryCols) +
   xlab(
     paste(
       "Days since passing", 
@@ -1843,7 +1881,8 @@ cp2 <- glue(
     "*Confirmed __active__ cases of COVID-19 for countries where the confirmed infection rate has exceeded {startingPoint} confirmed active cases/million for more than {nDays} calendar days.
     Only countries with a population greater than {comma(minPop)} are shown for better visualisation.
     Due to difficulties introduced by the currently reported __low active infection rate__ outside Hubei province, data from China has been excluded from this plot, with the exception of Hubei and Hong Kong.
-    __Recovered cases as poorly and irregularly reported by many countries (e.g. Ireland & Norway).
+    __Recovered cases are poorly and irregularly reported by many countries (e.g. Ireland, Serbia & Norway).
+    Some countries, such as Sweden, are not actively reporting recovered cases.
     As a result, this plot may indicate multiple instances of a sudden decline which are a simple artefact of data release schedules.__
     To hide a country, click on the country in the plot legend.
     Clicking again on the country in the legend will restore the data within the plot.
@@ -2161,86 +2200,6 @@ ggplotly(
 ```
 
 
-## State-wise Comparison of Confirmed Infection Rates
-
-
-```{r p5}
-minRate <- 10
-p5 <- confirmed %>%
-  dplyr::filter(
-    Country == "Australia"
-  ) %>%
-  dplyr::rename(State = `Province/State`) %>%
-  left_join(ausPops) %>%
-  mutate(
-    Rate = round(1e6*confirmed / Population, 2),
-    Date = format.Date(date, "%d-%B")
-  ) %>%
-  dplyr::filter(
-    !is.na(Population),
-    Rate > minRate
-  ) %>%
-  arrange(date) %>%
-  mutate(
-    State = fct_inorder(State)
-  ) %>%
-  dplyr::rename(
-    Confirmed = confirmed
-  ) %>%
-  ggplot(
-    aes(
-      x = date, y = Rate, colour = State, 
-      label = Date, key = Confirmed
-      )
-  ) +
-  geom_point() +
-  # geom_smooth(
-  #   data = . %>%
-  #     dplyr::filter(date >= dt - 14),
-  #   method = "lm",
-  #   se = FALSE,
-  #   show.legend = FALSE,
-  #   size = 1/2
-  # ) +
-  geom_smooth(
-    method = "loess",
-    se = FALSE,
-    linetype = 3,
-    size = 1/2
-  ) +
-  scale_y_log10() +
-  labs(
-    x = "Date",
-    y = "Confirmed Infection Rate (cases/million)"
-  )
-# Hide the tooltip from the regression lines
-n <- length(levels(p5$data$State))
-p5 <- ggplotly(p5, tooltip = c("Date", "Rate", "State", "Confirmed"))
-regIndex <- seq(n + 1, length.out = length(p5$x$data) , by = 1)
-p5$x$data[regIndex] <- lapply(
-  p5$x$data[regIndex],
-  function(x){
-  x$hoverinfo <- "none"
-  x
-})
-```
-
-```{r cp5, echo=FALSE}
-cp5 <- glue(
-"*Infection rates for each state with data beginning for each state once {minRate} confirmed cases /million was exceeded.
-States are shown in order of the initial date they passed {minRate} cases/million.
-Most states show a strong upward curve during the week following 19^th^ March, clearly showing the impact of the Ruby Princess, however the consistent deviation below regression lines for all states is strongly suggestive of a slowing in the recent infection rate.
-The hypothetical growth in the infection rate without that event occurring is not calculated here, however it is clear that the spread of COVID-19 has not continued at the same pace after that event initially occurred.*
-"
-)
-```
-
-
-```{r plotP5, fig.cap=cp5, fig.width=10, fig.height=7}
-p5
-```
-
-
 ## Assessment of Testing Within Each State
 
 ```{r updateTested}
@@ -2325,17 +2284,17 @@ latestAU %>%
 
 ## Current Growth Factor
 
-```{r plotGF, fig.width=10, fig.height=8, fig.cap="*Growth factor for each State/Territory. This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. In order to try and minimise volatility a 7 day (i.e. 1 week) __exponential__ moving average was used, in contrast to the simple 5-day average advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478). Dashed lines are a loess curve*"}
+```{r plotGF, fig.width=10, fig.height=8, fig.cap="*Growth factor for each State/Territory. This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. In order to try and minimise volatility a 5 day simple moving average was used, as advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478). Dashed lines are a loess curve*"}
 list(
   confirmed %>%
-    dplyr::filter(Country == "Australia") %>%
+    dplyr::filter(Country == "Australia", date < dt) %>%
     arrange(date) %>%
     group_by(
       `Province/State`
     ) %>%
     mutate(
       new = c(0, diff(confirmed)),
-      new_ma = ema(new, 7)
+      new_ma = sma(new, 5)
     ) %>%
     dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
     mutate(
@@ -2348,14 +2307,14 @@ list(
     ungroup() %>%
     arrange(`Province/State`),
   confirmed %>%
-    dplyr::filter(Country == "Australia") %>%
+    dplyr::filter(Country == "Australia", date < dt) %>%
     arrange(date) %>%
     group_by(Country, date) %>%
     summarise_at(vars(confirmed), sum) %>%
     ungroup() %>%
     mutate(
       new = c(0, diff(confirmed)),
-      new_ma = ema(new, 7)
+      new_ma = sma(new, 5)
     ) %>%
     dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
     mutate(
@@ -2387,7 +2346,7 @@ list(
   ) +
   facet_wrap(~`Province/State`, scales = "free_x") +
   theme(legend.position = "none") +
-  coord_cartesian(ylim= c(0, 5))
+  coord_cartesian(ylim= c(0.0, 5))
 ```
 
 
