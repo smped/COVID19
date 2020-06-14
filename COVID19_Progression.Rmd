@@ -350,8 +350,8 @@ saTxt <- saUrl  %>%
 # altSaUrl <- c(
 #   "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}",
 #   "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}"
-#   ) %>% 
-#   vapply(glue, character(1)) %>% 
+#   ) %>%
+#   vapply(glue, character(1)) %>%
 #   str_to_lower()
 # validSa <- altSaUrl %>%
 #   lapply(read_html) %>%
@@ -768,13 +768,13 @@ Population estimates for Hubei Province were taken from the 2018 estimates given
 
 Confirmed cases of COVID-19 as provided by the Chinese Government have been discussed elsewhere as unusual, and data appears potentially unreliable.
 In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
+**As of June 6th, Brazil has also stopped releasing any offical figures related to COVID-19.**
 
 However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for most countries.
 Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
 Information on *recovered cases has been difficult to accurately obtain* due inconsistent methods for considering a case as recovered, and lack of reporting for these cases in many jurisdictions.
 In Australia, some states (e.g. NSW & QLD) have only begun releasing these figures in mid-April, whilst other states such as Victoria were releasing these numbers from mid-March.
 
-**As of June 6th, Brazil has stopped releasing any figures related to COVID-19. All values related to Brazil will be extremely outdated and inaccurate.**
 
 # International Data 
 
@@ -787,6 +787,10 @@ minPop <- 2e6
 For this section, most data is presented *relative to population size*.
 Growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
 This equates to about `r round(startingPoint*dplyr::filter(wikiPops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
+
+Most plots in this section have been filtered for countries with a population, cases or fatalities larger than a given value.
+Due to their significantly strong or poor performances, a handful of countries have been specified to be always included regardless of this filter.
+These countries are `r pander(sort(alwaysShow))`
 
 ## Regional Data {.tabset}
 
@@ -828,7 +832,7 @@ ggplotly(
 
 ### Daily New Infection Rates
 
-```{r plotRegionDailyCases, fig.height=8, fig.width=10, fig.cap = "*Daily new confirmed infections, shown as cases / million. Values are calculated within the total population for each continent. The solid black line is the 7-day exponential moving average calculated within each continent*"}
+```{r plotRegionDailyCases, fig.height=8, fig.width=10, fig.cap = "*Daily new confirmed infections, shown as cases / million. Values are calculated within the total population for each continent. The solid black line is the 7-day simple moving average calculated within each continent*"}
 ggplotly(
   confirmed %>% 
     inner_join(wikiPops) %>%
@@ -863,13 +867,13 @@ ggplotly(
     ) +
     geom_bar(stat = "identity") +
     geom_line(
-      aes(Date, EMA),
+      aes(Date, MA),
       data = . %>%
         group_by(Continent, Date) %>%
         summarise(
           `Daily Rate` = sum(`Daily Rate`)
         ) %>%
-        mutate(EMA = ema(`Daily Rate`, 7)),
+        mutate(MA = sma(`Daily Rate`, 7)),
       inherit.aes = FALSE
     ) +
   scale_colour_manual(values = c(NA, "black")) +
@@ -1107,15 +1111,6 @@ ggplotly(
   )) 
 ```
 
-All figures and tables presented here simply aim to show an alternative viewpoint on the data.
-Every way to view COVID-19 data will mask important features, and the values shown here do not take into account vital factors such as population density, variability of infection across regions within countries, social culture and demographics.
-Many countries may not be directly comparable for a combination of the above factors.
-It is simply to view the data through the lens of a country's population size using a value which should be easily interpretable.
-
-In the above plot:
-
-- Only countries are shown where the infection rate has surpassed `r startingPoint` cases/million for more than `r minDays` days.
-This choice seemed to be a useful way of enabling the comparison of COVID-19 progression across countries after scaling for population size
 
 ### Daily New Cases
 
@@ -1281,7 +1276,7 @@ capIncVConf <- glue(
 ```{r showIncVConf, fig.cap=capIncVConf, fig.height=10, fig.width=10}
 ggplotly(plotIncVConf +
   coord_cartesian(
-    ylim = c(0.3, max(plotIncVConf$data$`Average Daily Increase`)))
+    ylim = c(0.5, max(plotIncVConf$data$`Average Daily Increase`)))
 )
 ```
 
@@ -1630,9 +1625,11 @@ plot_grid(
 
 ### Fatality Rate Vs Time
 
+
 ```{r plotFr}
 minDays <- 40
-minPop <- 10e6
+minPop <- 4e6
+startingPoint <- 2
 df <- confirmed %>%
   inner_join(deaths) %>%
   group_by(Country, date) %>%
@@ -1645,10 +1642,12 @@ df <- confirmed %>%
   ) %>%
   ungroup() %>%
   mutate(
-    `Infection Rate` = 1e6 * confirmed / Population
+    `Infection Rate` = 1e6 * confirmed / Population,
+    f  = 1e6 * deaths / Population
   ) %>%
   dplyr::filter(
-    `Infection Rate` > startingPoint
+    f > startingPoint
+    # `Infection Rate` > startingPoint
     ) %>%
   group_by(Country) %>%
   mutate(
@@ -1685,13 +1684,15 @@ plotFr <- mutate(
   )
 ) %>% 
   rename_all(str_to_title) %>%
+  mutate(`Population (millions)` = round(Population / 1e6, 2)) %>%
   ggplot(
     aes(
       x = Days, y = Country, fill = Rate,
       conf = Confirmed, 
       deaths = Deaths,
       date = Date,
-      label = `Fatality Rate`
+      label = `Fatality Rate`,
+      key = `Population (millions)`
       )
   ) +
   geom_raster() +
@@ -1714,7 +1715,7 @@ plotFr <- mutate(
   scale_y_discrete(expand = expansion(0, 0)) +
   labs(
     x = glue(
-      "Days since passing {startingPoint} cases/million"
+      "Days since passing {startingPoint} fatalities/million"
     ),
     y = c(),
     fill = "Fatality\nRate"
@@ -1726,7 +1727,7 @@ plotFr <- mutate(
 
 ```{r cpFr}
 cpFr <- glue(
-  "*Fatality Rate for confirmed cases after passing {startingPoint} confirmed cases / million.
+  "*Fatality Rate from confirmed cases after passing {startingPoint} fatalities / million.
   Only countries with {minDays} days of data beyond this time-point and a population size >{comma(minPop)} are shown.
   Country order is based on clustering using the most recent values.
   Countries with no recorded fatalities have been excluded for obvious reasons. 
@@ -1741,7 +1742,7 @@ ggplotly(
   plotFr ,
   tooltip = c(
     "Country", "Date", "Days", "Confirmed", "Deaths",
-    "Fatality Rate"
+    "Fatality Rate", "Population (millions)"
     )
   )
 ```
@@ -1781,6 +1782,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 
 ```{r p2}
 minDays <- 30
+startingPoint <- 4
 minPop <- 8e6
 df <- confirmed %>%
   dplyr::filter(
@@ -1812,6 +1814,7 @@ df <- confirmed %>%
     days = date - min(date)
   ) %>%
   dplyr::filter(max(days) > minDays | Country %in% alwaysShow) %>% 
+  dplyr::filter(max(recovered) > 0) %>%
   ungroup() %>%
   mutate(
     days = as.integer(days),
@@ -1882,7 +1885,7 @@ cp2 <- glue(
     Only countries with a population greater than {comma(minPop)} are shown for better visualisation.
     Due to difficulties introduced by the currently reported __low active infection rate__ outside Hubei province, data from China has been excluded from this plot, with the exception of Hubei and Hong Kong.
     __Recovered cases are poorly and irregularly reported by many countries (e.g. Ireland, Serbia & Norway).
-    Some countries, such as Sweden, are not actively reporting recovered cases.
+    Some countries, such as Sweden, are not reporting recovered cases and these countries have been excluded from this plot.
     As a result, this plot may indicate multiple instances of a sudden decline which are a simple artefact of data release schedules.__
     To hide a country, click on the country in the plot legend.
     Clicking again on the country in the legend will restore the data within the plot.
@@ -1933,13 +1936,12 @@ p4 <- confirmed %>%
   dplyr::filter(rate > startingPoint) %>% 
   group_by(Country) %>%
   mutate(
-    active = confirmed - recovered - deaths
-  ) %>%
-  mutate(
+    active = confirmed - recovered - deaths,
     active = 100*active / confirmed,
     recovered = 100*recovered / confirmed,
     fatalities = 100*deaths / confirmed
   ) %>%
+  dplyr::filter(max(recovered) > 1) %>%
   ungroup() %>%
   dplyr::filter(active < 100) %>%
   arrange(active) %>% 
@@ -1981,7 +1983,7 @@ p4 <- confirmed %>%
   )
 ```
 
-```{r plotP4, fig.height=9, fig.width=8, fig.cap = glue("*Fatality, Recovery and Active Infection rates for countries which have exceeded {startingPoint} confirmed cases / million, and with a population size > {comma(minPop)}. Countries are ordered by the percentageof cases that remain active.*")}
+```{r plotP4, fig.height=9, fig.width=8, fig.cap = glue("*Fatality, Recovery and Active Infection rates for countries which have exceeded {startingPoint} confirmed cases / million, and with a population size > {comma(minPop)}. Countries are ordered by the percentage of cases that remain active. Only countries with a reported recovery rate > 1% are shown*")}
 ggplotly(p4)
 ```
 
