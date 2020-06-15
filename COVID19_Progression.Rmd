@@ -1455,6 +1455,74 @@ scaledDeathPlot %>%
 ```
 
 
+### Daily Fatalities
+
+```{r}
+minPop <- 5e6
+minRate <- 0.1
+n <- 7
+```
+
+
+```{r dailyFatalityPlot, fig.width=10, fig.height=10, fig.cap = glue("*Average daily fatality rate (per million) using a {n}-day moving average. Only countries with a population greater than {comma(minPop)} and a daily fatality rate that has exceeded {minRate} deaths/million are included. __Clicking the Autoscale icon can be very helpful for this visualisation__.*")}
+ggplotly(
+  deaths %>%
+    group_by(Country, date) %>%
+    summarise_at(vars(deaths), sum) %>%
+    mutate(
+      daily = c(0, diff(deaths)),
+      MA = sma(daily, n)
+    ) %>%
+    inner_join(wikiPops) %>%
+    ungroup() %>%
+    dplyr::filter(
+      Population > minPop | Country %in% alwaysShow,
+      !is.na(MA),
+      deaths > 0
+    ) %>%
+    arrange(date) %>%
+    mutate(
+      rate = round(1e6 * MA / Population, 2),
+      Region = as.character(Region),
+      Region = str_replace_all(
+        Region, "(Central|Southern) Asia", "Central & Southern Asia"
+      ),
+      Region = str_replace_all(
+        Region, "(Eastern|South-eastern) Asia", "Eastern & South-Eastern Asia"
+      ),
+      Region = str_replace_all(
+        Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+      ),
+      Region = str_replace_all(
+        Region, "(Western|Northern) Africa", "Western & Northern Africa"
+      ),
+      Region = str_replace_all(
+        Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+      ),
+      Region = fct_lump(Region, n = 11),
+      Country = fct_inorder(Country),
+      `Population (millions)` = round(Population / 1e6, 2)
+    ) %>%
+    group_by(Country) %>%
+    dplyr::filter(max(rate) > minRate) %>%
+    dplyr::rename(
+      Date = date,
+      `Daily Fatility Rate` = rate,
+      `Actual Daily Total` = daily
+    ) %>%
+    ggplot(
+      aes(Date, `Daily Fatility Rate`, colour = Country, label = `Population (millions)`, key = `Actual Daily Total`)
+    ) +
+    geom_line() +
+    facet_wrap(~Region, ncol = 3) +
+    scale_colour_manual(values = countryCols) +
+    labs(
+      y = "Average Daily Fatalities (per million)"
+    )
+)
+```
+
+
 ### Daily Increase in Fatalities Vs Confirmed Fatalities
 
 ```{r dailyVsTotalDeaths}
