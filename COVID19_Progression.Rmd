@@ -34,6 +34,8 @@ library(DT)
 library(plotly)
 library(cowplot)
 library(QuantTools)
+library(ggfortify)
+library(readxl)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
 panderOptions("table.style", "rmarkdown")
@@ -768,7 +770,7 @@ Population estimates for Hubei Province were taken from the 2018 estimates given
 
 Confirmed cases of COVID-19 as provided by the Chinese Government have been discussed elsewhere as unusual, and data appears potentially unreliable.
 In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
-**As of June 6th, Brazil has also stopped releasing any offical figures related to COVID-19.**
+**As of June 6th, Brazil has also stopped releasing any official figures related to COVID-19.**
 
 However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for most countries.
 Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
@@ -2411,6 +2413,7 @@ latestAU %>%
     emphasize.strong.rows = nrow(.)
   )
 ```
+
 
 
 # R Session Information
