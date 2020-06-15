@@ -2201,8 +2201,136 @@ ggplotly(
 )
 ```
 
+## Daily New Cases
 
-## Assessment of Testing Within Each State
+```{r, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day average. Days which are above average are highlighted in red.*"}
+ggplotly(
+  confirmed %>%
+    dplyr::filter(Country == "Australia") %>%
+    group_by(`Province/State`) %>%
+    mutate(daily = c(0, diff(confirmed))) %>%
+    ungroup() %>%
+    dplyr::filter(confirmed > 0) %>%
+    mutate(
+      daily = case_when(
+        daily < 0 ~ 0,
+        daily >= 0 ~ daily
+      )
+    ) %>%
+    bind_rows(
+      group_by(., date) %>%
+        summarise(daily = sum(daily)) %>%
+        ungroup() %>%
+        mutate(`Province/State` = "All States")
+    ) %>%
+    group_by(`Province/State`) %>%
+    mutate(
+      MA = round(sma(daily, 7), 2),
+      `Above Average` = daily > MA
+    ) %>%
+    dplyr::filter(date > "2020-03-01") %>%
+    ggplot(aes(date, daily)) +
+    geom_col(
+      aes(fill = `Above Average`),
+      data = . %>% dplyr::filter(!is.na(`Above Average`)),
+      # fill = "grey80",
+      colour = "grey50"
+    ) +
+    geom_line(aes(y = MA), colour = "blue") +
+    facet_wrap(~`Province/State`, scales = "free_y") +
+    labs(
+      x = "Date",
+      y = "Daily New Cases",
+      fill = "\nAbove\nAverage"
+    ) +
+    scale_fill_manual(values = c("white", rgb(1, 0.2, 0.2))) 
+)
+```
+
+
+## Current Growth Factor
+
+```{r}
+n <- 14
+cp <- glue(
+  "*Growth factor for each State/Territory. 
+  This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. 
+  In order to try and minimise volatility a {n} day simple moving average was used, in contrast to the 5 day average as advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478).
+  This enables assessment of the growth factor over an entire quarantine period.
+  If no new cases are observed over this period, the value is not able to be calculated.*"
+)
+```
+
+
+```{r plotGF, fig.width=10, fig.height=8, fig.cap=cp}
+gf <- list(
+  confirmed %>%
+    dplyr::filter(Country == "Australia", date < dt) %>%
+    arrange(date) %>%
+    group_by(
+      `Province/State`
+    ) %>%
+    mutate(
+      new = c(0, diff(confirmed)),
+      new_ma = sma(new, n)
+    ) %>%
+    dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
+    mutate(
+      R = c(NA, new_ma[-1] / new_ma[-n()]),
+      R = case_when(
+        is.nan(R) ~ NA_real_,
+        !is.nan(R) ~ R
+      )
+    ) %>%
+    ungroup() %>%
+    arrange(`Province/State`),
+  confirmed %>%
+    dplyr::filter(Country == "Australia", date < dt) %>%
+    arrange(date) %>%
+    group_by(Country, date) %>%
+    summarise_at(vars(confirmed), sum) %>%
+    ungroup() %>%
+    mutate(
+      new = c(0, diff(confirmed)),
+      new_ma = sma(new, n)
+    ) %>%
+    dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
+    mutate(
+      R = c(NA, new_ma[-1] / new_ma[-n()]),
+      R = case_when(
+        is.nan(R) ~ NA_real_,
+        !is.nan(R) ~ R
+      ),
+      `Province/State` = "All States"
+    ) %>%
+    arrange(`Province/State`)
+) %>%
+  bind_rows() %>%
+  dplyr::filter(date > ymd("2020-03-15")) %>%
+  ggplot(aes(date, R, colour = `Province/State`)) +
+  geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
+  geom_hline(yintercept = 1) +
+  geom_label(
+    aes(label = R),
+    data = . %>%
+      dplyr::filter(date == max(date)) %>%
+      mutate(R = round(R, 2), date = date + 1),
+    fill = rgb(1, 1, 1, 0.3),
+    show.legend = FALSE
+  ) +
+  labs(
+    x = "Date", y = "Growth Factor"
+  ) +
+  facet_wrap(~`Province/State`, scales = "free_x") +
+  theme(legend.position = "none") +
+  coord_cartesian(ylim = c(0.0, 3))
+gf
+```
+
+The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R, 2)` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R > 1, "*considerable cause for concern*", "some degree of confidence that the spread of infections is relatively under control")`.
+In particular, the **outbreak in Victoria is clearly not under control**.
+
+## Testing Within Each State
 
 ```{r updateTested}
 latestAU %>%
@@ -2284,86 +2412,6 @@ latestAU %>%
   )
 ```
 
-## Current Growth Factor
-
-```{r}
-n <- 14
-cp <- glue(
-  "*Growth factor for each State/Territory. 
-  This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. 
-  In order to try and minimise volatility a {n} day simple moving average was used, in contrast to the 5 day average as advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478).
-  This enables assessment of the growth factor over an entire quarantine period.
-  If no new cases are observed over this period, the value is not able to be calculated.*"
-)
-```
-
-
-```{r plotGF, fig.width=10, fig.height=8, fig.cap=cp}
-gf <- list(
-  confirmed %>%
-    dplyr::filter(Country == "Australia", date < dt) %>%
-    arrange(date) %>%
-    group_by(
-      `Province/State`
-    ) %>%
-    mutate(
-      new = c(0, diff(confirmed)),
-      new_ma = sma(new, n)
-    ) %>%
-    dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
-    mutate(
-      R = c(NA, new_ma[-1] / new_ma[-n()]),
-      R = case_when(
-        is.nan(R) ~ NA_real_,
-        !is.nan(R) ~ R
-      )
-    ) %>%
-    ungroup() %>%
-    arrange(`Province/State`),
-  confirmed %>%
-    dplyr::filter(Country == "Australia", date < dt) %>%
-    arrange(date) %>%
-    group_by(Country, date) %>%
-    summarise_at(vars(confirmed), sum) %>%
-    ungroup() %>%
-    mutate(
-      new = c(0, diff(confirmed)),
-      new_ma = sma(new, n)
-    ) %>%
-    dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
-    mutate(
-      R = c(NA, new_ma[-1] / new_ma[-n()]),
-      R = case_when(
-        is.nan(R) ~ NA_real_,
-        !is.nan(R) ~ R
-      ),
-      `Province/State` = "All States"
-    ) %>%
-    arrange(`Province/State`)
-) %>%
-  bind_rows() %>%
-  dplyr::filter(date > ymd("2020-03-15")) %>%
-  ggplot(aes(date, R, colour = `Province/State`)) +
-  geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
-  geom_hline(yintercept = 1) +
-  geom_label(
-    aes(label = R),
-    data = . %>%
-      dplyr::filter(date == max(date)) %>%
-      mutate(R = round(R, 2), date = date + 1),
-    fill = rgb(1, 1, 1, 0.3),
-    show.legend = FALSE
-  ) +
-  labs(
-    x = "Date", y = "Growth Factor"
-  ) +
-  facet_wrap(~`Province/State`, scales = "free_x") +
-  theme(legend.position = "none") +
-  coord_cartesian(ylim = c(0.0, 3))
-gf
-```
-
-The current `r n` day growth factor is `dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R > 1, "*considerable cause for concern*", "some degree of confidence that the spread of infections is relatively under control")`.
 
 # R Session Information
 
