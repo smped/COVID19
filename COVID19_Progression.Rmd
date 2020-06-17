@@ -930,7 +930,7 @@ ggplotly(
 ```
 
 
-## Individual Countries {.tabset}
+## Infection Rates {.tabset}
 
 ### Table of Most Impacted Countries
 
