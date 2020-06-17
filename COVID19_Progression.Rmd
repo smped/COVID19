@@ -309,11 +309,12 @@ waTxt <- waUrl %>%
   str_trim() %>%
   .[. != ""] %>%
   stringi::stri_trans_general("latin-ascii") 
-waTests <- waTxt %>%
-  str_subset("test(s|ed).*performed") %>%
-  str_replace_all(".+ ([0-9,]+) COVID.+", "\\1") %>%
-  str_remove_all(",") %>%
-  as.numeric()
+# waTests <- waTxt %>%
+#   str_subset("test(s|ed).*performed") %>%
+#   str_replace_all(".+ ([0-9,]+) COVID.+", "\\1") %>%
+#   str_remove_all(",") %>%
+#   as.numeric()
+waTests <- 143418 
 waRecov <- waTxt %>%
   str_subset("recovered") %>%
   str_subset("[0-9]..") %>%
