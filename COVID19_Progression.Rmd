@@ -1,6 +1,6 @@
 ---
 title: "COVID-19 Progression"
-date: "`r paste('Last Updated:', format(Sys.time(), '%d-%B-%Y %H:%M'), '(UTC+8:30)')`"
+date: "`r paste('Last Updated:', format(Sys.time(), '%d-%B-%Y %H:%M'), '(UTC+9:30)')`"
 output: 
   html_document: 
     code_folding: hide
@@ -42,6 +42,16 @@ panderOptions("table.style", "rmarkdown")
 panderOptions("missing", "")
 theme_set(theme_bw())
 ```
+
+```{r shiftAxisLabel}
+shiftAxisLabel <- function(x, k = 2){
+  x$x$layout$annotations[[2]]$x <- x$x$layout$annotations[[2]]$x*k
+  x$x$layout$margin$l <- x$x$layout$margin$l*k
+  x
+}
+```
+
+
 
 ```{r dt}
 # Handle updates between 12am & 9am
@@ -756,7 +766,7 @@ wikiPops <- read_tsv("wikiPops.tsv") %>%
 ```
 
 ```{r alwaysShow}
-alwaysShow <- c("Australia", "New Zealand", "US", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland", "Russia", "Brazil", "Kuwait", "Finland", "Norway")
+alwaysShow <- c("Australia", "New Zealand", "US", "Canada", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland", "Russia", "Brazil", "Kuwait", "Finland", "Norway")
 ```
 
 
@@ -867,7 +877,8 @@ ggplotly(
     scale_y_log10(label = comma_format(1)) + 
     facet_wrap(~Continent, ncol = 2) +
     labs(x = "Date", y = "Cumulative Infection Rate (Confirmed Cases / Million)")
-)
+) %>%
+  shiftAxisLabel(k = 1.5)
 ```
 
 
@@ -926,7 +937,8 @@ ggplotly(
       y = "Daily New Infection Rate (cases / million)"
     ),
   tooltip  = c("Date", "Daily Rate", "Region")
-)
+) %>%
+  shiftAxisLabel(k = 3)
 ```
 
 
@@ -1149,14 +1161,16 @@ ggplotly(
   p, 
   tooltip = c(
     "Days", "Rate", "Country", "Date", "Confirmed"
-  )) 
+  )) %>%
+  shiftAxisLabel(k = 1.5)
 ```
 
 
 ### Daily New Cases
 
-```{r plotNewDailyCountry, fig.width=10, fig.height=10, fig.cap = "*Daily New Confirmed Cases (per million) using each country's population to calculate the case rate. 7 day Simple Moving Averages are used to plot daily case rates in order to minimise the impact of single-day spikes and irregular reporting. Daily Totals provided when hovering are the reported number of cases for that specific day, without smoothing or scaling.*"}
-minPop <- 4e6
+```{r plotNewDailyCountry, fig.width=10, fig.height=10, fig.cap = "*Daily New Confirmed Cases (per million) using each country's population to calculate the case rate. 7 day Simple Moving Averages are used to plot daily case rates in order to minimise the impact of single-day spikes and irregular reporting. Daily Totals provided when hovering are the reported number of cases for that specific day, without smoothing or scaling. Only countries with more than 4,000,000 people and where the daily rate exceeded 12 cases/million are shown.*"}
+minPop <- 5e6
+minRate <- 12
 ggplotly(
   confirmed %>%
     group_by(Country, date) %>%
@@ -1175,26 +1189,24 @@ ggplotly(
     mutate(
       `Daily Rate` = round(1e6 * daily_ma / Population, 2),
       Region = str_replace_all(
-        Region, "(Southern|Western) Europe", "Southern & Western Europe"
-      ),
-      Region = str_replace_all(
         Region, "(Central|Southern) Asia", "Central & Southern Asia"
       ),
+      # Region = str_replace_all(
+      #   Region, "(Eastern|South-eastern) Asia", "Eastern & South-Eastern Asia"
+      # ),
       Region = str_replace_all(
-        Region, "(Eastern|South-eastern) Asia", "Eastern & South-Eastern Asia"
+        Region, "(Northern America|Caribbean)", "Caribbean & Northern America"
       ),
-      Region = str_replace_all(
-        Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
-      ),
-      Region = str_replace_all(
-        Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
-      ),
+      Region = str_replace_all(Region, "(.+) Africa", "Africa (All Regions)"),
       Region = fct_lump(Region, n = 11)
     ) %>%
+    group_by(Country) %>%
     dplyr::filter(
       date > "2020-03-01",
-      date < dt
+      date < dt,
+      max(`Daily Rate`) > minRate | Country %in% alwaysShow
     ) %>%
+    ungroup() %>%
     rename_all(str_to_title) %>%
     mutate(
       `Population (millions)` = round(Population / 1e6, 2)
@@ -1204,15 +1216,16 @@ ggplotly(
     ) +
     geom_line() +
     facet_wrap(
-      ~Region, ncol = 3
+      ~Region, ncol = 3, scales = "free_y"
     ) +
     labs(
       y = "Daily New Confirmed Cases (per million)"
     ) +
     scale_x_date(expand = expansion(c(0, 0.03))) +
     scale_y_continuous(expand = expansion(c(0, 0.05))) +
-    scale_colour_manual(values = countryCols)
-)
+    scale_colour_manual(values = countryCols) 
+) %>%
+  shiftAxisLabel()
 ```
 
 
@@ -1318,7 +1331,8 @@ capIncVConf <- glue(
 ggplotly(plotIncVConf +
   coord_cartesian(
     ylim = c(0.5, max(plotIncVConf$data$`Average Daily Increase`)))
-)
+) %>%
+  shiftAxisLabel(1.5)
 ```
 
 
@@ -1490,7 +1504,8 @@ cp <- glue(
 scaledDeathPlot %>%
   ggplotly(
     tooltip = c("Country", "Date", "Rate", "Deaths", "One Death Every", "Population (millions)")
-  )
+  ) %>%
+  shiftAxisLabel(1.5)
 ```
 
 
@@ -1553,12 +1568,13 @@ ggplotly(
       aes(Date, `Daily Fatility Rate`, colour = Country, label = `Population (millions)`, key = `Actual Daily Total`)
     ) +
     geom_line() +
-    facet_wrap(~Region, ncol = 3) +
+    facet_wrap(~Region, ncol = 3, scales = "free_y") +
     scale_colour_manual(values = countryCols) +
     labs(
       y = "Average Daily Fatalities (per million)"
     )
-)
+) %>%
+  shiftAxisLabel(1.5)
 ```
 
 
@@ -1613,14 +1629,15 @@ dailyVsTotalDeaths <- deaths %>%
   mutate(
     Population = comma(round(Population, -3)),
     Country = fct_inorder(Country),
+    Region = str_replace_all(Region, "(Caribbean|Northern America)", "Caribbean & Northern America"),
     Region = fct_lump(Region, n = 11)
     ) %>%
   ggplot(aes(`Total Fatalities`, `Daily Fatalities`, colour = Country, label = Date, key = Population)) +
   geom_line() +
   scale_x_log10(labels = label_comma(accuracy = 1)) +
-  scale_y_log10(labels = label_comma(accuracy = 0.01)) +
+  scale_y_log10(labels = label_comma(accuracy = 0.01), limits = c(0.01, NA)) +
   scale_colour_manual(values = countryCols) +
-  facet_wrap(~Region, ncol = 3) +
+  facet_wrap(~Region, ncol = 3, scales = "free_y") +
   labs(
     x = "Total Fatalities (per million)",
     y = "Daily Fatalities (per million)"
@@ -1643,11 +1660,9 @@ capDailyVsTotal <- glue(
 
 ```{r showDailyVsTotalDeaths, fig.width=10, fig.height=9, fig.cap = capDailyVsTotal}
 ggplotly(
-  dailyVsTotalDeaths +
-    coord_cartesian(
-      ylim = c(0.01, max(dailyVsTotalDeaths$data$`Daily Fatalities`))
-    )
-)
+  dailyVsTotalDeaths 
+) %>%
+  shiftAxisLabel(1.6)
 ```
 
 
@@ -2010,7 +2025,8 @@ cp2 <- glue(
 ggplotly(
   p2 +
     coord_cartesian(ylim = range(p2$data$Rate))
-) 
+) %>%
+  shiftAxisLabel(1.8)
 ```
 
 Notable features of this perspective are:
