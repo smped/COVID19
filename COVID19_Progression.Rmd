@@ -1335,6 +1335,76 @@ ggplotly(plotIncVConf +
   shiftAxisLabel(1.5)
 ```
 
+### Comparison of Total Confirmed Infections
+
+```{r, fig.width=10, fig.height=10, fig.cap="*Most impacted 25 countries when combining rankings across both total confirmed cases, and total confirmed cases/million. Only countries with a population greater than 5 million are shown.*"}
+minPop <- 5e6
+confirmed %>%
+  group_by(Country) %>%
+  dplyr::filter(date == max(date)) %>%
+  group_by(Country, date) %>%
+  summarise_at(vars(confirmed), sum) %>%
+  ungroup() %>%
+  inner_join(wikiPops) %>%
+  dplyr::filter(Population > minPop) %>%
+  mutate(
+    `Infection Rate` = 1e6*confirmed / Population,
+    TotalRank = rank(1/confirmed),
+    RateRank = rank(1/`Infection Rate`),
+    AveRank = (TotalRank + RateRank) / 2
+  ) %>%
+  arrange(desc(RateRank)) %>%
+  mutate(
+    Country = fct_inorder(Country)
+  ) %>%
+  arrange(AveRank) %>%
+  dplyr::slice(1:25) %>%
+  droplevels() %>%
+  mutate(
+    Continent = fct_inorder(as.character(Continent))
+  ) %>%
+  dplyr::select(-contains("Rank")) %>%
+  pivot_longer(
+    cols = c(confirmed, `Infection Rate`),
+    names_to = "name",
+    values_to = "value"
+  ) %>%
+  mutate(
+    lab_y = case_when(
+      name == "confirmed" ~ value + 2.5e5,
+      name != "confirmed" ~ value + 1.2e3
+    )
+  ) %>%
+  ggplot(aes(Country, value, fill = Country)) +
+  geom_col(colour = "black") +
+  geom_label(
+    aes(y = lab_y, label = comma(value)), 
+    alpha = 0.3
+  ) +
+  facet_grid(
+    Continent~name, 
+    scales = "free", space = "free_y", 
+    labeller = as_labeller(
+      c(
+        `Infection Rate` = "Confirmed Cases / Million",
+        confirmed = "Total Confirmed Cases",
+        structure(levels(wikiPops$Continent), names = levels(wikiPops$Continent))
+      )
+    ), 
+    switch = "x"
+  ) +
+  coord_flip() +
+  scale_fill_viridis_d(option = "magma") +
+  scale_y_continuous(labels = comma, expand = expansion(c(0, 0.1))) +
+  theme(
+    axis.title = element_blank(),
+    legend.position = "none",
+    panel.spacing.x = unit(0.02, "npc"),
+    strip.text = element_text(face = "bold"),
+    strip.placement = "outside"
+  )
+```
+
 
 ## Fatalities {.tabset}
 
