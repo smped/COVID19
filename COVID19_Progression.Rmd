@@ -242,9 +242,9 @@ latestAU$QLD <- tibble(
 vicRecov <- vicTests <- NA_real_
 vicUrl <- c(
   "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt, '%d')}-{format.Date(dt, '%B')}-{year(dt)}",
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt)}-{format.Date(dt, '%B')}-{year(dt)}",
+  "https://www.dhhs.vic.gov.au/coronavirus-update-victorians-{day(dt)}-{format.Date(dt, '%B')}-{year(dt)}",
   "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt - 1, '%d')}-{format.Date(dt - 1, '%B')}-{year(dt-1)}",
-    "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt - 1)}-{format.Date(dt - 1, '%B')}-{year(dt-1)}"
+    "https://www.dhhs.vic.gov.au/coronavirus-update-victorians-{day(dt - 1)}-{format.Date(dt - 1, '%B')}-{year(dt-1)}"
   ) %>% 
   vapply(glue, character(1)) %>%
   str_to_lower() %>%
@@ -1337,8 +1337,18 @@ ggplotly(plotIncVConf +
 
 ### Comparison of Total Confirmed Infections
 
-```{r, fig.width=10, fig.height=10, fig.cap="*Most impacted 25 countries when combining rankings across both total confirmed cases, and total confirmed cases/million. Only countries with a population greater than 5 million are shown.*"}
+```{r}
 minPop <- 5e6
+totalConf <- confirmed %>% 
+  group_by(Country) %>%
+  dplyr::filter(date == max(date)) %>%
+  ungroup() %>%
+  summarise_at(vars(confirmed), sum) %>%
+  pull(confirmed)
+```
+
+
+```{r, fig.width=10, fig.height=10, fig.cap=glue("*Most impacted 25 countries when combining rankings across both total confirmed cases, and total confirmed cases/million. Only countries with a population greater than {comma(minPop)} are shown. At the time of preparation, the total number of global infections stands at {comma(totalConf)}.*")}
 confirmed %>%
   group_by(Country) %>%
   dplyr::filter(date == max(date)) %>%
@@ -1371,14 +1381,14 @@ confirmed %>%
   ) %>%
   mutate(
     lab_y = case_when(
-      name == "confirmed" ~ value + 2.5e5,
+      name == "confirmed" ~ value + 2.75e5,
       name != "confirmed" ~ value + 1.2e3
     )
   ) %>%
   ggplot(aes(Country, value, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = lab_y, label = comma(value)), 
+    aes(y = lab_y, label = comma_format(1)(value)), 
     alpha = 0.3
   ) +
   facet_grid(
@@ -1404,7 +1414,6 @@ confirmed %>%
     strip.placement = "outside"
   )
 ```
-
 
 ## Fatalities {.tabset}
 
