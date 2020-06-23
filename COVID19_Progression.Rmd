@@ -149,88 +149,50 @@ latestAU <- list()
 ```
 
 
-```{r nswJSON}
-# This is 24hrs behind but has the censored values
-# We can update the recovered time series from here
-# These deaths are more accurate than JHU and the JHU TS should be updated
-nswJSON <- "https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/data_Cases2.json" %>%
-    fromJSON() %>%
-    .[["data"]] %>%
-    as_tibble() %>%
-    separate(Date, into = c("Day", "Month")) %>%
-    mutate(
-      Date = paste0("2020-", Month, "-", Day) %>% 
-        as_datetime(format = "%Y-%b-%d") %>%
-        ymd()
-    ) %>% 
-    group_by(Date) %>%
-    summarise(
-      confirmed = sum(Cases),
-      recovered = sum(Recovered + censored),
-      deaths = sum(Deaths)
-    ) %>%
-    mutate(
-      `Province/State` = "New South Wales",
-      Country = "Australia"
-    ) %>%
-    dplyr::rename(date = Date)
-```
-
-
-
 ```{r updateNSW}
 nswRecov <- nswTests <- NA_real_
-nswUrl <- "https://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page=4ac47e14-04a9-4016-b501-65a23280e841&wp=baabf81e-a904-44f1-8d59-5f6d56519965&pageurl=/news/Pages/rss-nsw-health.aspx" 
-# %>%
-#   read_xml() %>%
-#   xml_find_all("//item") %>%
-#   .[[1]] %>%
-#   as.character() %>%
-#   str_split("\n") %>%
-#   .[[1]] %>%
-#   str_subset("https") %>%
-#   str_extract("https[^<]+")
-# nswTable <- nswUrl %>%
-#   read_html() %>%
-#   html_nodes("body") %>%
-#   xml_find_all("//table") %>%
-#   .[[1]] %>%
-#   html_table() %>%
-#   set_colnames(
-#      str_replace_all(colnames(.), "\\u200b", "")
-#   ) %>%
-#   mutate_all(str_replace_all, pattern = "\\u200b", replacement = "") %>%
-#   mutate(
-#     Count = str_remove_all(Count, "[\\*,]") %>% as.numeric,
-#     Cases = str_replace_all(Cases, " +", " ")
-#   )
-# nswTests <- nswTable %>%
-#   dplyr::filter(
-#     str_detect(Cases, "Total tests carried out")
-#   ) %>%
-#   .[["Count"]]
-# nswRecov <- nswTable %>%
-#   dplyr::filter(str_detect(Cases, "recovered")) %>%
-#   .[["Count"]] 
-# latestAU$NSW <- tibble(
-#   State = "New South Wales",
-#   date = dt,
-#   confirmed = nswTable %>% 
-#     dplyr::filter(str_detect(Cases, "Confirmed cases")) %>%
-#     .[["Count"]],
-#   deaths = nswTable %>% 
-#     dplyr::filter(str_detect(Cases, "Deaths")) %>%
-#     .[["Count"]],
-#   recovered = nswRecov,
-#   tested = nswTests
-# )
+nswUrl <- "https://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page=4ac47e14-04a9-4016-b501-65a23280e841&wp=baabf81e-a904-44f1-8d59-5f6d56519965&pageurl=/news/Pages/rss-nsw-health.aspx" %>%
+  read_xml() %>%
+  xml_find_all("//item") %>%
+  .[[1]] %>%
+  as.character() %>%
+  str_split("\n") %>%
+  .[[1]] %>%
+  str_subset("https") %>%
+  str_extract("https[^<]+")
+nswTable <- nswUrl %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all("//table") %>%
+  .[[1]] %>%
+  html_table() %>%
+  set_colnames(
+     str_replace_all(colnames(.), "\\u200b", "")
+  ) %>%
+  mutate_all(str_replace_all, pattern = "\\u200b", replacement = "") %>%
+  mutate(
+    Count = str_remove_all(Count, "[\\*,]") %>% as.numeric,
+    Cases = str_replace_all(Cases, " +", " ")
+  )
+nswTests <- nswTable %>%
+  dplyr::filter(
+    str_detect(Cases, "Total tests carried out")
+  ) %>%
+  .[["Count"]]
+nswRecov <- nswTable %>%
+  dplyr::filter(str_detect(Cases, "recovered")) %>%
+  .[["Count"]]
 latestAU$NSW <- tibble(
   State = "New South Wales",
   date = dt,
-  confirmed = 3150,
-  recovered = 3012,
-  deaths = 50,
-  tested = 742962
+  confirmed = nswTable %>%
+    dplyr::filter(str_detect(Cases, "Confirmed cases")) %>%
+    .[["Count"]],
+  deaths = nswTable %>%
+    dplyr::filter(str_detect(Cases, "Deaths")) %>%
+    .[["Count"]],
+  recovered = nswRecov,
+  tested = nswTests
 )
 ```
 
@@ -615,6 +577,35 @@ confirmed %<>%
   dplyr::select(-f) %>%
   arrange(Country, `Province/State`, date, desc(confirmed)) %>%
   dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE)
+```
+
+
+
+```{r nswJSON}
+# This is 24hrs behind but has the censored values
+# We can update the recovered time series from here
+# These deaths are more accurate than JHU and the JHU TS should be updated
+nswJSON <- "https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/data_Cases2.json" %>%
+    fromJSON() %>%
+    .[["data"]] %>%
+    as_tibble() %>%
+    separate(Date, into = c("Day", "Month")) %>%
+    mutate(
+      Date = paste0("2020-", Month, "-", Day) %>% 
+        as_datetime(format = "%Y-%b-%d") %>%
+        ymd()
+    ) %>% 
+    group_by(Date) %>%
+    summarise(
+      confirmed = sum(Cases),
+      recovered = sum(Recovered + censored),
+      deaths = sum(Deaths)
+    ) %>%
+    mutate(
+      `Province/State` = "New South Wales",
+      Country = "Australia"
+    ) %>%
+    dplyr::rename(date = Date)
 ```
 
 
