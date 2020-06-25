@@ -79,6 +79,18 @@ auStates <- c(
 
 # Data Sources
 
+```{r owid, echo=FALSE, eval=FALSE}
+# Contains no recovered data
+"https://covid.ourworldindata.org/data/owid-covid-data.json" %>%
+  fromJSON() %>%
+  bind_rows() %>%
+  as_tibble() %>%
+  mutate(date = ymd(date)) %>%
+  dplyr::filter(location != "World") %>%
+  arrange(date) 
+```
+
+
 ```{r confirmed}
 confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv") %>%
     read_csv() %>%
@@ -688,7 +700,9 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
   bind_rows(
     dplyr::select(latestAU, any_of(colnames(.)), `Province/State` = State)
   ) %>%
-  bind_rows(dplyr::select(nswJSON, any_of(colnames(.)))) %>%
+  bind_rows(
+    dplyr::select(nswJSON, any_of(colnames(.)))
+  ) %>%
   arrange(date) %>%
   mutate(f = paste(`Province/State`, Country, sep = "_")) %>%
   split(f = .$f) %>%
@@ -1337,7 +1351,7 @@ ggplotly(plotIncVConf +
 
 ### Comparison of Total Confirmed Infections
 
-```{r}
+```{r totalConf}
 minPop <- 5e6
 totalConf <- confirmed %>% 
   group_by(Country) %>%
@@ -1348,7 +1362,7 @@ totalConf <- confirmed %>%
 ```
 
 
-```{r, fig.width=10, fig.height=10, fig.cap=glue("*Most impacted 25 countries when combining rankings across both total confirmed cases, and total confirmed cases/million. Only countries with a population greater than {comma(minPop)} are shown. At the time of preparation, the total number of global infections stands at {comma(totalConf)}.*")}
+```{r plotMostInfected, fig.width=10, fig.height=10, fig.cap=glue("*Most impacted 25 countries when combining rankings across both total confirmed cases, and total confirmed cases/million. Only countries with a population greater than {comma(minPop)} are shown. At the time of preparation, the total number of global infections stands at {comma(totalConf)}.*")}
 confirmed %>%
   group_by(Country) %>%
   dplyr::filter(date == max(date)) %>%
@@ -2301,6 +2315,7 @@ ggplotly(
     dplyr::filter(Country == "Australia", confirmed > 0) %>%
     left_join(deaths) %>%
     left_join(recovered) %>%
+    mutate_at(vars(confirmed, deaths, recovered), na_locf) %>%
     group_by(Country, date) %>%
     summarise_at(vars(confirmed, deaths, recovered), sum) %>%
     ungroup() %>%
@@ -2354,6 +2369,7 @@ ggplotly(
     dplyr::filter(Country == "Australia") %>%
     left_join(deaths) %>%
     left_join(recovered) %>%
+    mutate_at(vars(confirmed, deaths, recovered), na_locf) %>%
     rename(State = `Province/State`) %>%
     dplyr::filter(
       date > ymd("2020-03-19"),
@@ -2413,7 +2429,7 @@ ggplotly(
 
 ## Daily New Cases
 
-```{r, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day average. Days which are above average are highlighted in red.*"}
+```{r plotDailyAusCases, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day average. Days which are above average are highlighted in red.*"}
 ggplotly(
   confirmed %>%
     dplyr::filter(Country == "Australia") %>%
@@ -2460,7 +2476,7 @@ ggplotly(
 
 ## Current Growth Factor
 
-```{r}
+```{r cap4GF}
 n <- 14
 cp <- glue(
   "*Growth factor for each State/Territory. 
@@ -2475,7 +2491,7 @@ cp <- glue(
 ```{r plotGF, fig.width=10, fig.height=8, fig.cap=cp}
 gf <- list(
   confirmed %>%
-    dplyr::filter(Country == "Australia", date < dt) %>%
+    dplyr::filter(Country == "Australia") %>% #, date < dt) %>%
     arrange(date) %>%
     group_by(
       `Province/State`
@@ -2495,7 +2511,7 @@ gf <- list(
     ungroup() %>%
     arrange(`Province/State`),
   confirmed %>%
-    dplyr::filter(Country == "Australia", date < dt) %>%
+    dplyr::filter(Country == "Australia") %>% #, date < dt) %>%
     arrange(date) %>%
     group_by(Country, date) %>%
     summarise_at(vars(confirmed), sum) %>%
