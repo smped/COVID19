@@ -855,7 +855,7 @@ This equates to about `r round(startingPoint*dplyr::filter(wikiPops, Country == 
 
 Most plots in this section have been filtered for countries with a population, cases or fatalities larger than a given value.
 Due to their significantly strong or poor performances, a handful of countries have been specified to be always included regardless of this filter.
-These countries are `r pander(sort(alwaysShow))`
+These countries are `r pander(sort(alwaysShow) %>% str_remove_all("\\*"))`
 
 ## Regional Data {.tabset}
 
@@ -1352,7 +1352,7 @@ ggplotly(plotIncVConf +
 ### Comparison of Total Confirmed Infections
 
 ```{r totalConf}
-minPop <- 5e6
+minPop <- 4e6
 totalConf <- confirmed %>% 
   group_by(Country) %>%
   dplyr::filter(date == max(date)) %>%
@@ -1580,7 +1580,7 @@ scaledDeathPlot <- deaths %>%
     x = glue("Days Since Passing {minRate} Deaths / Million"),
     y = "Deaths / Million"
   ) +
-  facet_wrap(~Region, ncol = 3)
+  facet_wrap(~Region, ncol = 3, scales = "free_y")
 ```
 
 
@@ -2024,8 +2024,11 @@ df <- confirmed %>%
   inner_join(
     dplyr::filter(wikiPops, Population > minPop | Country %in% alwaysShow)
   ) %>%
-  mutate(rate = 1e6 * active / Population) %>%
-  dplyr::filter(rate > startingPoint) %>%
+  mutate(
+    rate = 1e6 * active / Population,
+    pass = cummax(rate > startingPoint)
+  ) %>%
+  dplyr::filter(pass > 0) %>%
   group_by(Country) %>%
   mutate(
     days = date - min(date)
@@ -2057,6 +2060,12 @@ df <- confirmed %>%
   rename_all(str_to_title)
 nDays <- max(df$Days)
 p2 <- df %>%
+  # mutate(
+  #   Rate = case_when(
+  #     Rate < 1 ~ NA_real_,
+  #     Rate >= 1 ~ Rate
+  #   )
+  # ) %>%
   ggplot(
     aes(
       x = Days, y = Rate, colour = Country, 
@@ -2065,18 +2074,18 @@ p2 <- df %>%
       Deaths = Deaths
       )
   ) +
-  geom_segment(
-    aes(x, y, xend = xmax, yend = ymax),
-    data = tibble(
-      x = 0,
-      y = startingPoint,
-      xmax = ceiling(nDays / c(4, 2, 1)),
-      ymax = startingPoint + 2^(xmax/ c(2, 4, 8))
-    ),
-    inherit.aes = FALSE,
-    colour = "grey90",
-    linetype = 2
-  ) + 
+  # geom_segment(
+  #   aes(x, y, xend = xmax, yend = ymax),
+  #   data = tibble(
+  #     x = 0,
+  #     y = startingPoint,
+  #     xmax = ceiling(nDays / c(4, 2, 1)),
+  #     ymax = startingPoint + 2^(xmax/ c(2, 4, 8))
+  #   ),
+  #   inherit.aes = FALSE,
+  #   colour = "grey90",
+  #   linetype = 2
+  # ) + 
   geom_line() +
   scale_x_continuous(
     expand = expansion(mult = c(0, 0.05)),
@@ -2117,7 +2126,7 @@ cp2 <- glue(
 ```{r plotly2, fig.width=10, fig.height=10, fig.cap = cp2}
 ggplotly(
   p2 +
-    coord_cartesian(ylim = range(p2$data$Rate))
+    coord_cartesian(ylim = c(1, max(p2$data$Rate)))
 ) %>%
   shiftAxisLabel(1.8)
 ```
