@@ -2241,7 +2241,7 @@ A series of complimentary charts regarding the spread of COVID-19 are available 
 - It is now clear that Australia is **no longer in an exponential growth phase** and they pandemic may be under control
 - Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
 - Notably, the proportion of recovered cases is now >90%
-- NSW Health made a significnt change to their recovered cases on `r format.Date(min(nswJSON$date), "%d, %B %Y")` when **cases not tracked after 6 weeks were classified as recovered**
+- NSW Health made a significant change to their recovered cases on `r format.Date(min(nswJSON$date), "%d, %B %Y")` when **cases not tracked after 6 weeks were classified as recovered**
 
 
 ```{r latestAUTable}
@@ -2374,7 +2374,7 @@ ggplotly(
 
 
 
-```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases have only recently begun being reported and up until the most recent dates, recovered/active values were very approximate for these states. The extreme drop for NSW active cases in early June is a function of teh changed reporting strategy implemented by NSW Health.*"}
+```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases have only recently begun being reported and up until the most recent dates, recovered/active values were very approximate for these states. The extreme drop for NSW active cases in early June is a function of the changed reporting strategy implemented by NSW Health.*"}
 ggplotly(
   confirmed %>%
     dplyr::filter(Country == "Australia") %>%
@@ -2499,7 +2499,8 @@ cp <- glue(
   This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. 
   In order to try and minimise volatility a {n} day simple moving average was used, in contrast to the 5 day average as advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478).
   This enables assessment of the growth factor over an entire quarantine period.
-  If no new cases are observed over this period, the value is not able to be calculated.*"
+  If no new cases are observed over this period, the value is not able to be calculated.
+  The dashed vertical lines indicate the day most state borders were closed.*"
 )
 ```
 
@@ -2552,6 +2553,11 @@ gf <- list(
   ggplot(aes(date, R, colour = `Province/State`)) +
   geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
   geom_hline(yintercept = 1) +
+  geom_vline(
+    xintercept = ymd("2020-03-22"),
+    linetype = 2,
+    colour = "grey30"
+  ) +
   geom_label(
     aes(label = R),
     data = . %>%
