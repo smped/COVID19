@@ -375,7 +375,9 @@ saTxt <- saUrl  %>%
 ## These don't appear until late afternoon, so this is a pain in the arse quite frankly
 altSaUrl <- c(
   "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}",
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}"
+  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}",
+    "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}+2020",
+  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}+2020"
   ) %>%
   vapply(glue, character(1)) %>%
   str_to_lower()
@@ -2466,10 +2468,11 @@ ggplotly(
     dplyr::filter(date > "2020-03-01") %>%
     ggplot(aes(date, daily)) +
     geom_col(
-      aes(fill = `Above Average`),
+      aes(fill = `Above Average`, colour = `Above Average`),
       data = . %>% dplyr::filter(!is.na(`Above Average`)),
       # fill = "grey80",
-      colour = "grey50"
+      # colour = "grey50", 
+      width = 1/2
     ) +
     geom_line(aes(y = MA), colour = "blue") +
     facet_wrap(~`Province/State`, scales = "free_y") +
@@ -2478,7 +2481,11 @@ ggplotly(
       y = "Daily New Cases",
       fill = "\nAbove\nAverage"
     ) +
-    scale_fill_manual(values = c("white", rgb(1, 0.2, 0.2))) 
+    scale_fill_manual(values = c("white", rgb(1, 0.2, 0.2))) +
+    scale_colour_manual(values = c("grey50", rgb(1, 0.2, 0.2))),
+  tooltip = c(
+    "date", "daily", "MA"
+    )
 )
 ```
 
