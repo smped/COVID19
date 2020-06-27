@@ -355,7 +355,7 @@ latestAU$WA <- tibble(
     .[!is.na(.)],
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
-  tested = waTests
+  tested = 174330 + 571#waTests
 )
 ```
 
@@ -382,12 +382,16 @@ altSaUrl <- c(
   vapply(glue, character(1)) %>%
   str_to_lower()
 validSa <- altSaUrl %>%
-  lapply(read_html) %>%
+  vapply(url.exists, logical(1)) %>% 
+  which() %>%
+  names() %>%
+  sapply(read_html, simplify = FALSE) %>%
   lapply(html_node, css = "body") %>%
   vapply(function(x){!is.na(x)}, logical(1)) %>%
   which() %>%
+  names() %>%
   .[[1]]
-altSaTxt <- altSaUrl[validSa] %>%
+altSaTxt <- validSa %>%
   read_html() %>%
   html_node("body") %>%
   xml_find_all("//section[@class = 'main-content']") %>%
@@ -2119,7 +2123,9 @@ p2 <- df %>%
     expand = expansion(mult = c(0, 0.05)),
   ) +
   scale_y_log10(
-    expand = expansion(mult = c(0, 0.05))
+    expand = expansion(mult = c(0, 0.05)),
+    labels = comma_format(accuracy = 1),
+    breaks = 10^seq(1, 4)
   ) +
   scale_colour_manual(values = countryCols) +
   xlab(
@@ -2236,7 +2242,8 @@ p2 <- df %>%
   ) +
   scale_y_log10(
     expand = expansion(mult = c(0, 0.05)),
-    labels = comma_format(accuracy = 1)
+    labels = comma_format(accuracy = 1),
+    breaks = 10^seq(1, 4)
   ) +
   scale_colour_manual(values = countryCols) +
   xlab(
