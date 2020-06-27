@@ -714,6 +714,35 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
   dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE) 
 ```
 
+```{r predRecovered}
+predRecovered <- confirmed %>%
+  rename(
+    recovered = confirmed
+  ) %>%
+  mutate(
+    date = date + 21
+  ) %>%
+  left_join(deaths) %>%
+  mutate(recovered = recovered - deaths) %>%
+  dplyr::select(
+    `Province/State`, Country, date,recovered
+  )
+# predRecovered %>%
+#   rename(pred = recovered) %>%
+#   left_join(recovered) %>%
+#   group_by(Country, date) %>%
+#   summarise_at(
+#     vars(pred, recovered), sum
+#   ) %>%
+#   ungroup() %>%
+#   dplyr::filter(Country != "Sweden") %>%
+#   ggplot(aes(pred, recovered)) +
+#   geom_point() +
+#   geom_abline(slope = 1) +
+#   geom_smooth(method = "lm") +
+#   scale_x_log10(labels = comma) +
+#   scale_y_log10(labels = comma)
+```
 
 
 ```{r wikiPops, eval=FALSE, echo=FALSE}
@@ -1986,6 +2015,20 @@ rr <- confirmed %>%
   .[["rr"]]
 ```
 
+```{r}
+predRR <- confirmed %>%
+  group_by(Country) %>%
+  dplyr::filter(
+    date == max(date)
+  ) %>%
+  ungroup() %>%
+  left_join(predRecovered) %>%
+  group_by(Country, date) %>%
+  summarise_at(vars(confirmed, recovered), sum, na.rm = TRUE) %>%
+  ungroup() %>%
+  summarise(rr = sum(recovered) / sum(confirmed)) %>%
+  .[["rr"]]
+```
 
 
 Information regarding recovered cases is likely to be *the least reliable of reported values* as many regions do not report updated numbers for several consecutive days.
@@ -1994,8 +2037,9 @@ Given this:
 
 - __The current recovery rate from all confirmed cases is `r percent(rr,accuracy = 0.1)`.__
 Given the level of under-reporting this may also be highly inaccurate.
-- At this point, __`r percent(1 - fr - rr, accuracy = 0.1)` of all confirmed infections are considered as 'active'.__
-
+- As there is poor and inconsistent reporting of recoveries in many countries, an alternate methodology for estimating recoveries is to use the median recovery time of 21 days to predict recovered cases, subtracting those cases which proved fatal. __Under this approach `r percent(predRR)` of cases are predicted to be recovered.__
+- Using reported recoveries, __`r percent(1 - fr - rr, accuracy = 0.1)` of all confirmed infections are considered as 'active'.__
+- Using predicted recoveries, this changes to `r percent(1 - fr - predRR, accuracy = 0.1)` of confirmed infections predicted to be currently active.
 
 ### Active Infections Across All Countries
 
@@ -2013,7 +2057,7 @@ df <- confirmed %>%
   summarise_at(
     vars(confirmed, deaths), sum
   ) %>%
-  left_join(
+  inner_join(
     recovered %>%
       group_by(Country, date) %>%
       summarise_at(vars(recovered), sum)
@@ -2062,12 +2106,6 @@ df <- confirmed %>%
   rename_all(str_to_title)
 nDays <- max(df$Days)
 p2 <- df %>%
-  # mutate(
-  #   Rate = case_when(
-  #     Rate < 1 ~ NA_real_,
-  #     Rate >= 1 ~ Rate
-  #   )
-  # ) %>%
   ggplot(
     aes(
       x = Days, y = Rate, colour = Country, 
@@ -2076,18 +2114,6 @@ p2 <- df %>%
       Deaths = Deaths
       )
   ) +
-  # geom_segment(
-  #   aes(x, y, xend = xmax, yend = ymax),
-  #   data = tibble(
-  #     x = 0,
-  #     y = startingPoint,
-  #     xmax = ceiling(nDays / c(4, 2, 1)),
-  #     ymax = startingPoint + 2^(xmax/ c(2, 4, 8))
-  #   ),
-  #   inherit.aes = FALSE,
-  #   colour = "grey90",
-  #   linetype = 2
-  # ) + 
   geom_line() +
   scale_x_continuous(
     expand = expansion(mult = c(0, 0.05)),
@@ -2133,10 +2159,121 @@ ggplotly(
   shiftAxisLabel(1.8)
 ```
 
-Notable features of this perspective are:
 
-- Active infection rates in many countries are currently declining **especially in Australia and New Zealand**
-- Despite strict control measures early on in the pandemic, active infection rates are still exponentially increasing in Singapore
+### Predicted Active Infections Across All Countries
+
+```{r p2Pred}
+df <- confirmed %>%
+  dplyr::filter(
+    confirmed > 0,
+    Country != "China (Other)"
+  ) %>%
+  left_join(deaths) %>%
+  group_by(Country, date) %>%
+  summarise_at(
+    vars(confirmed, deaths), sum
+  ) %>%
+  inner_join(
+    predRecovered %>%
+      group_by(Country, date) %>%
+      summarise_at(vars(recovered), sum)
+  ) %>%
+  mutate_at(vars(confirmed, deaths, recovered), cummax) %>%
+  mutate(
+    active = confirmed - deaths - recovered
+  ) %>%
+  dplyr::filter(!is.na(active)) %>%
+  inner_join(
+    dplyr::filter(wikiPops, Population > minPop | Country %in% alwaysShow)
+  ) %>%
+  mutate(
+    rate = 1e6 * active / Population,
+    pass = cummax(rate > startingPoint)
+  ) %>%
+  dplyr::filter(pass > 0) %>%
+  group_by(Country) %>%
+  mutate(
+    days = date - min(date)
+  ) %>%
+  dplyr::filter(max(days) > minDays | Country %in% alwaysShow) %>% 
+  dplyr::filter(max(recovered) > 0) %>%
+  ungroup() %>%
+  mutate(
+    days = as.integer(days),
+    rate = round(rate, 2)
+  ) %>%
+  arrange(date) %>%
+  mutate(
+    Region = str_replace_all(
+      Region, "(Southern|Western) Europe", "Southern & Western Europe"
+    ),
+    Region = str_replace_all(
+      Region, "(Central|Southern) Asia", "Central & Southern Asia"
+    ),
+    Region = str_replace_all(
+      Region, "(Central America|Northern America|Caribbean)", "Caribbean, Central & Northern America"
+    ),
+    Region = str_replace_all(
+      Region, "(Eastern|Middle|Southern) Africa", "Eastern, Middle & Southern Africa"
+    ),
+    Country = fct_inorder(Country),
+    Region = fct_lump(Region, n = 11)
+  ) %>%
+  rename_all(str_to_title)
+nDays <- max(df$Days)
+p2 <- df %>%
+  ggplot(
+    aes(
+      x = Days, y = Rate, colour = Country, 
+      Date = Date, Active = Active,
+      Confirmed = Confirmed, Recovered = Recovered,
+      Deaths = Deaths
+      )
+  ) +
+  geom_line() +
+  scale_x_continuous(
+    expand = expansion(mult = c(0, 0.05)),
+  ) +
+  scale_y_log10(
+    expand = expansion(mult = c(0, 0.05)),
+    labels = comma_format(accuracy = 1)
+  ) +
+  scale_colour_manual(values = countryCols) +
+  xlab(
+    paste(
+      "Days since passing", 
+      startingPoint, 
+      "predicted active cases/million"
+    )
+  ) +
+  ylab("Predicted Active Infection Rate (cases/million)") + 
+  facet_wrap(~Region, ncol = 3)
+```
+
+```{r cp2Pred, echo=FALSE}
+cp2Pred <- glue(
+    "*Predicted __active__ cases of COVID-19 for countries where the active infection rate has exceeded {startingPoint} predicted active cases/million for more than {nDays} calendar days.
+    Predicted recovered cases are obtained using the median recovery time of 21 days, accounting for fatal cases.
+    This allows for assessment of countries where recovered cases are poorly reported.
+    Only countries with a population greater than {comma(minPop)} are shown for better visualisation.
+    Due to difficulties introduced by the currently reported __low active infection rate__ outside Hubei province, data from China has been excluded from this plot, with the exception of Hubei and Hong Kong.
+    To hide a country, click on the country in the plot legend.
+    Clicking again on the country in the legend will restore the data within the plot.
+    Countries are shown in order of the date at which they passed the {startingPoint} predicted __active__ case/million mark.
+    Due to the number of countries shown, you may need to scroll through the legend.
+    Regions of the plot are also able to be zoomed interactively.
+    Please note the y-axis is shown on the logarithmic scale, so that a series of points which appear to be diagonal will indicate exponential growth/decay.
+    Given the different starting point to the previous plot, data will generally be shown for fewer time-points.*"
+)
+```
+
+```{r plotly2Pred, fig.width=10, fig.height=10, fig.cap = cp2Pred}
+ggplotly(
+  p2 +
+    coord_cartesian(ylim = c(1, max(p2$data$Rate)))
+) %>%
+  shiftAxisLabel(1.8)
+```
 
 
 ### Summary of All Rates
