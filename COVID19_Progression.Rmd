@@ -883,7 +883,6 @@ Population estimates for Hubei Province were taken from the 2018 estimates given
 
 Confirmed cases of COVID-19 as provided by the Chinese Government have been discussed elsewhere as unusual, and data appears potentially unreliable.
 In this analysis, discussions regarding accurate Chinese reporting are not considered further and data is simply presented as supplied by JHU.
-**As of June 6th, Brazil has also stopped releasing any official figures related to COVID-19.**
 
 However, all countries are likely to contain many unreported cases given the incomplete testing regimes in place for most countries.
 Similarly, reporting in many countries may have features that cause concerns regarding data integrity and this makes comparison across countries difficult.
@@ -907,6 +906,10 @@ Most plots in this section have been filtered for countries with a population, c
 Due to their significantly strong or poor performances, a handful of countries have been specified to be always included regardless of this filter.
 These countries are `r pander(sort(alwaysShow) %>% str_remove_all("\\*"))`
 
+- At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
+- The time period for the **most recent doubling of global cases was `r confirmed %>% group_by(date) %>%summarise(confirmed = sum(confirmed)) %>% dplyr::filter(date < dt,confirmed > max(confirmed / 2)) %>% nrow()` days.**
+- **The last million cases were confirmed over the last `r  group_by(confirmed, date) %>% summarise_at(vars(confirmed), sum) %>% dplyr::filter(confirmed > max(confirmed) - 1e6) %>% nrow()` days.**
+
 ## Regional Data {.tabset}
 
 ### Cumulative Infection Rates
@@ -914,9 +917,6 @@ These countries are `r pander(sort(alwaysShow) %>% str_remove_all("\\*"))`
 Before exploring individual countries, a regional perspective may be helpful.
 Importantly, **only Oceania, Eastern Asia, Western Europe and Southern Europe** have successfully controlled the infection rate.
 Most other regions are still experiencing exponential growth.
-The time period for the most recent doubling of global cases was `r confirmed %>% group_by(date) %>%summarise(confirmed = sum(confirmed)) %>% dplyr::filter(date < dt,confirmed > max(confirmed / 2)) %>% nrow()` days.
-At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
-
 
 ```{r plotRegions, fig.height=8, fig.width=10, fig.cap = glue("*Current regional cumulative infection rates. Lines are shown from the point that regional cases exceeded {startingPoint} confirmed cases / million. Rates are calculated within each region using regional populations.*")}
 ggplotly(
