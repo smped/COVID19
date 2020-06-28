@@ -225,26 +225,30 @@ qldTable <- qldUrl %>%
   xml_find_all("//table[@id = 'QLD_Cases']") %>%
   html_table() %>%
   .[[1]] 
-qldRecov <- qldTable %>%
-  dplyr::filter(Cases == "Recovered") %>%
-  .[["Total"]] %>%
+qldConfirmed <-  qldTable %>%
+  dplyr::filter(str_detect(Cases, "Number of cases")) %>%
+  pull(Total) %>%
   str_remove_all(",") %>%
   as.numeric()
+qldActive <- qldTable %>%
+  dplyr::filter(str_detect(Cases, "Active")) %>%
+  pull(Total) %>%
+  as.numeric()
+qldDeaths <-  qldTable %>%
+  dplyr::filter(str_detect(Cases, "Deaths")) %>%
+  pull(Total) %>%
+  as.numeric()
+# qldRecov <- qldTable %>%
+#   dplyr::filter(Cases == "Recovered") %>%
+#   .[["Total"]] %>%
+#   str_remove_all(",") %>%
+#   as.numeric()
+qldRecov <- qldConfirmed - qldActive - qldDeaths
 latestAU$QLD <- tibble(
   State = "Queensland",
   date = dt,
-  confirmed = qldTable %>% 
-    dplyr::filter(str_detect(Cases, "Number of (cases|confirmed)")) %>%
-    .[["Total"]] %>% 
-    str_remove_all(",") %>%
-    str_extract("[0-9]+") %>% 
-    as.numeric(),
-  deaths = qldTable %>% 
-    dplyr::filter(str_detect(Cases, "Deaths")) %>%
-    .[["Total"]] %>% 
-    str_remove_all(",") %>%
-    str_extract("[0-9]+") %>% 
-    as.numeric(),
+  confirmed = qldConfirmed,
+  deaths = qldDeaths,
   recovered = qldRecov,
   tested = qldTests
 )
@@ -355,7 +359,7 @@ latestAU$WA <- tibble(
     .[!is.na(.)],
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
-  tested = 174330 + 571#waTests
+  tested = 174330 + 571 + 331#waTests
 )
 ```
 
@@ -487,7 +491,7 @@ latestAU$ACT <- tibble(
   confirmed = actTable %>% 
     dplyr::filter(str_detect(Cases, "Confirmed cases")) %>% 
     .[["Total"]],
-  deaths = 3, # Only able to be added manually. Thanks SA Health
+  deaths = 3, # Only able to be added manually.
   recovered = actRecov,
   tested = actTests
 )
@@ -526,39 +530,50 @@ latestAU$TAS <- tibble(
 ```
 
 ```{r updateNT}
-ntRecov <- ntTests <- NA_real_
-ntUrl <- "https://coronavirus.nt.gov.au/"
-ntTxt <- ntUrl %>%
-  read_html() %>%
+# ntRecov <- ntTests <- NA_real_
+# ntUrl <- "https://coronavirus.nt.gov.au/"
+# ntTxt <- ntUrl %>%
+#   read_html() %>%
+#   html_nodes("body") %>%
+#   xml_find_all(
+#     "//div[contains(@class, 'header-widget')]"
+#   ) %>%
+#   html_text() %>%
+#     str_split("\r\n") %>%
+#     .[[1]] %>%
+#     str_trim() %>%
+#     .[. != ""]
+# ntTests <- ntTxt %>%
+#   str_subset("test") %>%
+#   str_extract("([0-9,]+)") %>%
+#   str_remove_all(",") %>%
+#   as.numeric()
+# ntRecov <- ntTxt %>%
+#   str_subset("recovered") %>%
+#   str_extract("[0-9,]+") %>%
+#   str_remove_all(",") %>%
+#   as.numeric()
+ntUrl <- "https://coronavirus.nt.gov.au/current-status"
+ntTable <- ntUrl %>% 
+  read_html() %>% 
   html_nodes("body") %>%
-  xml_find_all(
-    "//div[contains(@class, 'header-widget')]"
-  ) %>%
-  html_text() %>%
-    str_split("\r\n") %>%
-    .[[1]] %>%
-    str_trim() %>%
-    .[. != ""]
-ntTests <- ntTxt %>%
-  str_subset("test") %>%
-  str_extract("([0-9,]+)") %>%
-  str_remove_all(",") %>%
-  as.numeric()
-ntRecov <- ntTxt %>%
-  str_subset("recovered") %>%
-  str_extract("[0-9,]+") %>%
-  str_remove_all(",") %>%
-  as.numeric()
+  xml_find_all("//div[contains(@class, 'covid-card-stats')]") %>% 
+  html_text() %>% 
+  str_split("\r\n") %>%
+  .[[1]] %>% 
+  str_trim() %>% 
+  .[. != ""] %>%
+  matrix(ncol = 2, byrow = TRUE) %>% 
+  set_colnames(c("Total", "Category")) %>% 
+  as.data.frame() %>% 
+  mutate(Total = str_remove_all(Total, ",") %>% as.numeric())
 latestAU$NT <- tibble(
   State = "Northern Territory",
   date = dt,
-  confirmed = 30,# ntTxt %>%
-    # str_subset("confirmed") %>% 
-    # str_extract("[0-9]+") %>% 
-    # as.numeric(),
+  confirmed = dplyr::filter(ntTable, str_detect(Category, "confirmed"))$Total,
   deaths = 0,
-  recovered = ntRecov,
-  tested = ntTests
+  recovered = dplyr::filter(ntTable, str_detect(Category, "recovered"))$Total,
+  tested = dplyr::filter(ntTable, str_detect(Category, "tests"))$Total
 )
 ```
 
