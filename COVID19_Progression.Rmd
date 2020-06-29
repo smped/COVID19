@@ -359,7 +359,7 @@ latestAU$WA <- tibble(
     .[!is.na(.)],
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
-  tested = 174330 + 571 + 331#waTests
+  tested = waTests
 )
 ```
 
