@@ -2034,7 +2034,7 @@ rr <- confirmed %>%
   .[["rr"]]
 ```
 
-```{r}
+```{r predRR}
 predRR <- confirmed %>%
   group_by(Country) %>%
   dplyr::filter(
@@ -2060,7 +2060,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 - Using reported recoveries, __`r percent(1 - fr - rr, accuracy = 0.1)` of all confirmed infections are considered as 'active'.__
 - Using predicted recoveries, this changes to `r percent(1 - fr - predRR, accuracy = 0.1)` of confirmed infections predicted to be currently active.
 
-### Active Infections Across All Countries
+### Reported Active Infections Across All Countries
 
 ```{r p2}
 minDays <- 30
@@ -2397,9 +2397,10 @@ The difference with previous estimates used above was within 0.04%, and as such 
 
 A series of complimentary charts regarding the spread of COVID-19 are available from [the ABC website](https://www.abc.net.au/news/2020-03-17/coronavirus-cases-data-reveals-how-covid-19-spreads-in-australia/12060704).
 
-- It is now clear that Australia is **no longer in an exponential growth phase** and they pandemic may be under control
+- It is now clear that Australia is **no longer in an exponential growth phase** and they pandemic may be under control in all states except Victoria.
+- The June outbreak in Victoria is of a similar size as the initial March outbreak
 - Using an estimated population size of `r comma(dplyr::filter(wikiPops, Country == "Australia")$Population)`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r confirmed %>% dplyr::filter(Country == "Australia") %>% group_by(Country, date) %>% summarise(confirmed = sum(confirmed)) %>% ungroup() %>% dplyr::slice(nrow(.)) %>% inner_join(wikiPops) %>% summarise(prop  = percent(confirmed/Population, accuracy = 0.001)) %>% .[["prop"]]`, or one person in every `r confirmed %>% dplyr::filter(Country == "Australia", date == max(date)) %>% .[["confirmed"]] %>% sum() %>% divide_by(dplyr::filter(wikiPops, Country == "Australia")$Population) %>% raise_to_power(-1) %>% round(0) %>% comma()`. 
-- Notably, the proportion of recovered cases is now >90%
+- Notably, the proportion of recovered cases is now >90% in all states except Victoria
 - NSW Health made a significant change to their recovered cases on `r format.Date(min(nswJSON$date), "%d, %B %Y")` when **cases not tracked after 6 weeks were classified as recovered**
 
 
