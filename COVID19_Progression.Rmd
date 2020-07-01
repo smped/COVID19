@@ -1297,7 +1297,7 @@ ggplotly(
 
 An alternate viewpoint on the data is to remove time and inspect the relationship between the daily increase in cases and the total number of cases.
 When this relationship ceases it's near linear relationship, this can be a sign the control measures have begun to take effect.
-Whilst this relationship **appears to have broken down for Australia**, no breakdown has yet occurred for countries such as the Singapore, Canada, the UK, USA and Turkey, with these countries **explicitly still in the exponential growth phase.**
+Whilst this relationship **appears to have broken down for Australia**, no breakdown has yet occurred for countries such as South Africa, USA and Brazil, with these countries **explicitly still in, or having resumed the exponential growth phase.**
 
 
 ```{r plotIncVConf}
@@ -2065,7 +2065,7 @@ Given the level of under-reporting this may also be highly inaccurate.
 ```{r p2}
 minDays <- 30
 startingPoint <- 4
-minPop <- 8e6
+minPop <- 5e6
 df <- confirmed %>%
   dplyr::filter(
     confirmed > 0,
