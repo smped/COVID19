@@ -899,19 +899,6 @@ startingPoint <- 4
 minPop <- 2e6
 ```
 
-
-For this section, most data is presented *relative to population size*.
-Growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
-This equates to about `r round(startingPoint*dplyr::filter(wikiPops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
-
-Most plots in this section have been filtered for countries with a population, cases or fatalities larger than a given value.
-Due to their significantly strong or poor performances, a handful of countries have been specified to be always included regardless of this filter.
-These countries are `r pander(sort(alwaysShow) %>% str_remove_all("\\*"))`
-
-- At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
-- The time period for the **most recent doubling of global cases was `r confirmed %>% group_by(date) %>%summarise(confirmed = sum(confirmed)) %>% dplyr::filter(date < dt,confirmed > max(confirmed / 2)) %>% nrow()` days.**
-- **The last million cases were confirmed over the last `r  group_by(confirmed, date) %>% summarise_at(vars(confirmed), sum) %>% dplyr::filter(confirmed > max(confirmed) - 1e6) %>% nrow()` days.**
-
 ## Regional Data {.tabset}
 
 ### Cumulative Infection Rates
@@ -1009,6 +996,19 @@ ggplotly(
 
 
 ## Infection Rates {.tabset}
+
+
+For this section, most data is presented *relative to population size*.
+Growth in infection rates is only shown after the point at which the cumulative confirmed infection rate breached `r startingPoint` confirmed cases / million.
+This equates to about `r round(startingPoint*dplyr::filter(wikiPops, Country == "Australia")$Population / 1e6,0)` confirmed cases within Australia, and is broadly comparable to the "Days since passing 100 confirmed cases" commonly shown elsewhere.
+
+Most plots in this section have been filtered for countries with a population, cases or fatalities larger than a given value.
+Due to their significantly strong or poor performances, a handful of countries have been specified to be always included regardless of this filter.
+These countries are `r pander(sort(alwaysShow) %>% str_remove_all("\\*"))`
+
+- At the time of report preparation, **the total number of confirmed cases, including all countries for which data has been made available, is `r  confirmed %>% group_by("Province/State", Country) %>% dplyr::filter(date == max(date)) %>% .[["confirmed"]] %>% sum() %>% comma()`.**
+- The time period for the **most recent doubling of global cases was `r confirmed %>% group_by(date) %>%summarise(confirmed = sum(confirmed)) %>% dplyr::filter(date < dt,confirmed > max(confirmed / 2)) %>% nrow()` days.**
+- **The last million cases were confirmed over the last `r  group_by(confirmed, date) %>% summarise_at(vars(confirmed), sum) %>% dplyr::filter(confirmed > max(confirmed) - 1e6) %>% nrow()` days.**
 
 ### Table of Most Impacted Countries
 
@@ -1495,6 +1495,8 @@ fr <- confirmed %>%
 
 __The current fatality rate from all confirmed cases is `r percent(fr, accuracy = 0.1)`.__
 This may be a function of under-reporting of true cases and is *very likely to be an overestimate*.
+
+At the time of report preparation the total number of reported global fatalities is `r deaths %>% group_by(Country)%>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise_at("deaths", sum) %>% pull(deaths) %>% comma()`.
 
 ### Table of Fatalities
 
