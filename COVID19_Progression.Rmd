@@ -361,7 +361,7 @@ latestAU$WA <- tibble(
     unique(),
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
-  tested = waTests
+  tested = 191213#waTests
 )
 ```
 
