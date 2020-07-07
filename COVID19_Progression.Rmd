@@ -54,9 +54,9 @@ shiftAxisLabel <- function(x, k = 2){
 
 
 ```{r dt}
-# Handle updates between 12am & 9am
+# Handle updates between 12am & 12pm
 dt <- Sys.Date()
-if (as.numeric(format(Sys.time(), "%H")) <= 9){
+if (as.numeric(format(Sys.time(), "%H")) <= 12){
   dt <- Sys.Date() - 1
 }
 ```
@@ -178,8 +178,11 @@ nswTable <- nswUrl %>%
   xml_find_all("//table") %>%
   .[[1]] %>%
   html_table() %>%
+  # set_colnames(
+     # str_replace_all(colnames(.), "\\u200b", "")
+  # ) %>%
   set_colnames(
-     str_replace_all(colnames(.), "\\u200b", "")
+    c("Cases", "Count")
   ) %>%
   mutate_all(str_replace_all, pattern = "\\u200b", replacement = "") %>%
   mutate(
@@ -290,7 +293,7 @@ vicTests <- vicTxt %>%
 vicRecov <- vicTxt %>%
   str_subset("[0-9]+.+recovered") %>%
   str_trim() %>%
-  str_replace_all(".*[^0-9,]([0-9,]+)[^0-9]*people have recovered.*", "\\1") %>%
+  str_replace_all("[^0-9,]*([0-9,]+)[^0-9]*people have recovered.*", "\\1") %>%
   str_remove(",") %>%
   as.numeric() 
 latestAU$VIC <- tibble(
@@ -299,9 +302,9 @@ latestAU$VIC <- tibble(
   confirmed = vicTxt %>%
     str_subset("(coronavirus|total).+cases") %>%
     str_subset("Victoria") %>%
-    # str_subset("regional", negate = TRUE) %>%
+    str_subset("regional", negate = TRUE) %>%
     # str_replace_all(".+[^0-9,]+ ([0-9,]+) cases[^0-9,].+", "\\1") %>%
-    str_replace_all(".+total ([0-9,]+) cases.+", "\\1") %>%
+    str_replace_all(".+total.+ ([0-9,]+).*", "\\1") %>%
     str_remove_all(",") %>%
     as.numeric() %>%
     .[!is.na(.)] %>%
@@ -458,8 +461,6 @@ latestAU$SA <- tibble(
   tested = saTests
 )
 ```
-
-
 
 
 ```{r updateACT}
@@ -749,21 +750,6 @@ predRecovered <- confirmed %>%
   dplyr::select(
     `Province/State`, Country, date,recovered
   )
-# predRecovered %>%
-#   rename(pred = recovered) %>%
-#   left_join(recovered) %>%
-#   group_by(Country, date) %>%
-#   summarise_at(
-#     vars(pred, recovered), sum
-#   ) %>%
-#   ungroup() %>%
-#   dplyr::filter(Country != "Sweden") %>%
-#   ggplot(aes(pred, recovered)) +
-#   geom_point() +
-#   geom_abline(slope = 1) +
-#   geom_smooth(method = "lm") +
-#   scale_x_log10(labels = comma) +
-#   scale_y_log10(labels = comma)
 ```
 
 
@@ -1857,7 +1843,7 @@ b <- topDeaths %>%
   ggplot(aes(Country, deaths, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = deaths + 10000, label = comma(deaths, accuracy = 1)),
+    aes(y = deaths + 15000, label = comma(deaths, accuracy = 1)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
