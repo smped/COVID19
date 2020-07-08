@@ -1434,8 +1434,8 @@ confirmed %>%
   ) %>%
   mutate(
     lab_y = case_when(
-      name == "confirmed" ~ value + 2.75e5,
-      name != "confirmed" ~ value + 1.2e3
+      name == "confirmed" ~ value + 4e5,
+      name != "confirmed" ~ value + 1.5e3
     )
   ) %>%
   ggplot(aes(Country, value, fill = Country)) +
@@ -2753,7 +2753,7 @@ latestAU %>%
   full_join(
     confirmed %>%
       dplyr::filter(
-        date == max(date),
+        date == dt,
         Country == "Australia"
       ) %>%
       rename(
