@@ -466,7 +466,7 @@ latestAU$SA <- tibble(
 ```{r updateACT}
 actRecov <- actTests <- NA_real_
 actUrl <- "https://www.covid19.act.gov.au/home"
-actTable <- actUrl %>%
+actTxt <- actUrl %>%
   read_html() %>%
   html_nodes("body") %>%
   xml_find_all(
@@ -474,27 +474,31 @@ actTable <- actUrl %>%
   ) %>% 
   html_text() %>% 
   str_split("\r\n") %>% 
-  .[[4]] %>% 
+  .[[1]] %>% 
   str_trim() %>% 
   setdiff(y = "") %>% 
-  str_remove_all("[,*]") %>%
+  str_remove_all("[,*]")
+actTable <- actTxt[seq(6, length(actTxt))] %>%
   matrix(ncol = 2, byrow = TRUE) %>%
-  set_colnames(c("Cases", "Total")) %>%
-  as.data.frame(stringsAsFactors = FALSE) %>%
+  set_colnames(c("Category", "Total")) %>%
+  as_tibble() %>%
   mutate(Total = as.numeric(Total))
+actConf <- actTxt %>%
+  str_subset("Total") %>% 
+  str_remove_all("[A-Za-z ]") %>% 
+  as.numeric() 
 actTests <- actTable %>% 
-  dplyr::filter(!str_detect(Cases, "recovered")) %>%
+  dplyr::filter(str_detect(Category, "Negative test")) %>%
   .[["Total"]] %>%
-  sum()
+  sum() %>%
+  add(actConf)
 actRecov <- actTable %>%
-  dplyr::filter(str_detect(Cases, "recov")) %>%
+  dplyr::filter(str_detect(Category, "recov")) %>%
   .[["Total"]]
 latestAU$ACT <- tibble(
   State = "Australian Capital Territory",
   date = dt,
-  confirmed = actTable %>% 
-    dplyr::filter(str_detect(Cases, "Confirmed cases")) %>% 
-    .[["Total"]],
+  confirmed = actConf,
   deaths = 3, # Only able to be added manually.
   recovered = actRecov,
   tested = actTests
@@ -1478,12 +1482,22 @@ fr <- confirmed %>%
   ungroup() %>%
   summarise(fr = sum(deaths) / sum(confirmed)) %>%
   .[["fr"]]
+days2death <- 18
+offsetFr <- confirmed %>%
+  mutate(date = date + days2death) %>%
+  inner_join(deaths) %>%
+  group_by(Country) %>%
+  dplyr::filter(date == max(date)) %>%
+  ungroup() %>%
+  summarise(fr = sum(deaths) / sum(confirmed)) %>%
+  .[["fr"]]
 ```
 
-__The current fatality rate from all confirmed cases is `r percent(fr, accuracy = 0.1)`.__
+- At the time of report preparation the total number of reported global fatalities is `r deaths %>% group_by(Country)%>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise_at("deaths", sum) %>% pull(deaths) %>% comma()`.
+- __The current fatality rate from all confirmed cases is `r percent(fr, accuracy = 0.1)`.__
 This may be a function of under-reporting of true cases and is *very likely to be an overestimate*.
+- Given that mortality from COVID-19 is a reflection of the number of cases contracted in the past, an offset of `r days2death` days (as the [median time from contraction of the virus to mortality](https://wwwnc.cdc.gov/eid/article/26/6/20-0320_article)) was used to obtain more accurate figures. **Using this approach the fatality rate is closer to `r percent(offsetFr, accuracy = 0.1)`**
 
-At the time of report preparation the total number of reported global fatalities is `r deaths %>% group_by(Country)%>% dplyr::filter(date == max(date)) %>% ungroup() %>% summarise_at("deaths", sum) %>% pull(deaths) %>% comma()`.
 
 ### Table of Fatalities
 
@@ -1885,7 +1899,7 @@ plot_grid(
 
 
 ```{r plotFr}
-minDays <- 40
+minDays <- 60
 minPop <- 4e6
 startingPoint <- 2
 df <- confirmed %>%
@@ -2004,8 +2018,6 @@ ggplotly(
     )
   )
 ```
-
-
 
 ## Currently Active Infections {.tabset}
 
