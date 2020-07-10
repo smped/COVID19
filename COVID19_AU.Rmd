@@ -298,6 +298,41 @@ latestAU$VIC <- tibble(
 )
 ```
 
+```{r altVic}
+vicBody <- "https://covidlive.com.au/vic" %>% 
+    read_html() %>% 
+    html_nodes("body") 
+vicTable <- vicBody %>%
+    xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
+    html_table() %>%
+    .[[1]] %>% 
+    mutate(
+        TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
+    )
+latestAU$VIC <- tibble(
+  State = "Victoria",
+  date = dt,
+  confirmed = vicTable %>%
+      dplyr::filter(COUNT == "Cases") %>%
+      pull(TOTAL),
+  deaths =  vicTable %>%
+      dplyr::filter(COUNT == "Deaths") %>%
+      pull(TOTAL),
+  recovered =  vicTable %>%
+      dplyr::filter(COUNT == "Recoveries") %>%
+      pull(TOTAL),
+  tested = vicBody %>% 
+      xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
+      html_table() %>% 
+      .[[1]] %>% 
+      mutate(TESTS = str_remove_all(TESTS, ",") %>% as.numeric) %>% 
+      pull(TESTS) %>%
+      max()
+)
+```
+
+
+
 ```{r updateWA}
 waTests <- waRecov <- NA_real_
 waMedia <- "https://ww2.health.wa.gov.au/News/Media-releases-listing-page" %>%
@@ -738,7 +773,7 @@ ausPops <- tribble(
 Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
 
 - It is now clear that Australia is **no longer in an exponential growth phase** and they pandemic may be under control in all states except Victoria.
-- The June outbreak in Victoria is of a similar size as the initial March outbreak
+- The July outbreak in Victoria is now larger than the initial March outbreak
 - Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(sum(latestAU$confirmed) / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / sum(latestAU$confirmed), 0))`. 
 - Notably, the proportion of recovered cases is now >90% in all states except Victoria
 - NSW Health made a significant change to their recovered cases on `r format.Date(min(nswJSON$date), "%d, %B %Y")` when **cases not tracked after 6 weeks were classified as recovered**. An additional change was subsequently made such that active cases are now formally classed as locally acquired within the last 4 weeks. This change has not yet been implemented below.
