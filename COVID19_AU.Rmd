@@ -900,6 +900,9 @@ ausPops <- tribble(
 
 Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
 
+
+All state-level numbers were obtained from the following sources: [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
+
 - It is now clear that Australia is **no longer in an exponential growth phase** and they pandemic may be under control in all states except Victoria.
 - The June/July outbreak in Victoria is now **larger than the initial March outbreak**
 - Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(sum(latestAU$confirmed) / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / sum(latestAU$confirmed), 0))`. 
@@ -1249,10 +1252,6 @@ latestAU %>%
 ```
 
 
-Testing numbers were initially sourced from manual inspection of individual press releases for [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
-Updates on testing numbers beyond the initial values were performed automatically using the above code which probes each state's official releases for the latest values, and updates where found.
-The number of tested individuals in each state was then assessed as a function of State population size.
-All results are valid at the time of report generation.
 
 ```{r propTest}
 latestAU %>%
