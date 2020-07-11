@@ -42,7 +42,6 @@ panderOptions("missing", "")
 theme_set(theme_bw())
 ```
 
-
 ```{r shiftAxisLabel}
 shiftAxisLabel <- function(x, k = 2){
   x$x$layout$annotations[[2]]$x <- x$x$layout$annotations[[2]]$x*k
@@ -50,8 +49,6 @@ shiftAxisLabel <- function(x, k = 2){
   x
 }
 ```
-
-
 
 ```{r dt}
 # Handle updates between 12am & 12pm
@@ -73,8 +70,6 @@ auStates <- c(
   TAS = "Tasmania"
 )
 ```
-
-
 
 # Data Sources
 
