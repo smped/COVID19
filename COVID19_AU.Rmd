@@ -53,7 +53,7 @@ shiftAxisLabel <- function(x, k = 2){
 ```{r dt}
 # Handle updates between 12am & 12pm
 dt <- Sys.Date()
-if (as.numeric(format(Sys.time(), "%H")) < 12){
+if (as.numeric(format(Sys.time(), "%H")) < 11){
   dt <- Sys.Date() - 1
 }
 ```
