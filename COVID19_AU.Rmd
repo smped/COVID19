@@ -1153,6 +1153,7 @@ n <- 14
 cp <- glue(
   "*Growth factor for each State/Territory. 
   This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. 
+  Given the multiple updates during the course of the day, values shown represent those up to the previous day.
   In order to try and minimise volatility a {n} day simple moving average was used, in contrast to the 5 day average as advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478).
   This enables assessment of the growth factor over an entire quarantine period.
   If no new cases are observed over this period, the value is not able to be calculated.
@@ -1164,7 +1165,7 @@ cp <- glue(
 ```{r plotGF, fig.width=10, fig.height=8, fig.cap=cp}
 gf <- list(
   confirmed %>%
-    dplyr::filter(Country == "Australia") %>% #, date < dt) %>%
+    dplyr::filter(Country == "Australia", date < dt) %>%
     arrange(date) %>%
     group_by(
       `Province/State`
@@ -1184,7 +1185,7 @@ gf <- list(
     ungroup() %>%
     arrange(`Province/State`),
   confirmed %>%
-    dplyr::filter(Country == "Australia") %>% #, date < dt) %>%
+    dplyr::filter(Country == "Australia", date < dt) %>%
     arrange(date) %>%
     group_by(Country, date) %>%
     summarise_at(vars(confirmed), sum) %>%
