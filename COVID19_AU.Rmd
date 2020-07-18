@@ -1145,6 +1145,81 @@ ggplotly(
 )
 ```
 
+## Australian Fatality Rate
+
+```{r frOffset}
+inc <- 6
+icu <- 11
+d <- 7
+offset <- inc + icu + d 
+minDate <- "2020-04-16"
+```
+
+```{r frCP, echo=FALSE}
+cp <- glue(
+  "*Fatality rate for Australian cases as calculated using two methods.
+  Where no offset is included, the rate shown is simply the number of fatalities divided by the total number of reported cases on the same date.
+  When cases increase during a new outbreak, this will skew the fatality rate lower.
+  An alternative is to use an offset based on the fact the the median time from infection to symptom onset is {inc} days, the median time from symptom onset to ICU admission is {icu} days, and the median time from ICU admission to mortality is {d} days.
+  Whilst still flawed this may give a less biased estimate on the true fatality rate, and will always be higher than the alternative calculation.
+  The intial fatality rate spiked above 30% during the intial outbreak under this approach, and as such, data is only shown after {format(ymd(minDate), '%d %b, %Y')}.
+  All times used in the offset were obtained from [here](https://wwwnc.cdc.gov/eid/article/26/6/20-0320_article)*"
+)
+```
+
+
+```{r plotFR, fig.width=10, fig.height=6, fig.cap=cp}
+list(
+  confirmed %>%
+    group_by(date) %>%
+    summarise_at("confirmed", sum) %>%
+    left_join(
+      deaths %>%
+        group_by(date) %>%
+        summarise_at("deaths", sum) 
+    ) %>%
+    dplyr::filter(
+      date > minDate
+    ) %>%
+    mutate(
+      fr = deaths / confirmed,
+      type = "No Offset"
+    ),
+  confirmed %>%
+    mutate(
+      date = date + offset 
+    ) %>%
+    group_by(date) %>%
+    summarise_at("confirmed", sum) %>%
+    left_join(
+      deaths %>%
+        group_by(date) %>%
+        summarise_at("deaths", sum) 
+    ) %>%
+    dplyr::filter(
+      date > minDate
+    ) %>%
+    mutate(
+      fr = deaths / confirmed,
+      type = glue("Offset ({offset} days)")
+    ) 
+) %>%
+  bind_rows() %>%
+  ggplot(
+    aes(date, fr, colour = type)
+  ) +
+  geom_line() +
+  scale_x_date(
+    expand = expansion(mult = 0, add = 0)
+  ) +
+  scale_y_continuous(label = percent) +
+  labs(
+    x = "Date",
+    y = "Estimated Fatality Rate",
+    colour = "Calculation"
+  )
+```
+
 
 ## Current Growth Factor
 
