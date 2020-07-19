@@ -1161,9 +1161,10 @@ cp <- glue(
   Where no offset is included, the rate shown is simply the number of fatalities divided by the total number of reported cases on the same date.
   When cases increase during a new outbreak, this will skew the fatality rate lower.
   An alternative is to use an offset based on the fact the the median time from infection to symptom onset is {inc} days, the median time from symptom onset to ICU admission is {icu} days, and the median time from ICU admission to mortality is {d} days.
-  Whilst still flawed this may give a less biased estimate on the true fatality rate, and will always be higher than the alternative calculation.
-  The intial fatality rate spiked above 30% during the intial outbreak under this approach, and as such, data is only shown after {format(ymd(minDate), '%d %b, %Y')}.
-  All times used in the offset were obtained from [here](https://wwwnc.cdc.gov/eid/article/26/6/20-0320_article)*"
+  When using the offset, the fatality rate is calculated as the number of recorded fatalities on a given date, divided by by the number of cases from {offset} days ago.
+  Whilst still flawed this may give a less biased estimate on the true fatality rate, and importantly, will always be higher than the alternative calculation.
+  The intial fatality rate spiked above 30% during the intial outbreak under the offset approach, and as such, data is only shown after {format(ymd(minDate), '%d %b, %Y')}.
+  All times used for estimation the offset were obtained from [here](https://wwwnc.cdc.gov/eid/article/26/6/20-0320_article)*"
 )
 ```
 
