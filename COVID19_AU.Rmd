@@ -675,19 +675,19 @@ latestAU$TAS <- tibble(
   State = "Tasmania",
   date = dt,
   confirmed = dplyr::filter(
-     tasTables[[2]], 
+     tasTables[[1]], 
      str_detect(`Cases in Tasmania`, "Total cases")
      )$Number,
   deaths = dplyr::filter(
-     tasTables[[2]], 
+     tasTables[[1]], 
      str_detect(`Cases in Tasmania`, "Deaths")
      )$Number,
   recovered = dplyr::filter(
-    tasTables[[2]],
+    tasTables[[1]],
     `Cases in Tasmania` == "Recovered"
     )$Number,
   tested = dplyr::filter(
-    tasTables[[1]],
+    tasTables[[2]],
     `Laboratory tests` == "Total laboratory tests"
     )$Number
 )
