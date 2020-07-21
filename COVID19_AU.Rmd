@@ -855,6 +855,11 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
     bind_rows() %>%
     dplyr::select(-f) %>%
     dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE) 
+# Now deal with any missing values from early in the day updates
+deaths %<>% 
+  expand(`Province/State`, Country, date) %>% 
+  left_join(deaths) %>%
+  mutate(deaths = na_locf(deaths))
 ```
 
 
@@ -1151,8 +1156,8 @@ ggplotly(
 inc <- 6
 icu <- 11
 d <- 7
-offset <- inc + icu + d 
-minDate <- "2020-04-16"
+offset <- inc + icu + d - 3
+minDate <- "2020-04-13"
 ```
 
 ```{r frCP, echo=FALSE}
