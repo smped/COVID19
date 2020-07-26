@@ -179,7 +179,7 @@ latestAU$NSW <- tibble(
   deaths = nswTable %>%
     dplyr::filter(str_detect(Cases, "Deaths")) %>%
     .[["Count"]],
-  recovered = nswRecov,
+  recovered = 2799,#nswRecov,
   tested = nswTests
 )
 ```
@@ -819,7 +819,13 @@ recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
     group_by(
         `Province/State`, Country, date
     ) %>%
-    summarise_at(vars(recovered), max)
+    summarise_at(vars(recovered), max) %>%
+  ungroup()
+# Now deal with any missing values from early in the day updates
+recovered %<>% 
+  expand(`Province/State`, Country, date) %>% 
+  left_join(recovered) %>%
+  mutate(recovered = na_locf(recovered))
 ```
 
 
