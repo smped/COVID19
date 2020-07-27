@@ -134,6 +134,35 @@ latestAU <- list()
 ```
 
 
+
+```{r nswJSON}
+# This is 24hrs behind but has the censored values
+# We can update the recovered time series from here
+# These deaths are more accurate than JHU and the JHU TS should be updated
+nswJSON <- "https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/data_Cases2.json" %>%
+    fromJSON() %>%
+    .[["data"]] %>%
+    as_tibble() %>%
+    separate(Date, into = c("Day", "Month")) %>%
+    mutate(
+      Date = paste0("2020-", Month, "-", Day) %>% 
+        as_datetime(format = "%Y-%b-%d") %>%
+        ymd()
+    ) %>% 
+    group_by(Date) %>%
+    summarise(
+      confirmed = sum(Cases),
+      recovered = sum(Recovered + censored),
+      deaths = sum(Deaths)
+    ) %>%
+    mutate(
+      `Province/State` = "New South Wales",
+      Country = "Australia"
+    ) %>%
+    dplyr::rename(date = Date)
+```
+
+
 ```{r updateNSW}
 nswRecov <- nswTests <- NA_real_
 nswUrl <- "https://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page=4ac47e14-04a9-4016-b501-65a23280e841&wp=baabf81e-a904-44f1-8d59-5f6d56519965&pageurl=/news/Pages/rss-nsw-health.aspx" %>%
@@ -179,7 +208,7 @@ latestAU$NSW <- tibble(
   deaths = nswTable %>%
     dplyr::filter(str_detect(Cases, "Deaths")) %>%
     .[["Count"]],
-  recovered = 2799,#nswRecov,
+  recovered = max(nswJSON$recovered),
   tested = nswTests
 )
 ```
@@ -755,33 +784,6 @@ confirmed %<>%
 ```
 
 
-
-```{r nswJSON}
-# This is 24hrs behind but has the censored values
-# We can update the recovered time series from here
-# These deaths are more accurate than JHU and the JHU TS should be updated
-nswJSON <- "https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/data_Cases2.json" %>%
-    fromJSON() %>%
-    .[["data"]] %>%
-    as_tibble() %>%
-    separate(Date, into = c("Day", "Month")) %>%
-    mutate(
-      Date = paste0("2020-", Month, "-", Day) %>% 
-        as_datetime(format = "%Y-%b-%d") %>%
-        ymd()
-    ) %>% 
-    group_by(Date) %>%
-    summarise(
-      confirmed = sum(Cases),
-      recovered = sum(Recovered + censored),
-      deaths = sum(Deaths)
-    ) %>%
-    mutate(
-      `Province/State` = "New South Wales",
-      Country = "Australia"
-    ) %>%
-    dplyr::rename(date = Date)
-```
 
 
 ```{r auRecTS}
