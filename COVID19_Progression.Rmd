@@ -868,7 +868,7 @@ confirmed %>%
   ) %>%
   mutate(
     lab_y = case_when(
-      name == "confirmed" ~ value + 4e5,
+      name == "confirmed" ~ value + 5e5,
       name != "confirmed" ~ value + 1.5e3
     )
   ) %>%
