@@ -912,7 +912,7 @@ fr <- confirmed %>%
   ungroup() %>%
   summarise(fr = sum(deaths) / sum(confirmed)) %>%
   .[["fr"]]
-days2death <- 18
+days2death <- 21
 offsetFr <- confirmed %>%
   mutate(date = date + days2death) %>%
   inner_join(deaths) %>%
