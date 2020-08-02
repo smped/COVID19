@@ -174,7 +174,7 @@ nswUrl <- "https://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page
   .[[1]] %>%
   str_subset("https") %>%
   str_extract("https[^<]+")
-nswUrl <- "https://www.health.nsw.gov.au/news/Pages/20200731_01.aspx"
+# nswUrl <- "https://www.health.nsw.gov.au/news/Pages/20200731_01.aspx"
 nswTable <- nswUrl %>%
   read_html() %>%
   html_nodes("body") %>%
@@ -394,7 +394,7 @@ latestAU$VIC <- tibble(
 ```
 
 
-```{r updateWA, eval=FALSE, echo=FALSE}
+```{r updateWA, eval=TRUE, echo=TRUE}
 waTests <- waRecov <- NA_real_
 waMedia <- "https://ww2.health.wa.gov.au/News/Media-releases-listing-page" %>%
   read_html() %>% 
@@ -429,13 +429,14 @@ latestAU$WA <- tibble(
   State = "Western Australia",
   date = dt,
   confirmed = waTxt %>% 
-    str_subset("(State|Western)") %>% 
+    # str_subset("(State|Western)") %>% 
     str_subset("total") %>%
     str_subset("recovered", TRUE) %>%
     str_remove_all("COVID.*19") %>% 
     str_replace_all("[^0-9]+([0-9]+)[^0-9]+", "\\1") %>% 
     as.numeric() %>%
     .[!is.na(.)] %>%
+    .[[1]] %>%
     unique(),
   deaths = 9, # Needs to be done manually again
   recovered = waRecov,
@@ -445,7 +446,7 @@ latestAU$WA <- tibble(
 
 
 
-```{r altWA}
+```{r altWA, echo=FALSE, eval=FALSE}
 waUrl <- "https://covidlive.com.au/wa" 
 waBody <- waUrl %>% 
     read_html() %>% 
