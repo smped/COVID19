@@ -952,7 +952,10 @@ confirmed %>%
   rename_all(str_remove_all, pattern = "confirmed_") %>%
   rename_all(str_remove_all, pattern = "_2020.+") %>%
   left_join(
-    dplyr::select(latestAU, State, confirmed, deaths)
+    dplyr::select(latestAU, State, deaths)
+  ) %>%
+  add_column(
+    confirmed = .[[as.character(dt)]]
   ) %>%
   mutate_at(
     vars(confirmed, deaths),
