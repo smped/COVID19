@@ -1316,14 +1316,16 @@ gf <- list(
       dplyr::filter(date == max(date)) %>%
       mutate(R = round(R, 2), date = date + 1),
     fill = rgb(1, 1, 1, 0.3),
-    show.legend = FALSE
+    show.legend = FALSE,
+    nudge_y = 0.3,
+    size = 4
   ) +
   labs(
     x = "Date", y = "Growth Factor"
   ) +
   facet_wrap(~`Province/State`, scales = "free_x") +
   theme(legend.position = "none") +
-  coord_cartesian(ylim = c(0.0, 3))
+  coord_cartesian(ylim = c(0.4, 2.1))
 gf
 ```
 
