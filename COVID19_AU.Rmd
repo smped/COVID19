@@ -1329,8 +1329,8 @@ gf <- list(
 gf
 ```
 
-The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R, 2)` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R > 1, "*considerable cause for concern*", "some degree of confidence that the spread of infections is relatively under control")`.
-In particular, the **outbreak in Victoria is clearly not under control**.
+The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R, 2)` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R > 1, "*considerable cause for concern.* In particular, the **outbreak in Victoria is clearly not under control**", "some degree of confidence that the spread of infections is relatively under control")`.
+
 
 ## Testing Within Each State
 
