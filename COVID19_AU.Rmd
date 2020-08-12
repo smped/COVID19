@@ -134,37 +134,8 @@ latestAU <- list()
 ```
 
 
-
-```{r nswJSON}
-# This is 24hrs behind but has the censored values
-# We can update the recovered time series from here
-# These deaths are more accurate than JHU and the JHU TS should be updated
-nswJSON <- "https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/data_Cases2.json" %>%
-    fromJSON() %>%
-    .[["data"]] %>%
-    as_tibble() %>%
-    separate(Date, into = c("Day", "Month")) %>%
-    mutate(
-      Date = paste0("2020-", Month, "-", Day) %>% 
-        as_datetime(format = "%Y-%b-%d") %>%
-        ymd()
-    ) %>% 
-    group_by(Date) %>%
-    summarise(
-      confirmed = sum(Cases),
-      recovered = sum(Recovered + censored),
-      deaths = sum(Deaths)
-    ) %>%
-    mutate(
-      `Province/State` = "New South Wales",
-      Country = "Australia"
-    ) %>%
-    dplyr::rename(date = Date)
-```
-
-
 ```{r updateNSW}
-nswRecov <- nswTests <- NA_real_
+nswTests <- NA_real_
 nswUrl <- "https://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page=4ac47e14-04a9-4016-b501-65a23280e841&wp=baabf81e-a904-44f1-8d59-5f6d56519965&pageurl=/news/Pages/rss-nsw-health.aspx" %>%
   read_xml() %>%
   xml_find_all("//item") %>%
@@ -174,7 +145,6 @@ nswUrl <- "https://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page
   .[[1]] %>%
   str_subset("https") %>%
   str_extract("https[^<]+")
-# nswUrl <- "https://www.health.nsw.gov.au/news/Pages/20200731_01.aspx"
 nswTable <- nswUrl %>%
   read_html() %>%
   html_nodes("body") %>%
@@ -192,13 +162,25 @@ nswTable <- nswUrl %>%
     Count = str_remove_all(Count, "[\\*,]") %>% as.numeric,
     Cases = str_replace_all(Cases, " +", " ")
   )
+nswRecov <- "https://covidlive.com.au/report/daily-recoveries/nsw" %>% 
+  read_html() %>% 
+  html_nodes("body") %>% 
+  xml_find_all("//table[contains(@class, 'DAILY')]") %>%
+  html_table() %>%
+  .[[1]] %>% 
+  as_tibble() %>%
+  dplyr::select(DATE, RECOV) %>%
+  mutate(
+    RECOV = str_remove_all(RECOV, ",") %>% 
+      str_replace_all("^$", "0") %>%
+      as.numeric(),
+    DATE = parse_date_time(DATE, "%a %d %b") %>%
+      ymd()
+  ) 
 nswTests <- nswTable %>%
   dplyr::filter(
     str_detect(Cases, "Total tests carried out")
   ) %>%
-  .[["Count"]]
-nswRecov <- nswTable %>%
-  dplyr::filter(str_detect(Cases, "recovered")) %>%
   .[["Count"]]
 latestAU$NSW <- tibble(
   State = "New South Wales",
@@ -209,7 +191,7 @@ latestAU$NSW <- tibble(
   deaths = nswTable %>%
     dplyr::filter(str_detect(Cases, "Deaths")) %>%
     .[["Count"]],
-  recovered = max(nswJSON$recovered),
+  recovered = dplyr::filter(nswRecov, DATE == dt)$RECOV,
   tested = nswTests
 )
 ```
@@ -793,8 +775,6 @@ confirmed %<>%
 auRecTS <- list.files(here::here("recovered"), pattern = "rec.*tsv",full.names = TRUE) %>%
   lapply(read_tsv) %>%
   bind_rows() %>% 
-  dplyr::filter(!(date %in% nswJSON$date & `Province/State` == "New South Wales")) %>%
-  bind_rows(dplyr::select(nswJSON, any_of(colnames(.)))) %>%
   arrange(`Province/State`, date) %>%
   group_by(`Province/State`) %>%
   mutate(recovered = cummax(recovered))
@@ -856,9 +836,6 @@ deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/
     bind_rows(
         dplyr::select(latestAU, any_of(colnames(.)), `Province/State` = State)
     ) %>%
-    bind_rows(
-        dplyr::select(nswJSON, any_of(colnames(.)))
-    ) %>%
     arrange(date) %>%
     mutate(f = paste(`Province/State`, Country, sep = "_")) %>%
     split(f = .$f) %>%
@@ -919,7 +896,7 @@ All state-level numbers were obtained from the following sources: [NSW](`r nswUr
 - Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(sum(latestAU$confirmed) / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / sum(latestAU$confirmed), 0))`. 
 - Within Victoria, that rises to one in every `r ausPops %>% left_join(latestAU) %>% mutate(r = confirmed / Population, every = 1 / r) %>% dplyr::filter(State == "Victoria") %>% pull(every) %>% round(0)` having contracted the virus at some point
 - Notably, the proportion of recovered cases is now >90% in all states except Victoria
-- NSW Health made a significant change to their recovered cases on `r format.Date(min(nswJSON$date), "%d, %B %Y")` when **cases not tracked after 6 weeks were classified as recovered**. An additional change was subsequently made such that active cases are now formally classed as locally acquired within the last 4 weeks. This change has not yet been implemented below.
+- NSW Health made a significant change to their recovered cases when **cases not tracked after 6 weeks were classified as recovered**. An additional change was subsequently made such that active cases are now formally classed as locally acquired within the last 4 weeks. This change has not yet been implemented below.
 
 
 ```{r latestAUTable}
