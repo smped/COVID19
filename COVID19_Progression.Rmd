@@ -1351,7 +1351,8 @@ df <- confirmed %>%
     f  = 1e6 * deaths / Population
   ) %>%
   dplyr::filter(
-    f > startingPoint
+    f > startingPoint,
+    Country != "Yemen"
     # `Infection Rate` > startingPoint
     ) %>%
   group_by(Country) %>%
