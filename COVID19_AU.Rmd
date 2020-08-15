@@ -174,7 +174,8 @@ nswRecov <- "https://covidlive.com.au/report/daily-recoveries/nsw" %>%
     RECOV = str_remove_all(RECOV, ",") %>% 
       str_replace_all("^$", "0") %>%
       as.numeric(),
-    DATE = parse_date_time(DATE, "%a %d %b") %>%
+    DATE = paste(DATE, "2020") %>%
+      parse_date_time("%d %b %Y") %>%
       ymd()
   ) 
 nswTests <- nswTable %>%
@@ -249,23 +250,24 @@ qldBody <- qldUrl %>%
     read_html() %>% 
     html_nodes("body") 
 qldTable <- qldBody %>%
-    xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-    html_table() %>%
-    .[[1]] %>% 
-    mutate(
-        TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-    )
+  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
+  html_table() %>%
+  .[[1]] %>% 
+  dplyr::filter(!str_detect(CATEGORY, "Last Updated")) %>%
+  mutate(
+    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
+  )
 latestAU$QLD <- tibble(
   State = "Queensland",
   date = dt,
   confirmed = qldTable %>%
-      dplyr::filter(COUNT == "Cases") %>%
+      dplyr::filter(CATEGORY == "Cases") %>%
       pull(TOTAL),
   deaths =  qldTable %>%
-      dplyr::filter(COUNT == "Deaths") %>%
+      dplyr::filter(CATEGORY == "Deaths") %>%
       pull(TOTAL),
   recovered =  qldTable %>%
-      dplyr::filter(COUNT == "Recoveries") %>%
+      dplyr::filter(CATEGORY == "Recoveries") %>%
       pull(TOTAL),
   tested = qldBody %>% 
       xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
@@ -344,26 +346,29 @@ latestAU$VIC <- tibble(
 ```{r altVic}
 vicUrl <- "https://covidlive.com.au/vic"
 vicBody <- vicUrl %>% 
-    read_html() %>% 
-    html_nodes("body") 
+  read_html() %>% 
+  html_nodes("body") 
 vicTable <- vicBody %>%
-    xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-    html_table() %>%
-    .[[1]] %>% 
-    mutate(
-        TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-    )
+  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
+  html_table() %>%
+  .[[1]] %>% 
+  dplyr::filter(
+    !str_detect(CATEGORY, "Updated")
+  ) %>%
+  mutate(
+    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
+  )
 latestAU$VIC <- tibble(
   State = "Victoria",
   date = dt,
   confirmed = vicTable %>%
-      dplyr::filter(COUNT == "Cases") %>%
+      dplyr::filter(CATEGORY == "Cases") %>%
       pull(TOTAL),
   deaths =  vicTable %>%
-      dplyr::filter(COUNT == "Deaths") %>%
+      dplyr::filter(CATEGORY == "Deaths") %>%
       pull(TOTAL),
   recovered =  vicTable %>%
-      dplyr::filter(COUNT == "Recoveries") %>%
+      dplyr::filter(CATEGORY == "Recoveries") %>%
       pull(TOTAL),
   tested = vicBody %>% 
       xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
@@ -431,26 +436,29 @@ latestAU$WA <- tibble(
 ```{r altWA, echo=TRUE, eval=TRUE}
 waUrl <- "https://covidlive.com.au/wa" 
 waBody <- waUrl %>% 
-    read_html() %>% 
-    html_nodes("body") 
+  read_html() %>% 
+  html_nodes("body") 
 waTable <- waBody %>%
-    xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-    html_table() %>%
-    .[[1]] %>% 
-    mutate(
-        TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-    )
+  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
+  html_table() %>%
+  .[[1]] %>% 
+  dplyr::filter(
+    !str_detect(CATEGORY, "Last Updated")
+  ) %>%
+  mutate(
+    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
+  )
 latestAU$WA <- tibble(
   State = "Western Australia",
   date = dt,
   confirmed = waTable %>%
-      dplyr::filter(COUNT == "Cases") %>%
+      dplyr::filter(CATEGORY == "Cases") %>%
       pull(TOTAL),
   deaths =  waTable %>%
-      dplyr::filter(COUNT == "Deaths") %>%
+      dplyr::filter(CATEGORY == "Deaths") %>%
       pull(TOTAL),
   recovered =  waTable %>%
-      dplyr::filter(COUNT == "Recoveries") %>%
+      dplyr::filter(CATEGORY == "Recoveries") %>%
       pull(TOTAL),
   tested = waBody %>% 
       xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
@@ -561,34 +569,37 @@ latestAU$SA <- tibble(
 ```{r altSA}
 saUrl <- "https://covidlive.com.au/sa" 
 saBody <- saUrl %>% 
-    read_html() %>% 
-    html_nodes("body") 
+  read_html() %>% 
+  html_nodes("body") 
 saTable <- saBody %>%
-    xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-    html_table() %>%
-    .[[1]] %>% 
-    mutate(
-        TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-    )
+  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
+  html_table() %>%
+  .[[1]] %>% 
+  dplyr::filter(
+    !str_detect(CATEGORY, "Last Updated")
+  ) %>%
+  mutate(
+    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
+  )
 latestAU$SA <- tibble(
   State = "South Australia",
   date = dt,
   confirmed = saTable %>%
-      dplyr::filter(COUNT == "Cases") %>%
-      pull(TOTAL),
+    dplyr::filter(CATEGORY == "Cases") %>%
+    pull(TOTAL),
   deaths =  saTable %>%
-      dplyr::filter(COUNT == "Deaths") %>%
-      pull(TOTAL),
+    dplyr::filter(CATEGORY == "Deaths") %>%
+    pull(TOTAL),
   recovered =  saTable %>%
-      dplyr::filter(COUNT == "Recoveries") %>%
-      pull(TOTAL),
+    dplyr::filter(CATEGORY == "Recoveries") %>%
+    pull(TOTAL),
   tested = saBody %>% 
-      xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
-      html_table() %>% 
-      .[[1]] %>% 
-      mutate(TESTS = str_remove_all(TESTS, ",") %>% as.numeric) %>% 
-      pull(TESTS) %>%
-      max()
+    xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
+    html_table() %>% 
+    .[[1]] %>% 
+    mutate(TESTS = str_remove_all(TESTS, ",") %>% as.numeric) %>% 
+    pull(TESTS) %>%
+    max()
 )
 ```
 
@@ -642,26 +653,29 @@ latestAU$ACT <- tibble(
 ```{r altACT}
 actUrl <- "https://covidlive.com.au/act" 
 actBody <- actUrl %>% 
-    read_html() %>% 
-    html_nodes("body") 
+  read_html() %>% 
+  html_nodes("body") 
 actTable <- actBody %>%
-    xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-    html_table() %>%
-    .[[1]] %>% 
-    mutate(
-        TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-    )
+  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
+  html_table() %>%
+  .[[1]] %>% 
+  dplyr::filter(
+    !str_detect(CATEGORY, "Last Updated")
+  ) %>%
+  mutate(
+    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
+  )
 latestAU$ACT <- tibble(
   State = "Australian Capital Territory",
   date = dt,
   confirmed = actTable %>%
-      dplyr::filter(COUNT == "Cases") %>%
+      dplyr::filter(CATEGORY == "Cases") %>%
       pull(TOTAL),
   deaths =  actTable %>%
-      dplyr::filter(COUNT == "Deaths") %>%
+      dplyr::filter(CATEGORY == "Deaths") %>%
       pull(TOTAL),
   recovered =  actTable %>%
-      dplyr::filter(COUNT == "Recoveries") %>%
+      dplyr::filter(CATEGORY == "Recoveries") %>%
       pull(TOTAL),
   tested = actBody %>% 
       xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
@@ -720,10 +734,13 @@ ntTable <- ntUrl %>%
   .[[1]] %>% 
   str_trim() %>% 
   .[. != ""] %>%
+  .[1:6] %>%
   matrix(ncol = 2, byrow = TRUE) %>% 
   set_colnames(c("Total", "Category")) %>% 
   as.data.frame() %>% 
-  mutate(Total = str_remove_all(Total, ",") %>% as.numeric())
+  mutate(
+    Total = str_remove_all(Total, ",") %>% as.numeric()
+  )
 latestAU$NT <- tibble(
   State = "Northern Territory",
   date = dt,
