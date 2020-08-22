@@ -1,5 +1,5 @@
 ---
-title: "COVID-19 Progression"
+title: "COVID-19 Progression: International Data"
 date: "`r paste('Last Updated:', format(Sys.time(), '%d-%B-%Y %H:%M'), '(UTC+9:30)')`"
 output: 
   html_document: 
