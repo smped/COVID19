@@ -134,69 +134,41 @@ confirmed %<>%
 latestAU <- list()
 ```
 
-
 ```{r updateNSW}
-nswTests <- NA_real_
-# nswUrl <- "http://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page=4ac47e14-04a9-4016-b501-65a23280e841&wp=baabf81e-a904-44f1-8d59-5f6d56519965&pageurl=/news/Pages/rss-nsw-health.aspx" %>%
-nswUrl <- GET("https://www.health.nsw.gov.au/_layouts/feed.aspx?xsl=1&web=/news&page=4ac47e14-04a9-4016-b501-65a23280e841&wp=baabf81e-a904-44f1-8d59-5f6d56519965&pageurl=/news/Pages/rss-nsw-health.aspx", config = httr::config(ssl_verifypeer = FALSE)) %>%
-  read_xml() %>%
-  xml_find_all("//item") %>%
-  .[[1]] %>%
-  as.character() %>%
-  str_split("\n") %>%
-  .[[1]] %>%
-  str_subset("https") %>%
-  str_extract("https[^<]+")
-nswTable <- nswUrl %>%
-  GET(config = httr::config(ssl_verifypeer = FALSE)) %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  xml_find_all("//table") %>%
-  .[[1]] %>%
-  html_table() %>%
-  # set_colnames(
-     # str_replace_all(colnames(.), "\\u200b", "")
-  # ) %>%
-  set_colnames(
-    c("Cases", "Count")
-  ) %>%
-  mutate_all(str_replace_all, pattern = "\\u200b", replacement = "") %>%
-  mutate(
-    Count = str_remove_all(Count, "[\\*,]") %>% as.numeric,
-    Cases = str_replace_all(Cases, " +", " ")
-  )
-nswRecov <- "https://covidlive.com.au/report/daily-recoveries/nsw" %>% 
-  read_html() %>% 
-  html_nodes("body") %>% 
-  xml_find_all("//table[contains(@class, 'DAILY')]") %>%
-  html_table() %>%
-  .[[1]] %>% 
+nswUrl <- "https://www.nsw.gov.au/covid-19"
+nswTotal <- fromJSON("https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/usecase2.json")$data %>%
   as_tibble() %>%
-  dplyr::select(DATE, RECOV) %>%
+  mutate(Total = cumsum(Cases)) 
+nswAct <- fromJSON("https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/active_cases.json")$data %>%
+  as_tibble() %>%
+  summarise_at(vars(starts_with("Day")), sum) %>%
+  pivot_longer(everything(), names_to = "Day", values_to = "Active") %>%
+  mutate(Day = str_remove(Day, "Day") %>% as.numeric()) %>%
+  arrange(Day) %>%
   mutate(
-    RECOV = str_remove_all(RECOV, ",") %>% 
-      str_replace_all("^$", "0") %>%
-      as.numeric(),
-    DATE = paste(DATE, "2020") %>%
-      parse_date_time("%d %b %Y") %>%
-      ymd()
-  ) 
-nswTests <- nswTable %>%
-  dplyr::filter(
-    str_detect(Cases, "Total tests carried out")
-  ) %>%
-  .[["Count"]]
+    date = tail(nswTotal$notification_date, 1) %>% 
+      paste0("-2020") %>% 
+      parse_date("%d-%b-%Y") %>% 
+      ymd() %>%
+      subtract(Day)
+  )
+nswAll <- fromJSON("https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/stats.json")$data %>%
+   as_tibble() %>%
+   mutate(
+     date = tail(nswTotal$notification_date, 1) %>% 
+       paste0("-2020") %>% 
+       parse_date("%d-%b-%Y") %>% 
+       ymd()
+   ) %>%
+   left_join(nswAct) %>%
+   mutate(Recovered = Cases - Deaths - Active)
 latestAU$NSW <- tibble(
   State = "New South Wales",
   date = dt,
-  confirmed = nswTable %>%
-    dplyr::filter(str_detect(Cases, "Confirmed cases")) %>%
-    .[["Count"]],
-  deaths = nswTable %>%
-    dplyr::filter(str_detect(Cases, "Deaths")) %>%
-    .[["Count"]],
-  recovered = dplyr::filter(nswRecov, DATE == dt)$RECOV,
-  tested = nswTests
+  confirmed = nswAll$Cases,
+  deaths = nswAll$Deaths,
+  recovered = nswAll$Recovered,
+  tested = nswAll$Tested
 )
 ```
 
@@ -913,7 +885,7 @@ All state-level numbers were obtained from the following sources: [NSW](`r nswUr
 
 - Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(sum(latestAU$confirmed) / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / sum(latestAU$confirmed), 0))`. 
 - Within Victoria, that rises to one in every `r ausPops %>% left_join(latestAU) %>% mutate(r = confirmed / Population, every = 1 / r) %>% dplyr::filter(State == "Victoria") %>% pull(every) %>% round(0)` having contracted the virus at some point
-- NSW Health made a significant change to their recovered cases when **cases not tracked after 6 weeks were classified as recovered**. An additional change was subsequently made such that active cases are now formally classed as locally acquired within the last 4 weeks. Due to the resultant incompatibility of running statistics, this change has not yet been implemented below.
+- NSW Health made a significant change to their recovered cases when **cases not tracked after 6 weeks were classified as recovered**. An additional change was subsequently made such that active cases are now formally classed as locally acquired within the last 4 weeks. This change was implemented for data sources used here on 5th Sept 2020.
 
 
 ```{r latestAUTable}
