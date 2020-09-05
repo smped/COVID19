@@ -868,8 +868,8 @@ confirmed %>%
   ) %>%
   mutate(
     lab_y = case_when(
-      name == "confirmed" ~ value + 5e5,
-      name != "confirmed" ~ value + 1.5e3
+      name == "confirmed" ~ value + 8e5,
+      name != "confirmed" ~ value + 2e3
     )
   ) %>%
   ggplot(aes(Country, value, fill = Country)) +
@@ -1290,7 +1290,7 @@ b <- topDeaths %>%
   ggplot(aes(Country, deaths, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = deaths + 15000, label = comma(deaths, accuracy = 1)),
+    aes(y = deaths + 18000, label = comma(deaths, accuracy = 1)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
