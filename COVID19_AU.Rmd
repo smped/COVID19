@@ -987,7 +987,7 @@ ggplotly(
     mutate(
       Status = str_to_title(Status),
       Status = str_replace_all(Status, "Deaths", "Fatal"),
-      Status = factor(Status, levels = c("Recovered", "Active", "Fatal"))
+      Status = factor(Status, levels = c("Fatal", "Recovered", "Active"))
     ) %>%
     dplyr::filter(Total > 0) %>%
     rename_all(str_to_title) %>%
@@ -1053,7 +1053,7 @@ ggplotly(
       rate = 1e6*count/Population,
       rate = round(rate, 2),
       status = str_replace(status, "deaths", "fatal") %>% str_to_title(),
-      status = factor(status, levels = c("Recovered", "Active", "Fatal"))
+      status = factor(status, levels = c("Fatal", "Recovered", "Active"))
     ) %>%
     rename_all(str_to_title) %>%
     ggplot(aes(Date, Rate, fill = Status, label = Count)) +
