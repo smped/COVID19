@@ -677,9 +677,9 @@ ggplotly(
       Region = str_replace_all(
         Region, "(Central|Southern) Asia", "Central & Southern Asia"
       ),
-      # Region = str_replace_all(
-      #   Region, "(Eastern|South-eastern) Asia", "Eastern & South-Eastern Asia"
-      # ),
+      Region = str_replace_all(
+        Region, "(Eastern|South-eastern) Asia", "Eastern & South-Eastern Asia"
+      ),
       Region = str_replace_all(
         Region, "(Northern America|Caribbean)", "Caribbean & Northern America"
       ),
@@ -687,12 +687,13 @@ ggplotly(
       Region = fct_lump(Region, n = 11)
     ) %>%
     group_by(Country) %>%
+    mutate(maxRate = max(`Daily Rate`, na.rm = TRUE)) %>%
+    ungroup() %>%
     dplyr::filter(
       date > "2020-03-01",
       date < dt,
-      max(`Daily Rate`) > minRate | Country %in% alwaysShow
+      maxRate > minRate | Country %in% alwaysShow
     ) %>%
-    ungroup() %>%
     rename_all(str_to_title) %>%
     mutate(
       `Population (millions)` = round(Population / 1e6, 2)
@@ -719,7 +720,7 @@ ggplotly(
 
 An alternate viewpoint on the data is to remove time and inspect the relationship between the daily increase in cases and the total number of cases.
 When this relationship ceases it's near linear relationship, this can be a sign the control measures have begun to take effect.
-Whilst this relationship **appears to have broken down for Australia**, no breakdown has yet occurred for countries such as South Africa, USA and Brazil, with these countries **explicitly still in, or having resumed the exponential growth phase.**
+Whilst this relationship **appears to have broken down again for Australia**, no breakdown has yet occurred for countries such as South Africa, USA and Brazil, with these countries **explicitly still in, or having resumed the exponential growth phase.**
 
 
 ```{r plotIncVConf}
@@ -835,7 +836,7 @@ totalConf <- confirmed %>%
 
 
 ```{r plotMostInfected, fig.width=10, fig.height=10, fig.cap=glue("*Most impacted countries when combining rankings across both total confirmed cases, and total confirmed cases/million. Only countries with a population greater than {comma(minPop)} are shown. At the time of preparation, the total number of global infections stands at {comma(totalConf)}.*")}
-n <- 15
+n <- 20
 confirmed %>%
   group_by(Country) %>%
   dplyr::filter(date == max(date)) %>%
@@ -868,8 +869,8 @@ confirmed %>%
   ) %>%
   mutate(
     lab_y = case_when(
-      name == "confirmed" ~ value + 8e5,
-      name != "confirmed" ~ value + 2e3
+      name == "confirmed" ~ value + 1e6,
+      name != "confirmed" ~ value + 3e3
     )
   ) %>%
   ggplot(aes(Country, value, fill = Country)) +
@@ -1103,6 +1104,7 @@ ggplotly(
     summarise_at(vars(deaths), sum) %>%
     mutate(
       daily = c(0, diff(deaths)),
+      daily = case_when(daily < 0 ~ 0, TRUE ~ daily),
       MA = sma(daily, n)
     ) %>%
     inner_join(wikiPops) %>%
@@ -1136,7 +1138,9 @@ ggplotly(
       `Population (millions)` = round(Population / 1e6, 2)
     ) %>%
     group_by(Country) %>%
-    dplyr::filter(max(rate) > minRate) %>%
+    mutate(maxRate = max(rate, na.rm = TRUE)) %>%
+    ungroup() %>%
+    dplyr::filter(maxRate > minRate) %>%
     dplyr::rename(
       Date = date,
       `Daily Fatility Rate` = rate,
@@ -1250,22 +1254,18 @@ ggplotly(
 n <- 20
 topDeaths <- deaths %>%
   dplyr::filter(deaths > 0) %>%
-  group_by(Country, date) %>%
-  summarise_at(vars(deaths), sum) %>%
-  dplyr::filter(
-    deaths == max(deaths),
-    date == max(date)
-  ) %>%
+  group_by(Country) %>%
+  summarise_at(vars(deaths), max, na.rm = TRUE) %>%
   ungroup() %>%
   inner_join(wikiPops) %>%
-    dplyr::filter(Population > minPop) %>%
+  dplyr::filter(Population > minPop) %>%
   mutate(
     rate = 1e6*deaths / Population,
     totalRank = nrow(.) - rank(deaths) + 1,
     rateRank = nrow(.) - rank(rate) + 1,
     aveRank = (totalRank + rateRank)/2,
     topRank = totalRank <= n | rateRank <= n
-    ) %>%
+  ) %>%
   arrange(aveRank, desc(Population)) %>%
   dplyr::filter(topRank) %>%
   # dplyr::slice(1:nCnt) %>%
@@ -1277,7 +1277,7 @@ a <- topDeaths %>%
   ggplot(aes(Country, rate, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = rate + 50, label = round(rate, 0)),
+    aes(y = rate + 70, label = round(rate, 0)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
@@ -1290,7 +1290,7 @@ b <- topDeaths %>%
   ggplot(aes(Country, deaths, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = deaths + 18000, label = comma(deaths, accuracy = 1)),
+    aes(y = deaths + 25000, label = comma(deaths, accuracy = 1)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
