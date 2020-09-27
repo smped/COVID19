@@ -315,8 +315,8 @@ All Australian specific data has [been moved to a separate page](COVID19_AU.html
 
 
 ```{r setThresholds}
-startingPoint <- 4
-minPop <- 2e6
+startingPoint <- 10
+minPop <- 4e6
 ```
 
 # Regional Data {.tabset}
@@ -655,7 +655,7 @@ ggplotly(
 ## Daily New Cases
 
 ```{r plotNewDailyCountry, fig.width=10, fig.height=10, fig.cap = "*Daily New Confirmed Cases (per million) using each country's population to calculate the case rate. 7 day Simple Moving Averages are used to plot daily case rates in order to minimise the impact of single-day spikes and irregular reporting. Daily Totals provided when hovering are the reported number of cases for that specific day, without smoothing or scaling. Only countries with more than 4,000,000 people and where the daily rate exceeded 12 cases/million are shown.*"}
-minPop <- 5e6
+minPop <- 4e6
 minRate <- 12
 ggplotly(
   confirmed %>%
