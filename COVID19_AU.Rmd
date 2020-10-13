@@ -1084,7 +1084,7 @@ ggplotly(
 
 ## Daily New Cases
 
-```{r plotDailyAusCases, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day average. Days which are above average are highlighted in red.*"}
+```{r plotDailyAusCases, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day (blue) and 14-day (black) averages. Days which the 7-day average is above the 14-day average are highlighted in red.*"}
 ggplotly(
   confirmed %>%
     group_by(`Province/State`) %>%
@@ -1106,7 +1106,8 @@ ggplotly(
     group_by(`Province/State`) %>%
     mutate(
       MA = round(sma(daily, 7), 2),
-      `Above Average` = daily > MA
+      MA2 = round(sma(daily, 14), 2),
+      `Above Average` = MA > MA2
     ) %>%
     dplyr::filter(date > "2020-03-01") %>%
     ggplot(aes(date, daily)) +
@@ -1116,6 +1117,7 @@ ggplotly(
       width = 1/2
     ) +
     geom_line(aes(y = MA), colour = "blue") +
+    geom_line(aes(y = MA2), colour = "black") +
     facet_wrap(~`Province/State`, scales = "free_y") +
     labs(
       x = "Date",
@@ -1295,7 +1297,7 @@ gf <- list(
 gf
 ```
 
-The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R, 2)` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R > 1, "*considerable cause for concern.* In particular, the **outbreak in Victoria is not yet under control**", "some degree of confidence that the spread of infections is relatively under control")`.
+The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R, 2)` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R > 1, "**considerable cause for concern.**", "some degree of confidence that the spread of infections is relatively under control")`.
 
 
 ## Testing Within Each State
