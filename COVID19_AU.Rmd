@@ -116,17 +116,17 @@ altAU <- guardData$sheets$updates %>%
   fill(confirmed)  %>%
   dplyr::filter(!is.na(confirmed))  %>%
   ungroup()
-# Add the data, with the Guardian API being preferentialy selected
-confirmed %<>%
-  mutate(source = "JHU") %>%
-  bind_rows(
-    mutate(altAU, source = "API")
-  ) %>%
-  arrange(
-    date, `Province/State`, source
-  ) %>%
-  distinct(`Province/State`, Country, date, .keep_all = TRUE) %>%
-  dplyr::select(-source)
+# # Add the data, with the Guardian API being preferentialy selected
+# confirmed %<>%
+#   mutate(source = "JHU") %>%
+#   bind_rows(
+#     mutate(altAU, source = "API")
+#   ) %>%
+#   arrange(
+#     date, `Province/State`, source
+#   ) %>%
+#   distinct(`Province/State`, Country, date, .keep_all = TRUE) %>%
+#   dplyr::select(-source)
 ```
 
 
@@ -700,22 +700,29 @@ latestAU$TAS <- tibble(
 
 ```{r updateNT}
 ntUrl <- "https://coronavirus.nt.gov.au/current-status"
-ntTable <- ntUrl %>% 
-  read_html() %>% 
-  html_nodes("body") %>%
-  xml_find_all("//div[contains(@class, 'covid-card-stats')]") %>% 
-  html_text() %>% 
-  str_split("\r\n") %>%
-  .[[1]] %>% 
-  str_trim() %>% 
-  .[. != ""] %>%
-  .[1:6] %>%
-  matrix(ncol = 2, byrow = TRUE) %>% 
-  set_colnames(c("Total", "Category")) %>% 
-  as.data.frame() %>% 
-  mutate(
-    Total = str_remove_all(Total, ",") %>% as.numeric()
-  )
+ntTable <- suppressWarnings(
+  ntUrl %>% 
+    read_html() %>% 
+    html_nodes("body") %>%
+    xml_find_all("//div[contains(@class, 'covid-card-stats')]") %>% 
+    html_text() %>% 
+    str_remove_all("\r\n") %>% 
+    str_split("  +") %>% 
+    .[[1]] %>% 
+    .[nchar(.) > 0] %>%
+    str_remove_all(",") %>% 
+    enframe(name = c()) %>% 
+    mutate(
+      num = !is.na(suppressWarnings(as.integer(value))),
+      card = cumsum(num)
+    ) %>%
+    pivot_wider(id_cols = card, values_from = value, names_from = num, names_prefix = "num_") %>%
+    mutate(
+      num_FALSE = vapply(num_FALSE, paste, character(1), collapse = " "), 
+      num_TRUE = vapply(num_TRUE, as.integer, integer(1))
+    ) %>%
+    dplyr::select(Total = num_TRUE, Category = num_FALSE)
+)
 latestAU$NT <- tibble(
   State = "Northern Territory",
   date = dt,
@@ -869,7 +876,7 @@ ausPops <- tribble(
   ~State, ~Population,
   "New South Wales", 	8117976,
   "Victoria", 6629870,
-   "Queensland", 5115451,
+  "Queensland", 5115451,
   "South Australia", 1756494,
   "Western Australia", 2630557,
   "Tasmania", 535500,
