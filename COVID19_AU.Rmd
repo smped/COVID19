@@ -134,6 +134,37 @@ altAU <- guardData$sheets$updates %>%
 latestAU <- list()
 ```
 
+
+```{r replace_nsw}
+# The NSW data for JHU is nearly always wrong. Just get rid of it
+confirmed <- dplyr::filter(confirmed, `Province/State` != "New South Wales") %>%
+  bind_rows(
+    "https://covidlive.com.au/report/daily-cases/nsw" %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+      html_table() %>%
+      .[[1]] %>%
+      as_tibble() %>%
+      dplyr::select(date = DATE, confirmed = CASES) %>%
+      separate(date, into = c("day", "month")) %>%
+      mutate(
+        year = "2020",
+        date = paste(year, month, day, sep = "-"),
+        date = parse_date_time(date, orders = "%Y-%B-%d"),
+        date = ymd(date),
+        confirmed = str_remove_all(confirmed, ","),
+        confirmed = as.numeric(confirmed),
+        `Province/State` = "New South Wales",
+        Country = "Australia"
+      ) %>%
+      dplyr::select(any_of(colnames(confirmed))) %>%
+      arrange(date) %>%
+      dplyr::filter(date <= dt)
+  )
+```
+
+
 ```{r updateNSW}
 nswUrl <- "https://www.nsw.gov.au/covid-19"
 nswTotal <- fromJSON("https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/usecase2.json")$data %>%
@@ -169,52 +200,6 @@ latestAU$NSW <- tibble(
   deaths = nswAll$Deaths,
   recovered = nswAll$Recovered,
   tested = nswAll$Tested
-)
-```
-
-```{r updateQLD, eval=FALSE, echo=FALSE}
-qldRecov <- qldTests <- NA_real_
-qldUrl <- "https://www.qld.gov.au/health/conditions/health-alerts/coronavirus-covid-19/current-status/statistics"
-qldTests <- qldUrl %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  xml_find_all("//div[contains(@class, 'tested')]") %>%
-  html_text() %>%
-  str_extract("[0-9,]+") %>%
-  str_remove_all(",") %>%
-  as.numeric()
-qldTable <- qldUrl %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  xml_find_all("//table[@id = 'QLD_Cases']") %>%
-  html_table() %>%
-  .[[1]] 
-qldConfirmed <-  qldTable %>%
-  dplyr::filter(str_detect(Cases, "Number of cases")) %>%
-  pull(Total) %>%
-  str_remove_all(",") %>%
-  as.numeric()
-qldActive <- qldTable %>%
-  dplyr::filter(str_detect(Cases, "Active")) %>%
-  pull(Total) %>%
-  as.numeric()
-qldDeaths <-  qldTable %>%
-  dplyr::filter(str_detect(Cases, "Deaths")) %>%
-  pull(Total) %>%
-  as.numeric()
-# qldRecov <- qldTable %>%
-#   dplyr::filter(Cases == "Recovered") %>%
-#   .[["Total"]] %>%
-#   str_remove_all(",") %>%
-#   as.numeric()
-qldRecov <- qldConfirmed - qldActive - qldDeaths
-latestAU$QLD <- tibble(
-  State = "Queensland",
-  date = dt,
-  confirmed = qldConfirmed,
-  deaths = qldDeaths,
-  recovered = qldRecov,
-  tested = qldTests
 )
 ```
 
@@ -255,69 +240,6 @@ latestAU$QLD <- tibble(
 ```
 
 
-```{r updateVic, eval=FALSE, echo=FALSE}
-vicRecov <- vicTests <- NA_real_
-vicUrl <- c(
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt, '%d')}-{format.Date(dt, '%B')}-{year(dt)}",
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt)}-{format.Date(dt, '%B')}-{year(dt)}",
-  "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{format(dt - 1, '%d')}-{format.Date(dt - 1, '%B')}-{year(dt-1)}",
-    "https://www.dhhs.vic.gov.au/coronavirus-update-victoria-{day(dt - 1)}-{format.Date(dt - 1, '%B')}-{year(dt-1)}"
-  ) %>% 
-  vapply(glue, character(1)) %>%
-  str_to_lower() %>%
-  vapply(url.exists, logical(1)) %>%
-  which() %>%
-  names() %>%
-  .[[1]] 
-vicTxt <- vicUrl %>%
-  read_html() %>%
-  html_nodes("body") %>% 
-  html_text() %>% 
-  str_split("\n") %>% 
-  .[[1]] %>% 
-  str_trim() %>% 
-  .[. != ""] %>%
-  str_subset("(test|recovered|total|died)") %>% 
-  stringi::stri_trans_general("latin-ascii")
-vicTests <- vicTxt %>%
-  str_subset(".*[0-9]+.*tests") %>%
-  .[[1]] %>%
-  str_replace_all(
-    ".* ([0-9,]+)[^0-9]test(ed|s|ing).+",
-    "\\1"
-  ) %>%
-  str_remove_all(",") %>%
-  as.numeric()
-vicRecov <- vicTxt %>%
-  str_subset("[0-9]+.+recovered") %>%
-  str_trim() %>%
-  str_replace_all("[^0-9,]*([0-9,]+)[^0-9]*people have recovered.*", "\\1") %>%
-  str_remove(",") %>%
-  as.numeric() 
-latestAU$VIC <- tibble(
-  State = "Victoria",
-  date = dt,
-  confirmed = vicTxt %>%
-    str_subset("(coronavirus|total).+cases") %>%
-    str_subset("Victoria") %>%
-    str_subset("regional", negate = TRUE) %>%
-    # str_replace_all(".+[^0-9,]+ ([0-9,]+) cases[^0-9,].+", "\\1") %>%
-    str_replace_all(".+total.+ ([0-9,]+).*", "\\1") %>%
-    str_remove_all(",") %>%
-    as.numeric() %>%
-    .[!is.na(.)] %>%
-    unique(),
-  deaths = vicTxt %>% 
-    str_subset("died") %>% 
-    str_replace_all(".+[^0-9]([0-9,]+)[^0-9]*people have died.+", "\\1") %>%
-    str_remove_all(",") %>% 
-    as.numeric() %>%
-    unique(),
-  recovered = vicRecov,
-  tested = vicTests
-)
-```
-
 ```{r altVic}
 vicUrl <- "https://covidlive.com.au/vic"
 vicBody <- vicUrl %>% 
@@ -354,58 +276,6 @@ latestAU$VIC <- tibble(
       max()
 )
 ```
-
-
-```{r updateWA, eval=FALSE, echo=FALSE}
-waTests <- waRecov <- NA_real_
-waMedia <- "https://ww2.health.wa.gov.au/News/Media-releases-listing-page" %>%
-  read_html() %>% 
-  html_nodes("body") %>% 
-  xml_find_all("//a[contains(@title, '19 update')]") %>%
-  html_attr("href") %>%
-  str_subset("2020$") %>%
-  .[[1]] 
-waUrl <- glue("https://ww2.health.wa.gov.au{waMedia}")
-waTxt <- waUrl %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  html_text() %>%
-  str_split("\n") %>%
-  .[[1]] %>%
-  str_trim() %>%
-  .[. != ""] %>%
-  stringi::stri_trans_general("latin-ascii") 
-waTests <- waTxt %>%
-  str_subset("test(s|ed).*performed") %>%
-  str_replace_all(".+ ([0-9,]+) COVID.+", "\\1") %>%
-  str_remove_all(",") %>%
-  as.numeric()
-waRecov <- waTxt %>%
-  str_subset("recovered") %>%
-  str_subset("[0-9]..") %>%
-  str_remove_all("COVID-19") %>%
-  # str_replace_all("[^0-9]*([0-9]*)[^0-9]*", "\\1") %>%
-  str_replace_all(".+ ([0-9,]+) [a-z ]+recovered.+", "\\1") %>%
-  as.numeric()
-latestAU$WA <- tibble(
-  State = "Western Australia",
-  date = dt,
-  confirmed = waTxt %>% 
-    # str_subset("(State|Western)") %>% 
-    str_subset("total") %>%
-    str_subset("recovered", TRUE) %>%
-    str_remove_all("COVID.*19") %>% 
-    str_replace_all("[^0-9]+([0-9]+)[^0-9]+", "\\1") %>% 
-    as.numeric() %>%
-    .[!is.na(.)] %>%
-    .[[1]] %>%
-    unique(),
-  deaths = 9, # Needs to be done manually again
-  recovered = waRecov,
-  tested = waTests
-)
-```
-
 
 
 ```{r altWA, echo=TRUE, eval=TRUE}
@@ -445,99 +315,31 @@ latestAU$WA <- tibble(
 )
 ```
 
-
-
-```{r updateSA, eval=FALSE, echo = FALSE}
-saRecov <- saTests <- NA_real_
-saUrl <- "https://www.covid-19.sa.gov.au/home/dashboard"
-saTxt <- saUrl  %>%
-  read_html() %>%
-  xml_find_all("//div[contains(@class, 'accordion__content')]") %>%
-  .[[1]] %>%
-  html_text() %>%
-  str_split("\r\n") %>%
-  .[[1]] %>%
-  str_trim() %>%
-  .[. != ""]
-## The dashboard is unreliable so use SA Health press releases as an additional source
-## These don't appear until late afternoon, so this is a pain in the arse quite frankly
-altSaUrl <- c(
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}",
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}",
-    "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt)}+{format(dt, '%B')}+2020",
-  "https://www.sahealth.sa.gov.au/wps/wcm/connect/public+content/sa+health+internet/about+us/news+and+media/all+media+releases/covid-19+update+{day(dt - 1)}+{format(dt - 1, '%B')}+2020"
-  ) %>%
-  vapply(glue, character(1)) %>%
-  str_to_lower()
-validSa <- altSaUrl %>%
-  vapply(url.exists, logical(1)) %>% 
-  which() %>%
-  names() %>%
-  sapply(read_html, simplify = FALSE) %>%
-  lapply(html_node, css = "body") %>%
-  vapply(function(x){!is.na(x)}, logical(1)) %>%
-  which() %>%
-  names() %>%
-  .[[1]]
-altSaTxt <- validSa %>%
-  read_html() %>%
-  html_node("body") %>%
-  xml_find_all("//section[@class = 'main-content']") %>%
-  html_text() %>%
-  str_split("\n") %>%
-  .[[1]] %>%
-  str_trim() %>%
-  .[. != ""]
-saTests <- c(
-  saTxt %>%
-    str_replace_all(".+[^0-9,]([0-9,]+)[^0-9,]+tests.+", "\\1") %>%
-    str_remove_all("[, ]") %>%
-    as.numeric(),
-  altSaTxt %>%
-    str_subset("tests") %>%
-    str_replace_all(".+ ([0-9,]+) test.+", "\\1") %>%
-    str_remove_all(",") %>%
-    as.numeric()
-) %>%
-  max(na.rm = TRUE)
-saTable <- "https://www.covid-19.sa.gov.au/" %>% 
-  read_html() %>% 
-  html_node("body") %>% 
-  xml_find_all("//div[@class = 'focus-boxes']") %>%
-  html_text() %>% 
-  str_split("\r\n") %>% 
-  .[[1]] %>% 
-  str_trim() %>% 
-  .[.!=""] %>% 
-  .[seq(length(.), 1, by = -1)] %>% 
-  .[!str_detect(., "(Data current|View the|See more)")] %>%
-  matrix(ncol = 2, byrow = TRUE) %>% 
-  set_colnames(c("Cases", "Total")) %>% 
-  as.data.frame(stringsAsFactors = FALSE) %>% 
-  mutate(
-    Total = as.numeric(Total),
-    Cases = str_remove_all(Cases, "in South Australia")
+```{r replace_sa}
+# The SA data for JHU is nearly always wrong. Just get rid of it
+confirmed <- dplyr::filter(confirmed, `Province/State` != "South Australia") %>%
+  bind_rows(
+    "https://covidlive.com.au/report/daily-cases/sa" %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+      html_table() %>%
+      .[[1]] %>%
+      as_tibble() %>%
+      dplyr::select(date = DATE, confirmed = CASES) %>%
+      separate(date, into = c("day", "month")) %>%
+      mutate(
+        year = "2020",
+        date = paste(year, month, day, sep = "-"),
+        date = parse_date_time(date, orders = "%Y-%B-%d"),
+        date = ymd(date),
+        `Province/State` = "South Australia",
+        Country = "Australia"
+      ) %>%
+      dplyr::select(any_of(colnames(confirmed))) %>%
+      arrange(date) %>%
+      dplyr::filter(date <= dt)
   )
-saRecov <- c(
-  saTable %>%
-    dplyr::filter(str_detect(Cases, "recovered")) %>%
-    .[["Total"]],
-  altSaTxt %>%
-    str_subset("(cleared|recovered)") %>%
-    str_replace_all(".+ ([0-9]+) people have.+", "\\1") %>%
-    as.numeric()
-) %>%
-  max(na.rm = TRUE)
-latestAU$SA <- tibble(
-  State = "South Australia",
-  date = dt,
-  confirmed = saTable %>% 
-    dplyr::filter(str_detect(Cases, "Total cases")) %>% 
-    .[["Total"]],
-  deaths = 4, # Only able to be added manually. Thanks SA Health
-  recovered = saRecov,
-  tested = saTests
-)
 ```
 
 
