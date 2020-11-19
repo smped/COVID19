@@ -381,49 +381,32 @@ latestAU$SA <- tibble(
 ```
 
 
-
-```{r updateACT}
-actRecov <- actTests <- NA_real_
-actUrl <- "https://www.covid19.act.gov.au/home"
-actTxt <- actUrl %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  xml_find_all(
-    "//div[contains(@class, 'spf-article-card--tabular')]"
-  ) %>% 
-  html_text() %>% 
-  str_split("\r\n") %>% 
-  .[[1]] %>% 
-  str_trim() %>% 
-  setdiff(y = "") %>% 
-  str_remove_all("[,*]")
-actTable <- actTxt[seq(6, length(actTxt))] %>%
-  matrix(ncol = 2, byrow = TRUE) %>%
-  set_colnames(c("Category", "Total")) %>%
-  as_tibble() %>%
-  mutate(Total = as.numeric(Total))
-actConf <- actTxt %>%
-  str_subset("Total") %>% 
-  str_remove_all("[A-Za-z ]") %>% 
-  as.numeric() 
-actTests <- actTable %>% 
-  dplyr::filter(str_detect(Category, "Negative test")) %>%
-  .[["Total"]] %>%
-  sum() %>%
-  add(actConf)
-actRecov <- actTable %>%
-  dplyr::filter(str_detect(Category, "recov")) %>%
-  .[["Total"]]
-latestAU$ACT <- tibble(
-  State = "Australian Capital Territory",
-  date = dt,
-  confirmed = actConf,
-  deaths = 3, # Only able to be added manually.
-  recovered = actRecov,
-  tested = actTests
-)
+```{r replace_act}
+# The ACT data for JHU is nearly always wrong. Just get rid of it
+confirmed <- dplyr::filter(confirmed, `Province/State` != "Australian Capital Territory") %>%
+  bind_rows(
+    "https://covidlive.com.au/report/daily-cases/act" %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+      html_table() %>%
+      .[[1]] %>%
+      as_tibble() %>%
+      dplyr::select(date = DATE, confirmed = CASES) %>%
+      separate(date, into = c("day", "month")) %>%
+      mutate(
+        year = "2020",
+        date = paste(year, month, day, sep = "-"),
+        date = parse_date_time(date, orders = "%Y-%B-%d"),
+        date = ymd(date),
+        `Province/State` = "Australian Capital Territory",
+        Country = "Australia"
+      ) %>%
+      dplyr::select(any_of(colnames(confirmed))) %>%
+      arrange(date) %>%
+      dplyr::filter(date <= dt)
+  )
 ```
-
 
 
 
