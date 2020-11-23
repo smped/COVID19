@@ -203,6 +203,36 @@ latestAU$NSW <- tibble(
 )
 ```
 
+```{r replace_qld}
+# The NSW data for JHU is nearly always wrong. Just get rid of it
+confirmed <- dplyr::filter(confirmed, `Province/State` != "Queensland") %>%
+  bind_rows(
+    "https://covidlive.com.au/report/daily-cases/qld" %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+      html_table() %>%
+      .[[1]] %>%
+      as_tibble() %>%
+      dplyr::select(date = DATE, confirmed = CASES) %>%
+      separate(date, into = c("day", "month")) %>%
+      mutate(
+        year = "2020",
+        date = paste(year, month, day, sep = "-"),
+        date = parse_date_time(date, orders = "%Y-%B-%d"),
+        date = ymd(date),
+        confirmed = str_remove_all(confirmed, ","),
+        confirmed = as.numeric(confirmed),
+        `Province/State` = "Queensland",
+        Country = "Australia"
+      ) %>%
+      dplyr::select(any_of(colnames(confirmed))) %>%
+      arrange(date) %>%
+      dplyr::filter(date <= dt)
+  )
+```
+
+
 
 ```{r altQld}
 qldUrl <- "https://covidlive.com.au/qld" 
@@ -237,6 +267,36 @@ latestAU$QLD <- tibble(
       pull(TESTS) %>%
       max()
 )
+```
+
+
+```{r replace_vic}
+# The data for JHU is nearly always wrong. Just get rid of it
+confirmed <- dplyr::filter(confirmed, `Province/State` != "Victoria") %>%
+  bind_rows(
+    "https://covidlive.com.au/report/daily-cases/vic" %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+      html_table() %>%
+      .[[1]] %>%
+      as_tibble() %>%
+      dplyr::select(date = DATE, confirmed = CASES) %>%
+      separate(date, into = c("day", "month")) %>%
+      mutate(
+        year = "2020",
+        date = paste(year, month, day, sep = "-"),
+        date = parse_date_time(date, orders = "%Y-%B-%d"),
+        date = ymd(date),
+        confirmed = str_remove_all(confirmed, ","),
+        confirmed = as.numeric(confirmed),
+        `Province/State` = "Victoria",
+        Country = "Australia"
+      ) %>%
+      dplyr::select(any_of(colnames(confirmed))) %>%
+      arrange(date) %>%
+      dplyr::filter(date <= dt)
+  )
 ```
 
 
@@ -276,6 +336,36 @@ latestAU$VIC <- tibble(
       max()
 )
 ```
+
+
+
+```{r replace_wa}
+# The SA data for JHU is nearly always wrong. Just get rid of it
+confirmed <- dplyr::filter(confirmed, `Province/State` != "Western Australia") %>%
+  bind_rows(
+    "https://covidlive.com.au/report/daily-cases/wa" %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+      html_table() %>%
+      .[[1]] %>%
+      as_tibble() %>%
+      dplyr::select(date = DATE, confirmed = CASES) %>%
+      separate(date, into = c("day", "month")) %>%
+      mutate(
+        year = "2020",
+        date = paste(year, month, day, sep = "-"),
+        date = parse_date_time(date, orders = "%Y-%B-%d"),
+        date = ymd(date),
+        `Province/State` = "Western Australia",
+        Country = "Australia"
+      ) %>%
+      dplyr::select(any_of(colnames(confirmed))) %>%
+      arrange(date) %>%
+      dplyr::filter(date <= dt)
+  )
+```
+
 
 
 ```{r altWA, echo=TRUE, eval=TRUE}
@@ -447,6 +537,33 @@ latestAU$ACT <- tibble(
 )
 ```
 
+```{r replace_tas}
+# The SA data for JHU is nearly always wrong. Just get rid of it
+confirmed <- dplyr::filter(confirmed, `Province/State` != "Tasmania") %>%
+  bind_rows(
+    "https://covidlive.com.au/report/daily-cases/tas" %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+      html_table() %>%
+      .[[1]] %>%
+      as_tibble() %>%
+      dplyr::select(date = DATE, confirmed = CASES) %>%
+      separate(date, into = c("day", "month")) %>%
+      mutate(
+        year = "2020",
+        date = paste(year, month, day, sep = "-"),
+        date = parse_date_time(date, orders = "%Y-%B-%d"),
+        date = ymd(date),
+        `Province/State` = "Tasmania",
+        Country = "Australia"
+      ) %>%
+      dplyr::select(any_of(colnames(confirmed))) %>%
+      arrange(date) %>%
+      dplyr::filter(date <= dt)
+  )
+```
+
 
 ```{r updateTAS}
 tasUrl <- "https://www.coronavirus.tas.gov.au/facts/cases-and-testing-updates"
@@ -481,6 +598,33 @@ latestAU$TAS <- tibble(
 )
 ```
 
+
+```{r replace_nt}
+# The SA data for JHU is nearly always wrong. Just get rid of it
+confirmed <- dplyr::filter(confirmed, `Province/State` != "Northern Territory") %>%
+  bind_rows(
+    "https://covidlive.com.au/report/daily-cases/nt" %>%
+      read_html() %>%
+      html_nodes("body") %>%
+      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+      html_table() %>%
+      .[[1]] %>%
+      as_tibble() %>%
+      dplyr::select(date = DATE, confirmed = CASES) %>%
+      separate(date, into = c("day", "month")) %>%
+      mutate(
+        year = "2020",
+        date = paste(year, month, day, sep = "-"),
+        date = parse_date_time(date, orders = "%Y-%B-%d"),
+        date = ymd(date),
+        `Province/State` = "Northern Territory",
+        Country = "Australia"
+      ) %>%
+      dplyr::select(any_of(colnames(confirmed))) %>%
+      arrange(date) %>%
+      dplyr::filter(date <= dt)
+  )
+```
 
 
 ```{r updateNT}
