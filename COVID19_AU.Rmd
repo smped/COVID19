@@ -11,9 +11,9 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
-    echo = TRUE,
-    message = FALSE, warning = FALSE,
-    fig.align = "center"
+  echo = TRUE,
+  message = FALSE, warning = FALSE,
+  fig.align = "center"
 )
 ```
 
@@ -43,21 +43,6 @@ panderOptions("missing", "")
 theme_set(theme_bw())
 ```
 
-```{r shiftAxisLabel}
-shiftAxisLabel <- function(x, k = 2){
-  x$x$layout$annotations[[2]]$x <- x$x$layout$annotations[[2]]$x*k
-  x$x$layout$margin$l <- x$x$layout$margin$l*k
-  x
-}
-```
-
-```{r dt}
-# Handle updates between 1am & 12pm
-dt <- Sys.Date()
-if (as.numeric(format(Sys.time(), "%H")) < 11){
-  dt <- Sys.Date() - 1
-}
-```
 
 ```{r ausStates}
 auStates <- c(
@@ -74,728 +59,176 @@ auStates <- c(
 
 # Data Sources
 
-
 ```{r confirmed}
-confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv") %>%
-    read_csv() %>%
-    pivot_longer(
-        cols = ends_with("20"),
-        names_to = "date",
-        values_to = "confirmed"
-    )  %>%
-    mutate(
-        date = str_replace_all(
-            date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
-        ) %>%
-            ymd()
-    ) %>%
-    dplyr::rename(
-        Country = `Country/Region`
-    ) %>%
-    dplyr::filter(
-        !is.na(confirmed),
-        Country == "Australia"
-    ) %>%
-  dplyr::select(-Lat, -Long)
-```
-
-```{r guardData}
-guardData <- fromJSON("https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json")
-altAU <- guardData$sheets$updates %>% 
-  as_tibble() %>% 
-  mutate(
-    `Province/State` = auStates[State], 
-    Country = "Australia", 
-    Date = parse_date_time(Date, orders = "%d/%m/%Y") %>% ymd()
-  ) %>% 
-  dplyr::select(`Province/State`, Country, date = Date, confirmed = `Cumulative case count`) %>% 
-  mutate(confirmed = as.numeric(confirmed)) %>%
-  arrange(`Province/State`, date) %>%
-  tidyr::complete(`Province/State`, Country, date) %>%
-  group_by(`Province/State`) %>%
-  fill(confirmed)  %>%
-  dplyr::filter(!is.na(confirmed))  %>%
-  ungroup()
-# # Add the data, with the Guardian API being preferentialy selected
-# confirmed %<>%
-#   mutate(source = "JHU") %>%
-#   bind_rows(
-#     mutate(altAU, source = "API")
-#   ) %>%
-#   arrange(
-#     date, `Province/State`, source
-#   ) %>%
-#   distinct(`Province/State`, Country, date, .keep_all = TRUE) %>%
-#   dplyr::select(-source)
-```
-
-
-```{r initLatestAU}
-latestAU <- list()
-```
-
-
-```{r replace_nsw}
-# The NSW data for JHU is nearly always wrong. Just get rid of it
-confirmed <- dplyr::filter(confirmed, `Province/State` != "New South Wales") %>%
-  bind_rows(
-    "https://covidlive.com.au/report/daily-cases/nsw" %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
-      html_table() %>%
-      .[[1]] %>%
-      as_tibble() %>%
-      dplyr::select(date = DATE, confirmed = CASES) %>%
-      separate(date, into = c("day", "month")) %>%
-      mutate(
-        year = "2020",
-        date = paste(year, month, day, sep = "-"),
-        date = parse_date_time(date, orders = "%Y-%B-%d"),
-        date = ymd(date),
-        confirmed = str_remove_all(confirmed, ","),
-        confirmed = as.numeric(confirmed),
-        `Province/State` = "New South Wales",
-        Country = "Australia"
-      ) %>%
-      dplyr::select(any_of(colnames(confirmed))) %>%
-      arrange(date) %>%
-      dplyr::filter(date <= dt)
-  )
-```
-
-
-```{r updateNSW}
-nswUrl <- "https://www.nsw.gov.au/covid-19"
-nswTotal <- fromJSON("https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/usecase2.json")$data %>%
-  as_tibble() %>%
-  mutate(Total = cumsum(Cases)) 
-nswAct <- fromJSON("https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/active_cases.json")$data %>%
-  as_tibble() %>%
-  summarise_at(vars(starts_with("Day")), sum) %>%
-  pivot_longer(everything(), names_to = "Day", values_to = "Active") %>%
-  mutate(Day = str_remove(Day, "Day") %>% as.numeric()) %>%
-  arrange(Day) %>%
-  mutate(
-    date = tail(nswTotal$notification_date, 1) %>% 
-      paste0("-2020") %>% 
-      parse_date("%d-%b-%Y") %>% 
-      ymd() %>%
-      subtract(Day)
-  )
-nswAll <- fromJSON("https://nswdac-covid-19-postcode-heatmap.azurewebsites.net/datafiles/stats.json")$data %>%
-   as_tibble() %>%
-   mutate(
-     date = tail(nswTotal$notification_date, 1) %>% 
-       paste0("-2020") %>% 
-       parse_date("%d-%b-%Y") %>% 
-       ymd()
-   ) %>%
-   left_join(nswAct) %>%
-   mutate(Recovered = Cases - Deaths - Active)
-latestAU$NSW <- tibble(
-  State = "New South Wales",
-  date = dt,
-  confirmed = nswAll$Cases,
-  deaths = nswAll$Deaths,
-  recovered = nswAll$Recovered,
-  tested = nswAll$Tested
-)
-```
-
-```{r replace_qld}
-# The NSW data for JHU is nearly always wrong. Just get rid of it
-confirmed <- dplyr::filter(confirmed, `Province/State` != "Queensland") %>%
-  bind_rows(
-    "https://covidlive.com.au/report/daily-cases/qld" %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
-      html_table() %>%
-      .[[1]] %>%
-      as_tibble() %>%
-      dplyr::select(date = DATE, confirmed = CASES) %>%
-      separate(date, into = c("day", "month")) %>%
-      mutate(
-        year = "2020",
-        date = paste(year, month, day, sep = "-"),
-        date = parse_date_time(date, orders = "%Y-%B-%d"),
-        date = ymd(date),
-        confirmed = str_remove_all(confirmed, ","),
-        confirmed = as.numeric(confirmed),
-        `Province/State` = "Queensland",
-        Country = "Australia"
-      ) %>%
-      dplyr::select(any_of(colnames(confirmed))) %>%
-      arrange(date) %>%
-      dplyr::filter(date <= dt)
-  )
-```
-
-
-
-```{r altQld}
-qldUrl <- "https://covidlive.com.au/qld" 
-qldBody <- qldUrl %>% 
-    read_html() %>% 
-    html_nodes("body") 
-qldTable <- qldBody %>%
-  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-  html_table() %>%
-  .[[1]] %>% 
-  dplyr::filter(!str_detect(CATEGORY, "Last Updated")) %>%
-  mutate(
-    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-  )
-latestAU$QLD <- tibble(
-  State = "Queensland",
-  date = dt,
-  confirmed = qldTable %>%
-      dplyr::filter(CATEGORY == "Cases") %>%
-      pull(TOTAL),
-  deaths =  qldTable %>%
-      dplyr::filter(CATEGORY == "Deaths") %>%
-      pull(TOTAL),
-  recovered =  qldTable %>%
-      dplyr::filter(CATEGORY == "Recoveries") %>%
-      pull(TOTAL),
-  tested = qldBody %>% 
-      xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
-      html_table() %>% 
-      .[[1]] %>% 
-      mutate(TESTS = str_remove_all(TESTS, ",") %>% as.numeric) %>% 
-      pull(TESTS) %>%
-      max()
-)
-```
-
-
-```{r replace_vic}
-# The data for JHU is nearly always wrong. Just get rid of it
-confirmed <- dplyr::filter(confirmed, `Province/State` != "Victoria") %>%
-  bind_rows(
-    "https://covidlive.com.au/report/daily-cases/vic" %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
-      html_table() %>%
-      .[[1]] %>%
-      as_tibble() %>%
-      dplyr::select(date = DATE, confirmed = CASES) %>%
-      separate(date, into = c("day", "month")) %>%
-      mutate(
-        year = "2020",
-        date = paste(year, month, day, sep = "-"),
-        date = parse_date_time(date, orders = "%Y-%B-%d"),
-        date = ymd(date),
-        confirmed = str_remove_all(confirmed, ","),
-        confirmed = as.numeric(confirmed),
-        `Province/State` = "Victoria",
-        Country = "Australia"
-      ) %>%
-      dplyr::select(any_of(colnames(confirmed))) %>%
-      arrange(date) %>%
-      dplyr::filter(date <= dt)
-  )
-```
-
-
-```{r altVic}
-vicUrl <- "https://covidlive.com.au/vic"
-vicBody <- vicUrl %>% 
-  read_html() %>% 
-  html_nodes("body") 
-vicTable <- vicBody %>%
-  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-  html_table() %>%
-  .[[1]] %>% 
-  dplyr::filter(
-    !str_detect(CATEGORY, "Updated")
-  ) %>%
-  mutate(
-    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-  )
-latestAU$VIC <- tibble(
-  State = "Victoria",
-  date = dt,
-  confirmed = vicTable %>%
-      dplyr::filter(CATEGORY == "Cases") %>%
-      pull(TOTAL),
-  deaths =  vicTable %>%
-      dplyr::filter(CATEGORY == "Deaths") %>%
-      pull(TOTAL),
-  recovered =  vicTable %>%
-      dplyr::filter(CATEGORY == "Recoveries") %>%
-      pull(TOTAL),
-  tested = vicBody %>% 
-      xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
-      html_table() %>% 
-      .[[1]] %>% 
-      mutate(TESTS = str_remove_all(TESTS, ",") %>% as.numeric) %>% 
-      pull(TESTS) %>%
-      max()
-)
-```
-
-
-
-```{r replace_wa}
-# The SA data for JHU is nearly always wrong. Just get rid of it
-confirmed <- dplyr::filter(confirmed, `Province/State` != "Western Australia") %>%
-  bind_rows(
-    "https://covidlive.com.au/report/daily-cases/wa" %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
-      html_table() %>%
-      .[[1]] %>%
-      as_tibble() %>%
-      dplyr::select(date = DATE, confirmed = CASES) %>%
-      separate(date, into = c("day", "month")) %>%
-      mutate(
-        year = "2020",
-        date = paste(year, month, day, sep = "-"),
-        date = parse_date_time(date, orders = "%Y-%B-%d"),
-        date = ymd(date),
-        `Province/State` = "Western Australia",
-        Country = "Australia"
-      ) %>%
-      dplyr::select(any_of(colnames(confirmed))) %>%
-      arrange(date) %>%
-      dplyr::filter(date <= dt)
-  )
-```
-
-
-
-```{r altWA, echo=TRUE, eval=TRUE}
-waUrl <- "https://covidlive.com.au/wa" 
-waBody <- waUrl %>% 
-  read_html() %>% 
-  html_nodes("body") 
-waTable <- waBody %>%
-  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-  html_table() %>%
-  .[[1]] %>% 
-  dplyr::filter(
-    !str_detect(CATEGORY, "Last Updated")
-  ) %>%
-  mutate(
-    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-  )
-latestAU$WA <- tibble(
-  State = "Western Australia",
-  date = dt,
-  confirmed = waTable %>%
-      dplyr::filter(CATEGORY == "Cases") %>%
-      pull(TOTAL),
-  deaths =  waTable %>%
-      dplyr::filter(CATEGORY == "Deaths") %>%
-      pull(TOTAL),
-  recovered =  waTable %>%
-      dplyr::filter(CATEGORY == "Recoveries") %>%
-      pull(TOTAL),
-  tested = waBody %>% 
-      xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
-      html_table() %>% 
-      .[[1]] %>% 
-      mutate(TESTS = str_remove_all(TESTS, ",") %>% as.numeric) %>% 
-      pull(TESTS) %>%
-      max()
-)
-```
-
-```{r replace_sa}
-# The SA data for JHU is nearly always wrong. Just get rid of it
-confirmed <- dplyr::filter(confirmed, `Province/State` != "South Australia") %>%
-  bind_rows(
-    "https://covidlive.com.au/report/daily-cases/sa" %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
-      html_table() %>%
-      .[[1]] %>%
-      as_tibble() %>%
-      dplyr::select(date = DATE, confirmed = CASES) %>%
-      separate(date, into = c("day", "month")) %>%
-      mutate(
-        year = "2020",
-        date = paste(year, month, day, sep = "-"),
-        date = parse_date_time(date, orders = "%Y-%B-%d"),
-        date = ymd(date),
-        `Province/State` = "South Australia",
-        Country = "Australia"
-      ) %>%
-      dplyr::select(any_of(colnames(confirmed))) %>%
-      arrange(date) %>%
-      dplyr::filter(date <= dt)
-  )
-```
-
-
-```{r altSA}
-saUrl <- "https://covidlive.com.au/sa" 
-saBody <- saUrl %>% 
-  read_html() %>% 
-  html_nodes("body") 
-saTable <- saBody %>%
-  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-  html_table() %>%
-  .[[1]] %>% 
-  dplyr::filter(
-    !str_detect(CATEGORY, "Last Updated")
-  ) %>%
-  mutate(
-    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-  )
-latestAU$SA <- tibble(
-  State = "South Australia",
-  date = dt,
-  confirmed = saTable %>%
-    dplyr::filter(CATEGORY == "Cases") %>%
-    pull(TOTAL),
-  deaths =  saTable %>%
-    dplyr::filter(CATEGORY == "Deaths") %>%
-    pull(TOTAL),
-  recovered =  saTable %>%
-    dplyr::filter(CATEGORY == "Recoveries") %>%
-    pull(TOTAL),
-  tested = saBody %>% 
-    xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
-    html_table() %>% 
-    .[[1]] %>% 
-    mutate(TESTS = str_remove_all(TESTS, ",") %>% as.numeric) %>% 
-    pull(TESTS) %>%
-    max()
-)
-```
-
-
-```{r replace_act}
-# The ACT data for JHU is nearly always wrong. Just get rid of it
-confirmed <- dplyr::filter(confirmed, `Province/State` != "Australian Capital Territory") %>%
-  bind_rows(
-    "https://covidlive.com.au/report/daily-cases/act" %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
-      html_table() %>%
-      .[[1]] %>%
-      as_tibble() %>%
-      dplyr::select(date = DATE, confirmed = CASES) %>%
-      separate(date, into = c("day", "month")) %>%
-      mutate(
-        year = "2020",
-        date = paste(year, month, day, sep = "-"),
-        date = parse_date_time(date, orders = "%Y-%B-%d"),
-        date = ymd(date),
-        `Province/State` = "Australian Capital Territory",
-        Country = "Australia"
-      ) %>%
-      dplyr::select(any_of(colnames(confirmed))) %>%
-      arrange(date) %>%
-      dplyr::filter(date <= dt)
-  )
-```
-
-
-
-```{r altACT}
-actUrl <- "https://covidlive.com.au/act" 
-actBody <- actUrl %>% 
-  read_html() %>% 
-  html_nodes("body") 
-actTable <- actBody %>%
-  xml_find_all("//table[contains(@class, 'DAILY-SUMMARY')]") %>% 
-  html_table() %>%
-  .[[1]] %>% 
-  dplyr::filter(
-    !str_detect(CATEGORY, "Last Updated")
-  ) %>%
-  mutate(
-    TOTAL = str_remove_all(TOTAL, ",") %>% as.numeric
-  )
-latestAU$ACT <- tibble(
-  State = "Australian Capital Territory",
-  date = dt,
-  confirmed = actTable %>%
-      dplyr::filter(CATEGORY == "Cases") %>%
-      pull(TOTAL),
-  deaths =  actTable %>%
-      dplyr::filter(CATEGORY == "Deaths") %>%
-      pull(TOTAL),
-  recovered =  actTable %>%
-      dplyr::filter(CATEGORY == "Recoveries") %>%
-      pull(TOTAL),
-  tested = actBody %>% 
-      xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>%
-      html_table() %>% 
-      .[[1]] %>% 
-      mutate(TESTS = str_remove_all(TESTS, ",") %>% as.numeric) %>% 
-      pull(TESTS) %>%
-      max()
-)
-```
-
-```{r replace_tas}
-# The SA data for JHU is nearly always wrong. Just get rid of it
-confirmed <- dplyr::filter(confirmed, `Province/State` != "Tasmania") %>%
-  bind_rows(
-    "https://covidlive.com.au/report/daily-cases/tas" %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
-      html_table() %>%
-      .[[1]] %>%
-      as_tibble() %>%
-      dplyr::select(date = DATE, confirmed = CASES) %>%
-      separate(date, into = c("day", "month")) %>%
-      mutate(
-        year = "2020",
-        date = paste(year, month, day, sep = "-"),
-        date = parse_date_time(date, orders = "%Y-%B-%d"),
-        date = ymd(date),
-        `Province/State` = "Tasmania",
-        Country = "Australia"
-      ) %>%
-      dplyr::select(any_of(colnames(confirmed))) %>%
-      arrange(date) %>%
-      dplyr::filter(date <= dt)
-  )
-```
-
-
-```{r updateTAS}
-tasUrl <- "https://www.coronavirus.tas.gov.au/facts/cases-and-testing-updates"
-tasTables <- tasUrl %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  xml_find_all("//table") %>%
-  html_table() %>%
-  # .[2:1] %>%
-  .[c(4, 3)] %>%
-  lapply(mutate, Number = str_remove_all(Number, "[^0-9]")) %>%
-  lapply(mutate, Number  = as.numeric(Number))
-latestAU$TAS <- tibble(
-  State = "Tasmania",
-  date = dt,
-  confirmed = dplyr::filter(
-     tasTables[[1]], 
-     str_detect(`Cases in Tasmania`, "Total cases")
-     )$Number,
-  deaths = dplyr::filter(
-     tasTables[[1]], 
-     str_detect(`Cases in Tasmania`, "Deaths")
-     )$Number,
-  recovered = dplyr::filter(
-    tasTables[[1]],
-    `Cases in Tasmania` == "Recovered"
-    )$Number,
-  tested = dplyr::filter(
-    tasTables[[2]],
-    `Laboratory tests` == "Total laboratory tests"
-    )$Number
-)
-```
-
-
-```{r replace_nt}
-# The SA data for JHU is nearly always wrong. Just get rid of it
-confirmed <- dplyr::filter(confirmed, `Province/State` != "Northern Territory") %>%
-  bind_rows(
-    "https://covidlive.com.au/report/daily-cases/nt" %>%
-      read_html() %>%
-      html_nodes("body") %>%
-      xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
-      html_table() %>%
-      .[[1]] %>%
-      as_tibble() %>%
-      dplyr::select(date = DATE, confirmed = CASES) %>%
-      separate(date, into = c("day", "month")) %>%
-      mutate(
-        year = "2020",
-        date = paste(year, month, day, sep = "-"),
-        date = parse_date_time(date, orders = "%Y-%B-%d"),
-        date = ymd(date),
-        `Province/State` = "Northern Territory",
-        Country = "Australia"
-      ) %>%
-      dplyr::select(any_of(colnames(confirmed))) %>%
-      arrange(date) %>%
-      dplyr::filter(date <= dt)
-  )
-```
-
-
-```{r updateNT}
-ntUrl <- "https://coronavirus.nt.gov.au/current-status"
-ntTable <- suppressWarnings(
-  ntUrl %>% 
-    read_html() %>% 
+getConfirmed <- function(state, .state_full = auStates){
+  state <- str_to_lower(state)
+  url <- glue("https://covidlive.com.au/report/daily-cases/{state}")
+  url %>%
+    read_html() %>%
     html_nodes("body") %>%
-    xml_find_all("//div[contains(@class, 'covid-card-stats')]") %>% 
-    html_text() %>% 
-    str_remove_all("\r\n") %>% 
-    str_split("  +") %>% 
-    .[[1]] %>% 
-    .[nchar(.) > 0] %>%
-    str_remove_all(",") %>% 
-    enframe(name = c()) %>% 
+    xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+    html_table() %>%
+    .[[1]] %>%
+    as_tibble() %>%
+    dplyr::select(date = DATE, confirmed = CASES) %>%
+    separate(date, into = c("day", "month")) %>%
     mutate(
-      num = !is.na(suppressWarnings(as.integer(value))),
-      card = cumsum(num)
+      year = year(today()),
+      date = paste(year, month, day, sep = "-"),
+      date = parse_date_time(date, orders = "%Y-%B-%d"),
+      date = ymd(date),
+      confirmed = str_remove_all(confirmed, ","),
+      confirmed = as.numeric(confirmed),
+      State = .state_full[str_to_upper(state)],
+      Country = "Australia"
     ) %>%
-    pivot_wider(id_cols = card, values_from = value, names_from = num, names_prefix = "num_") %>%
+    dplyr::select(State, Country, date, confirmed) %>%
+    arrange(date) 
+}
+confirmed <- names(auStates) %>%
+  lapply(getConfirmed) %>%
+  bind_rows()
+```
+
+
+```{r recovered}
+getRecovered <- function(state, .state_full = auStates){
+  state <- str_to_lower(state)
+  url <- glue("https://covidlive.com.au/report/daily-recoveries/{state}")
+  url %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//table[contains(@class, 'DAILY-RECOVERIES')]") %>% 
+    html_table() %>%
+    .[[1]] %>%
+    as_tibble() %>%
+    dplyr::select(date = DATE, recovered = RECOV) %>%
+    separate(date, into = c("day", "month")) %>%
     mutate(
-      num_FALSE = vapply(num_FALSE, paste, character(1), collapse = " "), 
-      num_TRUE = vapply(num_TRUE, as.integer, integer(1))
+      year = year(today()),
+      date = paste(year, month, day, sep = "-"),
+      date = parse_date_time(date, orders = "%Y-%B-%d"),
+      date = ymd(date),
+      recovered = str_remove_all(recovered, ","),
+      recovered = as.numeric(recovered),
+      State = .state_full[str_to_upper(state)],
+      Country = "Australia"
     ) %>%
-    dplyr::select(Total = num_TRUE, Category = num_FALSE)
-)
-latestAU$NT <- tibble(
-  State = "Northern Territory",
-  date = dt,
-  confirmed = dplyr::filter(ntTable, str_detect(Category, "confirmed"))$Total,
-  deaths = 0,
-  recovered = dplyr::filter(ntTable, str_detect(Category, "recovered"))$Total,
-  tested = dplyr::filter(ntTable, str_detect(Category, "tests"))$Total
-)
+    dplyr::select(State, Country, date, recovered) %>%
+    arrange(date) 
+}
+recovered <- names(auStates) %>%
+  lapply(getRecovered) %>%
+  bind_rows()
 ```
-
-
-```{r latestAU}
-latestAU %<>% 
-  bind_rows() %>%
-  mutate(Country = "Australia")
-```
-
-
-```{r updateRecovered}
-latestAU %>%
-  dplyr::select(
-    `Province/State` = State, Country, date, recovered
-  ) %>%
-  write_tsv(
-    here::here(glue("recovered/recovered_{dt}.tsv"))
-  )
-```
-
-
-```{r updateConfirmed}
-confirmed %<>%
-  bind_rows(
-    dplyr::select(latestAU, any_of(colnames(.)), `Province/State` = State)
-  ) %>%
-  arrange(date) %>%
-  mutate(f = paste(`Province/State`, Country, sep = "_")) %>%
-  split(f = .$f) %>%
-  lapply(mutate, confirmed = cummax(confirmed)) %>%
-  bind_rows() %>%
-  dplyr::select(-f) %>%
-  arrange(Country, `Province/State`, date, desc(confirmed)) %>%
-  dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE)
-```
-
-
-
-
-```{r auRecTS}
-auRecTS <- list.files(here::here("recovered"), pattern = "rec.*tsv",full.names = TRUE) %>%
-  lapply(read_tsv) %>%
-  bind_rows() %>% 
-  arrange(`Province/State`, date) %>%
-  group_by(`Province/State`) %>%
-  mutate(recovered = cummax(recovered))
-```
-
-
-```{r jhuRecovered}
-recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv") %>%
-    read_csv() %>%
-    pivot_longer(
-        cols = ends_with("20"),
-        names_to = "date",
-        values_to = "recovered"
-    )  %>%
-    mutate(
-        date = str_replace_all(
-            date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
-        ) %>%
-            ymd()
-    ) %>%
-    dplyr::rename(
-        Country = `Country/Region`
-    ) %>%
-    dplyr::select(-Lat, -Long) %>%
-    dplyr::filter(Country == "Australia") %>%
-    bind_rows(auRecTS) %>%
-    group_by(
-        `Province/State`, Country, date
-    ) %>%
-    summarise_at(vars(recovered), max) %>%
-  ungroup()
-# Now deal with any missing values from early in the day updates
-recovered %<>% 
-  expand(`Province/State`, Country, date) %>% 
-  left_join(recovered) %>%
-  mutate(recovered = na_locf(recovered))
-```
-
 
 ```{r deaths}
-deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv") %>%
-    read_csv() %>%
-    pivot_longer(
-        cols = ends_with("20"),
-        names_to = "date",
-        values_to = "deaths"
-    )  %>%
+getDeaths <- function(state, .state_full = auStates){
+  state <- str_to_lower(state)
+  url <- glue("https://covidlive.com.au/report/daily-deaths/{state}")
+  url %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//table[contains(@class, 'DAILY-DEATHS')]") %>% 
+    html_table() %>%
+    .[[1]] %>%
+    as_tibble() %>%
+    dplyr::select(date = DATE, deaths = DEATHS) %>%
+    separate(date, into = c("day", "month")) %>%
     mutate(
-        date = str_replace_all(
-            date, "(.+)/(.+)/(.+)", "20\\3-\\1-\\2"
-        ) %>%
-            ymd()
+      year = year(today()),
+      date = paste(year, month, day, sep = "-"),
+      date = parse_date_time(date, orders = "%Y-%B-%d"),
+      date = ymd(date),
+      deaths = str_remove_all(deaths, ","),
+      deaths = as.numeric(deaths),
+      State = .state_full[str_to_upper(state)],
+      Country = "Australia"
     ) %>%
-    dplyr::rename(
-        Country = `Country/Region`
+    dplyr::select(State, Country, date, deaths) %>%
+    arrange(date) 
+}
+deaths <- names(auStates) %>%
+  lapply(getDeaths) %>%
+  bind_rows()
+```
+
+```{r active}
+getActive <- function(state, .state_full = auStates){
+  state <- str_to_lower(state)
+  url <- glue("https://covidlive.com.au/report/daily-active-cases/{state}")
+  url %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//table[contains(@class, 'DAILY-ACTIVE-CASES')]") %>% 
+    html_table() %>%
+    .[[1]] %>%
+    as_tibble() %>%
+    dplyr::select(date = DATE, active = ACTIVE) %>%
+    separate(date, into = c("day", "month")) %>%
+    mutate(
+      year = year(today()),
+      date = paste(year, month, day, sep = "-"),
+      date = parse_date_time(date, orders = "%Y-%B-%d"),
+      date = ymd(date),
+      active = str_remove_all(active, ","),
+      active = as.numeric(active),
+      State = .state_full[str_to_upper(state)],
+      Country = "Australia"
     ) %>%
-    dplyr::filter(Country == "Australia") %>%
-    dplyr::select(-Lat, -Long) %>%
-    bind_rows(
-        dplyr::select(latestAU, any_of(colnames(.)), `Province/State` = State)
+    dplyr::select(State, Country, date, active) %>%
+    arrange(date) 
+}
+active <- names(auStates) %>%
+  lapply(getActive) %>%
+  bind_rows()
+```
+
+```{r}
+getTested <- function(state, .state_full = auStates){
+  state <- str_to_lower(state)
+  url <- glue("https://covidlive.com.au/report/daily-tests/{state}")
+  url %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>% 
+    html_table() %>%
+    .[[1]] %>%
+    as_tibble() %>%
+    dplyr::select(date = DATE, tests = TESTS) %>%
+    separate(date, into = c("day", "month")) %>%
+    mutate(
+      year = year(today()),
+      date = paste(year, month, day, sep = "-"),
+      date = parse_date_time(date, orders = "%Y-%B-%d"),
+      date = ymd(date),
+      tests = str_remove_all(tests, ","),
+      tests = as.numeric(tests),
+      State = .state_full[str_to_upper(state)],
+      Country = "Australia"
     ) %>%
-    arrange(date) %>%
-    mutate(f = paste(`Province/State`, Country, sep = "_")) %>%
-    split(f = .$f) %>%
-    lapply(mutate, deaths = cummax(deaths)) %>%
-    bind_rows() %>%
-    dplyr::select(-f) %>%
-    dplyr::distinct(`Province/State`, Country, date, .keep_all = TRUE) 
-# Now deal with any missing values from early in the day updates
-deaths %<>% 
-  expand(`Province/State`, Country, date) %>% 
-  left_join(deaths) %>%
-  mutate(deaths = na_locf(deaths))
+    dplyr::select(State, Country, date, tests) %>%
+    arrange(date) 
+}
+tested <- names(auStates) %>%
+  lapply(getTested) %>%
+  bind_rows() %>%
+  dplyr::filter(!is.na(tests))
 ```
 
 
-Data for confirmed cases, recoveries and fatalities was primarily sourced from [Johns Hopkins University](https://coronavirus.jhu.edu/), using the datasets provided at https://github.com/CSSEGISandData/COVID-19.
-JHU data is now updated every 24 hours at approximately 3:30(UTC), which is about 1:00PM in Adelaide.
-**As such no accurate, daily updates for international data can be produced until after that time.**
-Importantly, dates associated with confirmed cases from this data source, may differ from dates associated with confirmed cases from Australian sources.
-For example, cases reported in the morning in Australia may be assigned to the previous day in US data sources.
+Data for confirmed cases, active cases, recoveries and fatalities was exclusively sourced from [COVID LIVE](https://covidlive.com.au/).
 
-Live hourly updates for Australia are available from https://covid-19-au.com/ for those who would like an up to the minute breakdown of confirmed cases.
-Numbers used for generation of this page are updated periodically throughout the day using values provided by individual states at [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
-Additional Australian data was obtained from [The Guardian](https://interactive.guim.co.uk/docsdata/1q5gdePANXci8enuiS4oHUJxcxC13d6bjMRSicakychE.json).
-Whilst dates from the Guardian are likely to be reported using the UK time-zone as a reference, this is still closer to Australian time zones than USA-based data from JHU.
-
-Information on *recovered cases has been difficult to accurately obtain* due inconsistent methods for considering a case as recovered, and lack of reporting for these cases in many jurisdictions.
-In Australia, some states (e.g. NSW & QLD) have only begun releasing these figures in mid-April, whilst other states such as Victoria were releasing these numbers from mid-March.
 
 ### International Data
 
 International data and figures [can be viewed here](COVID19_Progression.html)
+
+```{r dt}
+dt <- max(confirmed$date)
+dt_char <- as.character(dt)
+```
+
 
 
 # Latest Australian Data {.tabset}
@@ -816,71 +249,58 @@ ausPops <- tribble(
 
 Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
 
-
-All state-level numbers were obtained from the following sources: [NSW](`r nswUrl`), [QLD](`r qldUrl`), [VIC](`r vicUrl`), [WA](`r waUrl`), [SA](`r saUrl`), [TAS](`r tasUrl`), [ACT](`r actUrl`) and the [NT](`r ntUrl`).
-
-- Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(sum(latestAU$confirmed) / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / sum(latestAU$confirmed), 0))`. 
-- Within Victoria, that rises to one in every `r ausPops %>% left_join(latestAU) %>% mutate(r = confirmed / Population, every = 1 / r) %>% dplyr::filter(State == "Victoria") %>% pull(every) %>% round(0)` having contracted the virus at some point
-- NSW Health made a significant change to their recovered cases when **cases not tracked after 6 weeks were classified as recovered**. An additional change was subsequently made such that active cases are now formally classed as locally acquired within the last 4 weeks. This change was implemented for data sources used here on 5th Sept 2020.
+- Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(sum(dplyr::filter(confirmed, date == dt)$confirmed) / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / sum(dplyr::filter(confirmed, date == dt)$confirmed), 0))`. 
+- Within Victoria, that rises to one in every `r round(dplyr::filter(ausPops, State == "Victoria")$Population / dplyr::filter(confirmed, date == dt, State == "Victoria")$confirmed, 0)` having contracted the virus at some point
 
 
 ```{r latestAUTable}
 confirmed %>% 
+  left_join(recovered) %>%
+  left_join(deaths) %>%
+  left_join(active) %>%
   dplyr::filter(
-    date >= sort(unique(date), decreasing = TRUE)[2]
+    date >= max(date) - 1
   ) %>%
-  bind_rows(
-    group_by(., date) %>%
-      summarise(
-        confirmed = sum(confirmed)
-      ) %>%
-      mutate(
-        `Province/State` = "Total"
-      )
-  ) %>%
-  group_by(`Province/State`) %>%
+  group_by(State) %>%
   mutate(
     Increase = c(NA, diff(confirmed)),
-    `% Increase` = c(NA, diff(confirmed)) / min(confirmed)
+    `% Increase` = Increase / min(confirmed),
+    recovered = c(NA, max(recovered)),
+    deaths = c(NA, max(deaths)),
+    active = c(NA, active[2])
   ) %>%
   ungroup() %>%
   pivot_wider(
-    id_cols = `Province/State`, 
+    id_cols = State, 
     names_from = date, 
-    values_from = c(confirmed, Increase, `% Increase`)
+    values_from = c(confirmed, recovered, deaths, active, Increase, `% Increase`)
   ) %>%
   dplyr::select_if(function(x){sum(is.na(x)) <= 1}) %>%
-  rename(State = `Province/State`) %>%
-  rename_all(str_remove_all, pattern = "confirmed_") %>%
-  rename_all(str_remove_all, pattern = "_2020.+") %>%
-  left_join(
-    dplyr::select(latestAU, State, deaths)
+  rename_all(
+    str_remove_all, pattern = "confirmed_"
   ) %>%
-  add_column(
-    confirmed = .[[as.character(dt)]]
-  ) %>%
-  mutate_at(
-    vars(confirmed, deaths),
-    function(x){
-      x[is.na(x)] <- sum(x, na.rm = TRUE)
-      x
-    }
-  ) %>%
-  left_join(
-    auRecTS %>% 
-      dplyr::filter(date == dt) %>% 
-      dplyr::select(State = `Province/State`, recovered) %>%
-      bind_rows(tibble(State = "Total", recovered = sum(.$recovered)))
+  rename_all(str_remove_all, pattern = "_202[01].+") %>%
+  bind_rows(
+    tibble(
+      State = "National Total",
+      "{as.character(dt -1)}" := sum(.[[as.character(dt -1)]]),
+      "{dt_char}" := sum(.[[dt_char]]),
+      Increase = sum(.$Increase),
+      recovered = sum(.$recovered),
+      deaths = sum(.$deaths),
+      active = sum(.$active),
+      `% Increase` = Increase / !!sym(as.character(dt - 1))
+    )
   ) %>%
   mutate(
     `% Increase` = percent(`% Increase`, accuracy = 0.01),
-    `Fatality Rate` = percent(deaths / confirmed, accuracy = 0.1),
-    `Recovery Rate` = percent(recovered / confirmed, accuracy = 0.1),
-    `Currently Active` = confirmed - recovered - deaths,
+    `Fatality Rate` = percent(deaths / !!sym(dt_char), accuracy = 0.1),
+    `Recovery Rate` = percent(recovered / !!sym(dt_char), accuracy = 0.1),
   ) %>%
   rename(
     Fatalities = deaths,
-    Recovered = recovered
+    Recovered = recovered,
+    `Currently Active` = active
   ) %>%
   dplyr::select(
     State, starts_with("20"), ends_with("Increase"), starts_with("Fatal"), starts_with("Recov"), `Currently Active`
@@ -899,7 +319,7 @@ confirmed %>%
 ## Plot of Current Australian Values
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ March 2020 as this was the date of the first recorded fatality in Australia. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date. NSW followed a fortnight after this date and as such, only the most recent numbers can be considered as accurate. Below this plot, the same figures can be seen broken down by state.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ April 2020 as this was the first date of complete data being available. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date. NSW followed a fortnight after this date and as such, only the most recent numbers can be considered as accurate. Below this plot, the same figures can be seen broken down by state.*"
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
@@ -907,19 +327,18 @@ ggplotly(
   confirmed %>%
     left_join(deaths) %>%
     left_join(recovered) %>%
-    mutate_at(vars(confirmed, deaths, recovered), na_locf) %>%
+    left_join(active) %>%
+    mutate_at(vars(confirmed, deaths, recovered, active), na_locf) %>%
     group_by(Country, date) %>%
-    summarise_at(vars(confirmed, deaths, recovered), sum) %>%
+    summarise_at(vars(confirmed, deaths, recovered, active), sum) %>%
     ungroup() %>%
-    mutate_at(vars(confirmed, deaths, recovered), cummax) %>%
-    mutate(active = confirmed - deaths - recovered) %>%
     pivot_longer(
       cols = c(active, confirmed, deaths, recovered),
       names_to = "Status",
       values_to = "Total"
     ) %>%
     arrange(Status, date) %>%
-    dplyr::filter(date > ymd("2020-02-29")) %>%
+    dplyr::filter(date > ymd("2020-04-01")) %>%
     mutate(
       Status = str_to_title(Status),
       Status = str_replace_all(Status, "Deaths", "Fatal"),
@@ -960,19 +379,13 @@ ggplotly(
   confirmed %>%
     left_join(deaths) %>%
     left_join(recovered) %>%
-    mutate_at(vars(confirmed, deaths, recovered), na_locf) %>%
-    rename(State = `Province/State`) %>%
+    left_join(active) %>%
+    mutate_at(vars(confirmed, deaths, recovered, active), na_locf) %>%
     dplyr::filter(
-      date > ymd("2020-03-19"),
+      date > ymd("2020-04-01"),
     ) %>%
     arrange(date) %>%
-    group_by(State) %>%
-    mutate_at(
-      vars(confirmed, recovered, deaths), cummax
-    ) %>%
-    ungroup() %>%
     left_join(ausPops) %>%
-    mutate(active = confirmed - deaths - recovered) %>%
     pivot_longer(
       cols = c(confirmed, deaths, recovered, active),
       names_to = "status",
@@ -1023,7 +436,7 @@ ggplotly(
 ```{r plotDailyAusCases, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day (blue) and 14-day (black) averages. Days which the 7-day average is above the 14-day average are highlighted in red.*"}
 ggplotly(
   confirmed %>%
-    group_by(`Province/State`) %>%
+    group_by(State) %>%
     mutate(daily = c(0, diff(confirmed))) %>%
     ungroup() %>%
     dplyr::filter(confirmed > 0) %>%
@@ -1037,9 +450,9 @@ ggplotly(
       group_by(., date) %>%
         summarise(daily = sum(daily)) %>%
         ungroup() %>%
-        mutate(`Province/State` = "All States")
+        mutate(State = "All States")
     ) %>%
-    group_by(`Province/State`) %>%
+    group_by(State) %>%
     mutate(
       MA = round(sma(daily, 7), 2),
       MA2 = round(sma(daily, 14), 2),
@@ -1054,7 +467,7 @@ ggplotly(
     ) +
     geom_line(aes(y = MA), colour = "blue") +
     geom_line(aes(y = MA2), colour = "black") +
-    facet_wrap(~`Province/State`, scales = "free_y") +
+    facet_wrap(~State, scales = "free_y") +
     labs(
       x = "Date",
       y = "Daily New Cases",
@@ -1064,7 +477,7 @@ ggplotly(
     scale_colour_manual(values = c("grey50", rgb(1, 0.2, 0.2))),
   tooltip = c(
     "date", "daily", "MA"
-    )
+  )
 )
 ```
 
@@ -1075,7 +488,7 @@ inc <- 6
 icu <- 11
 d <- 7
 offset <- icu + d 
-minDate <- "2020-04-10"
+minDate <- "2020-04-20"
 ```
 
 ```{r frCP, echo=FALSE}
@@ -1166,9 +579,7 @@ gf <- list(
   confirmed %>%
     dplyr::filter(Country == "Australia", date < dt) %>%
     arrange(date) %>%
-    group_by(
-      `Province/State`
-    ) %>%
+    group_by(State) %>%
     mutate(
       new = c(0, diff(confirmed)),
       new_ma = sma(new, n)
@@ -1182,7 +593,7 @@ gf <- list(
       )
     ) %>%
     ungroup() %>%
-    arrange(`Province/State`),
+    arrange(State),
   confirmed %>%
     dplyr::filter(Country == "Australia", date < dt) %>%
     arrange(date) %>%
@@ -1200,13 +611,13 @@ gf <- list(
         is.nan(R) ~ NA_real_,
         !is.nan(R) ~ R
       ),
-      `Province/State` = "All States"
+      State = "All States"
     ) %>%
-    arrange(`Province/State`)
+    arrange(State)
 ) %>%
   bind_rows() %>%
   dplyr::filter(date > ymd("2020-03-15")) %>%
-  ggplot(aes(date, R, colour = `Province/State`)) +
+  ggplot(aes(date, R, colour = State)) +
   geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
   geom_hline(yintercept = 1) +
   geom_vline(
@@ -1227,7 +638,7 @@ gf <- list(
   labs(
     x = "Date", y = "Growth Factor"
   ) +
-  facet_wrap(~`Province/State`, scales = "free_x") +
+  facet_wrap(~State, scales = "free_x") +
   theme(legend.position = "none") +
   coord_cartesian(ylim = c(0.4, 2.1))
 gf
@@ -1238,57 +649,31 @@ The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == m
 
 ## Testing Within Each State
 
-```{r updateTested}
-latestAU %>%
-  dplyr::select(State, Tested = tested) %>%
-  write_tsv(
-    glue(
-      "tested/tested_{format(dt, '%Y%m%d')}.tsv"
-    )
-  )
-```
-
-
 
 ```{r propTest}
-latestAU %>%
-  dplyr::select(State, Tested = tested) %>%
-  full_join(
-    confirmed %>%
-      dplyr::filter(
-        date == dt,
-        Country == "Australia"
-      ) %>%
-      rename(
-        State = `Province/State`
-      ) 
-  ) %>%
-  mutate(
-    Tested = case_when(
-      is.na(Tested) ~ confirmed,
-      Tested < confirmed ~ confirmed,
-      !is.na(Tested) ~ Tested
-    )
-  ) %>%
-  left_join(ausPops) %>%
+tested %>% 
+  left_join(confirmed, by = c("State", "Country", "date") ) %>%
+  dplyr::filter(date == dt) %>%
+  left_join(ausPops,  by = "State") %>%
   bind_rows(
     tibble(
-      State = "Total",
+      State = "National Total",
+      date = dt,
       Population = sum(.$Population, na.rm = TRUE),
       confirmed = sum(.$confirmed, na.rm = TRUE),
-      Tested = sum(.$Tested, na.rm = TRUE)
+      tests = sum(.$tests, na.rm = TRUE)
     )
   ) %>%
   mutate(
-    `Tests / '000` = round(1e3 * Tested / Population, 2),
-    Positive = confirmed / Tested,
+    `Tests / '000` = round(1e3 * tests / Population, 2),
+    Positive = confirmed / tests,
     Negative = 1 - Positive,
     isTotal = grepl("Total", State)
   ) %>%
   dplyr::select(
     State, Population,
     Confirmed = confirmed,
-    Tested, 
+    Tests = tests, 
     contains("000"), 
     ends_with("ive"),
     isTotal
