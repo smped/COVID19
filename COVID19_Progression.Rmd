@@ -258,7 +258,7 @@ wikiPops <- read_tsv("wikiPops.tsv") %>%
 ```
 
 ```{r alwaysShow}
-alwaysShow <- c("Australia", "New Zealand", "US", "Canada", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland", "Russia", "Brazil", "Kuwait", "Finland", "Norway", "India")
+alwaysShow <- c("Australia", "New Zealand", "US", "Canada", "United Kingdom", "Taiwan*", "Singapore", "South Korea", "China (Other)", "China (Hubei)", "Hong Kong", "Japan", "Ireland", "Russia", "Brazil", "Kuwait", "Finland", "Norway", "India", "Switzerland")
 ```
 
 
