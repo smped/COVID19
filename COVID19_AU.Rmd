@@ -255,9 +255,9 @@ Australian State populations were taken from the [ABS Website](http://stat.data.
 
 ```{r latestAUTable}
 confirmed %>% 
-  left_join(recovered) %>%
-  left_join(deaths) %>%
-  left_join(active) %>%
+  left_join(recovered, by = c("State", "Country", "date")) %>%
+  left_join(deaths, by = c("State", "Country", "date")) %>%
+  left_join(active, by = c("State", "Country", "date")) %>%
   dplyr::filter(
     date >= max(date) - 1
   ) %>%
@@ -325,9 +325,9 @@ ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities fo
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
 ggplotly(
   confirmed %>%
-    left_join(deaths) %>%
-    left_join(recovered) %>%
-    left_join(active) %>%
+    left_join(deaths, by = c("State", "Country", "date")) %>%
+    left_join(recovered, by = c("State", "Country", "date")) %>%
+    left_join(active, by = c("State", "Country", "date")) %>%
     mutate_at(vars(confirmed, deaths, recovered, active), na_locf) %>%
     group_by(Country, date) %>%
     summarise_at(vars(confirmed, deaths, recovered, active), sum) %>%
@@ -377,9 +377,9 @@ ggplotly(
 ```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases have only recently begun being reported and up until the most recent dates, recovered/active values were very approximate for these states. The extreme drop for NSW active cases in early June is a function of the changed reporting strategy implemented by NSW Health.*"}
 ggplotly(
   confirmed %>%
-    left_join(deaths) %>%
-    left_join(recovered) %>%
-    left_join(active) %>%
+    left_join(deaths, by = c("State", "Country", "date")) %>%
+    left_join(recovered, by = c("State", "Country", "date")) %>%
+    left_join(active, by = c("State", "Country", "date")) %>%
     mutate_at(vars(confirmed, deaths, recovered, active), na_locf) %>%
     dplyr::filter(
       date > ymd("2020-04-01"),
@@ -513,7 +513,7 @@ list(
     left_join(
       deaths %>%
         group_by(date) %>%
-        summarise_at("deaths", sum) 
+        summarise_at("deaths", sum)
     ) %>%
     dplyr::filter(
       date > minDate
