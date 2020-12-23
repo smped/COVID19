@@ -61,7 +61,6 @@ if (as.numeric(format(Sys.time(), "%H")) <= 14){
 ```
 
 
-*Disclaimer: This very simple report was prepared by a bioinformatician with no experience in epidemiology or virology, and as such should be treated simply as an alternate viewpoint on the data, which I was simply unable to find elsewhere. Many other people exist with much greater expertise on this subject. However, I do hope this provides a useful perspective which is able to add constructively to the wider discussion. In addition, it should be noted that this is very much focussed on Australian data.*
 
 # Data Sources
 
