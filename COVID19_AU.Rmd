@@ -19,23 +19,15 @@ knitr::opts_chunk$set(
 
 ```{r packages}
 library(tidyverse)
-library(magrittr)
+library(rlang)
 library(lubridate)
 library(scales)
-library(matrixStats)
 library(ggrepel)
-library(broom)
 library(glue)
-library(jsonlite)
 library(rvest)
-library(RCurl)
 library(pander)
 library(plotly)
-library(cowplot)
 library(QuantTools)
-library(ggfortify)
-library(readxl)
-library(httr)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
 panderOptions("table.style", "rmarkdown")
@@ -59,176 +51,180 @@ auStates <- c(
 
 # Data Sources
 
-```{r confirmed}
-getConfirmed <- function(state, .state_full = auStates){
-  state <- str_to_lower(state)
-  url <- glue("https://covidlive.com.au/report/daily-cases/{state}")
+```{r getCovidTable}
+getCovidTable <- function(
+  state = c("ACT", "QLD", "NSW", "VIC", "SA", "WA", "NT", "TAS"),
+  type = c("cases", "recoveries", "deaths", "active-cases", "tests"),
+  .state_full = auStates
+){
+  
+  state <- match.arg(state)
+  
+  type <- match.arg(type)
+  type_name <- c(
+    cases = "confirmed",
+    recoveries = "recovered",
+    deaths = "deaths",
+    `active-cases` = "active",
+    tests = "tests"
+  )[[type]]
+  col_name <- c(
+    cases = "CASES",
+    recoveries = "RECOV",
+    deaths = "DEATHS",
+    `active-cases` = "ACTIVE",
+    tests = "TESTS"
+  )[[type]]
+  
+  url <- glue("https://covidlive.com.au/report/daily-{type}/{str_to_lower(state)}")
   url %>%
     read_html() %>%
     html_nodes("body") %>%
-    xml_find_all("//table[contains(@class, 'DAILY-CASES')]") %>% 
+    xml_find_all(
+      glue("//table[contains(@class, 'DAILY-{str_to_upper(type)}')]")
+    ) %>% 
     html_table() %>%
     .[[1]] %>%
     as_tibble() %>%
-    dplyr::select(date = DATE, confirmed = CASES) %>%
+    dplyr::select(date = DATE, !!sym(type_name) := !!sym(col_name)) %>%
     separate(date, into = c("day", "month")) %>%
     mutate(
       year = year(today()),
       date = paste(year, month, day, sep = "-"),
       date = parse_date_time(date, orders = "%Y-%B-%d"),
       date = ymd(date),
-      confirmed = str_remove_all(confirmed, ","),
-      confirmed = as.numeric(confirmed),
       State = .state_full[str_to_upper(state)],
       Country = "Australia"
     ) %>%
-    dplyr::select(State, Country, date, confirmed) %>%
+    mutate_at(
+      .vars = type_name, 
+      .funs = function(x){as.integer(str_remove_all(x, ","))}
+    ) %>%
+    dplyr::select(State, Country, date, !!sym(type_name)) %>%
     arrange(date) 
 }
-confirmed <- names(auStates) %>%
-  lapply(getConfirmed) %>%
-  bind_rows()
 ```
 
 
+```{r confirmed}
+confirmed <- names(auStates) %>%
+  lapply(getCovidTable, type = "cases") %>%
+  bind_rows()
+```
+
 ```{r recovered}
-getRecovered <- function(state, .state_full = auStates){
-  state <- str_to_lower(state)
-  url <- glue("https://covidlive.com.au/report/daily-recoveries/{state}")
-  url %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//table[contains(@class, 'DAILY-RECOVERIES')]") %>% 
-    html_table() %>%
-    .[[1]] %>%
-    as_tibble() %>%
-    dplyr::select(date = DATE, recovered = RECOV) %>%
-    separate(date, into = c("day", "month")) %>%
-    mutate(
-      year = year(today()),
-      date = paste(year, month, day, sep = "-"),
-      date = parse_date_time(date, orders = "%Y-%B-%d"),
-      date = ymd(date),
-      recovered = str_remove_all(recovered, ","),
-      recovered = as.numeric(recovered),
-      State = .state_full[str_to_upper(state)],
-      Country = "Australia"
-    ) %>%
-    dplyr::select(State, Country, date, recovered) %>%
-    arrange(date) 
-}
 recovered <- names(auStates) %>%
-  lapply(getRecovered) %>%
+  lapply(getCovidTable, type = "recoveries") %>%
   bind_rows()
 ```
 
 ```{r deaths}
-getDeaths <- function(state, .state_full = auStates){
-  state <- str_to_lower(state)
-  url <- glue("https://covidlive.com.au/report/daily-deaths/{state}")
-  url %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//table[contains(@class, 'DAILY-DEATHS')]") %>% 
-    html_table() %>%
-    .[[1]] %>%
-    as_tibble() %>%
-    dplyr::select(date = DATE, deaths = DEATHS) %>%
-    separate(date, into = c("day", "month")) %>%
-    mutate(
-      year = year(today()),
-      date = paste(year, month, day, sep = "-"),
-      date = parse_date_time(date, orders = "%Y-%B-%d"),
-      date = ymd(date),
-      deaths = str_remove_all(deaths, ","),
-      deaths = as.numeric(deaths),
-      State = .state_full[str_to_upper(state)],
-      Country = "Australia"
-    ) %>%
-    dplyr::select(State, Country, date, deaths) %>%
-    arrange(date) 
-}
 deaths <- names(auStates) %>%
-  lapply(getDeaths) %>%
+  lapply(getCovidTable, type = "deaths") %>%
   bind_rows()
 ```
 
 ```{r active}
-getActive <- function(state, .state_full = auStates){
-  state <- str_to_lower(state)
-  url <- glue("https://covidlive.com.au/report/daily-active-cases/{state}")
-  url %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//table[contains(@class, 'DAILY-ACTIVE-CASES')]") %>% 
-    html_table() %>%
-    .[[1]] %>%
-    as_tibble() %>%
-    dplyr::select(date = DATE, active = ACTIVE) %>%
-    separate(date, into = c("day", "month")) %>%
-    mutate(
-      year = year(today()),
-      date = paste(year, month, day, sep = "-"),
-      date = parse_date_time(date, orders = "%Y-%B-%d"),
-      date = ymd(date),
-      active = str_remove_all(active, ","),
-      active = as.numeric(active),
-      State = .state_full[str_to_upper(state)],
-      Country = "Australia"
-    ) %>%
-    dplyr::select(State, Country, date, active) %>%
-    arrange(date) 
-}
 active <- names(auStates) %>%
-  lapply(getActive) %>%
+  lapply(getCovidTable, type = "active-cases") %>%
   bind_rows()
 ```
 
-```{r}
-getTested <- function(state, .state_full = auStates){
-  state <- str_to_lower(state)
-  url <- glue("https://covidlive.com.au/report/daily-tests/{state}")
-  url %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//table[contains(@class, 'DAILY-TESTS')]") %>% 
-    html_table() %>%
-    .[[1]] %>%
-    as_tibble() %>%
-    dplyr::select(date = DATE, tests = TESTS) %>%
-    separate(date, into = c("day", "month")) %>%
-    mutate(
-      year = year(today()),
-      date = paste(year, month, day, sep = "-"),
-      date = parse_date_time(date, orders = "%Y-%B-%d"),
-      date = ymd(date),
-      tests = str_remove_all(tests, ","),
-      tests = as.numeric(tests),
-      State = .state_full[str_to_upper(state)],
-      Country = "Australia"
-    ) %>%
-    dplyr::select(State, Country, date, tests) %>%
-    arrange(date) 
-}
+```{r tests}
 tested <- names(auStates) %>%
-  lapply(getTested) %>%
+  lapply(getCovidTable, type = "tests") %>%
   bind_rows() %>%
   dplyr::filter(!is.na(tests))
 ```
 
+```{r local}
+getLocal <- function(  
+  state = c("ACT", "QLD", "NSW", "VIC", "SA", "WA", "NT", "TAS"),  
+  .state_full = auStates
+){
+  
+  state <- match.arg(state)
+  
+  url <- glue("https://covidlive.com.au/report/daily-source-overseas/{str_to_lower(state)}")
+  url %>%
+    read_html() %>%
+    html_nodes("body") %>%
+    xml_find_all("//table[contains(@class, 'DAILY-SOURCE-OVERSEAS')]") %>% 
+    html_table() %>%
+    .[[1]] %>%
+    as_tibble() %>%
+    dplyr::select(date = DATE, local = LOCAL) %>%
+    separate(date, into = c("day", "month")) %>%
+    mutate(
+      year = year(today()),
+      date = paste(year, month, day, sep = "-"),
+      date = parse_date_time(date, orders = "%Y-%B-%d"),
+      date = ymd(date),
+      State = .state_full[str_to_upper(state)],
+      Country = "Australia",
+      local = str_remove_all(local, ","),
+      local = as.integer(local)
+    ) %>%
+    dplyr::select(State, Country, date, local) %>%
+    arrange(date) 
+}
+local <- names(auStates) %>%
+  lapply(getLocal) %>%
+  bind_rows() %>%
+  dplyr::filter(!is.na(local))
+```
+
+
+```{r dt}
+dt <- max(confirmed$date)
+if (hour(Sys.time()) < 9) dt <- dt -1
+dt_char <- as.character(dt)
+```
+
+
+
+```{r vic_aged}
+vic_aged <- "https://covidlive.com.au/report/daily-outbreaks-aged" %>%
+  read_html() %>%
+  html_nodes("body") %>%
+  xml_find_all("//table[contains(@class, 'DAILY-OUTBREAKS-AGED')]") %>% 
+    html_table() %>%
+    .[[1]] %>%
+    as_tibble() %>%
+    dplyr::select(date = DATE, deaths = DEATHS, active = ACTIVE) %>%
+    separate(date, into = c("day", "month")) %>%
+    mutate(
+      year = year(today()),
+      date = paste(year, month, day, sep = "-"),
+      date = parse_date_time(date, orders = "%Y-%b-%d"),
+      date = ymd(date),
+      State = "Victoria (Aged Care)",
+      Country = "Australia"
+    ) %>%
+  arrange(date) %>%
+  mutate(
+    deaths = na_locf(deaths),
+    active = na_locf(active),
+    new = c(active[[1]], diff(active)),
+    new = ifelse(new < 0, 0, new),
+    confirmed = cumsum(new),
+    recovered = confirmed - deaths - active,
+    recovered = ifelse(recovered < 0, 0, recovered)
+  ) %>%
+  dplyr::filter(date <= dt) %>%
+  dplyr::select(
+    State, Country, date, deaths, confirmed, active, recovered
+  ) 
+```
+
 
 Data for confirmed cases, active cases, recoveries and fatalities was exclusively sourced from [COVID LIVE](https://covidlive.com.au/).
+Similarly, data for the Victorian Aged Care outbreak was obtained from [data based on press releases](https://covidlive.com.au/report/daily-outbreaks-aged)
 
 
 ### International Data
 
 International data and figures [can be viewed here](COVID19_Progression.html)
-
-```{r dt}
-dt <- max(confirmed$date)
-dt_char <- as.character(dt)
-```
-
 
 
 # Latest Australian Data {.tabset}
@@ -258,8 +254,28 @@ confirmed %>%
   left_join(recovered, by = c("State", "Country", "date")) %>%
   left_join(deaths, by = c("State", "Country", "date")) %>%
   left_join(active, by = c("State", "Country", "date")) %>%
+  bind_rows(vic_aged) %>%
   dplyr::filter(
-    date >= max(date) - 1
+    date %in% c(dt, dt -1)
+  ) %>%
+  mutate(
+    confirmed = case_when(
+      State == "Victoria" ~ confirmed - dplyr::filter(., State == "Victoria (Aged Care)")$confirmed,
+      TRUE ~ confirmed
+    ),
+    recovered = case_when(
+      State == "Victoria" ~ recovered - dplyr::filter(., State == "Victoria (Aged Care)")$recovered,
+      TRUE ~ recovered
+    ),
+    deaths = case_when(
+      State == "Victoria" ~ deaths - dplyr::filter(., State == "Victoria (Aged Care)")$deaths,
+      TRUE ~ deaths
+    ),
+    active = case_when(
+      State == "Victoria" ~ active - dplyr::filter(., State == "Victoria (Aged Care)")$active,
+      TRUE ~ active
+    ),
+    State = str_replace_all(State, "^Victoria$", "Victoria (Non-Aged Care)")
   ) %>%
   group_by(State) %>%
   mutate(
@@ -280,6 +296,7 @@ confirmed %>%
     str_remove_all, pattern = "confirmed_"
   ) %>%
   rename_all(str_remove_all, pattern = "_202[01].+") %>%
+  arrange(State) %>%
   bind_rows(
     tibble(
       State = "National Total",
@@ -309,8 +326,10 @@ confirmed %>%
     justify = "lrrrrrrrrr",
     caption = paste(
       "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.",
-      "Any states with unchanged, or decreasing confirmed cases may indicate delays with the automated data sources, such as health.gov.au or JHU, or that these states have not yet reported for the day.", 
-      "Please note that some discrepancy with dates may occur due to automated data sources obtained different time zones, such as the USA, the UK and Australia.*"
+      "Given that the Victorian outbreak significantly impacted the Federally-run Aged Care facilities,", 
+      "Victorian statistics are broken down into those for which the Andrews government is responsible (Non-Aged Care),", 
+      "and those __for which the Morrisson government is reponsible (Aged Care)__.", 
+      "Detailed statistics on Aged Care are not currently available for other states.*"
     ),
     emphasize.strong.rows = nrow(.)
   )
@@ -325,6 +344,7 @@ ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities fo
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
 ggplotly(
   confirmed %>%
+    dplyr::filter(date <= dt) %>%
     left_join(deaths, by = c("State", "Country", "date")) %>%
     left_join(recovered, by = c("State", "Country", "date")) %>%
     left_join(active, by = c("State", "Country", "date")) %>%
@@ -377,6 +397,7 @@ ggplotly(
 ```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases have only recently begun being reported and up until the most recent dates, recovered/active values were very approximate for these states. The extreme drop for NSW active cases in early June is a function of the changed reporting strategy implemented by NSW Health.*"}
 ggplotly(
   confirmed %>%
+    dplyr::filter(date <= dt) %>%    
     left_join(deaths, by = c("State", "Country", "date")) %>%
     left_join(recovered, by = c("State", "Country", "date")) %>%
     left_join(active, by = c("State", "Country", "date")) %>%
@@ -436,6 +457,7 @@ ggplotly(
 ```{r plotDailyAusCases, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day (blue) and 14-day (black) averages. Days which the 7-day average is above the 14-day average are highlighted in red.*"}
 ggplotly(
   confirmed %>%
+    dplyr::filter(date <= dt) %>%    
     group_by(State) %>%
     mutate(daily = c(0, diff(confirmed))) %>%
     ungroup() %>%
@@ -508,6 +530,7 @@ cp <- glue(
 ```{r plotFR, fig.width=10, fig.height=6, fig.cap=cp}
 list(
   confirmed %>%
+    dplyr::filter(date <= dt) %>%    
     group_by(date) %>%
     summarise_at("confirmed", sum) %>%
     left_join(
@@ -523,6 +546,7 @@ list(
       type = "No Offset"
     ),
   confirmed %>%
+    dplyr::filter(date <= dt) %>%    
     mutate(
       date = date + offset 
     ) %>%
@@ -565,26 +589,25 @@ n <- 14
 cp <- glue(
   "*Growth factor for each State/Territory. 
   This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. 
-  Given the multiple updates during the course of the day, values shown represent those up to the previous day.
+  __Values are calculated using only locally-acquired cases__.
   In order to try and minimise volatility a {n} day simple moving average was used, in contrast to the 5 day average as advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478).
   This enables assessment of the growth factor over an entire quarantine period.
-  If no new cases are observed over this period, the value is not able to be calculated.
-  The dashed vertical lines indicate the day most state borders were closed.*"
+  If no new cases are observed over this period, the value is not able to be calculated.*"
 )
 ```
 
 
 ```{r plotGF, fig.width=10, fig.height=8, fig.cap=cp}
 gf <- list(
-  confirmed %>%
-    dplyr::filter(Country == "Australia", date < dt) %>%
+  local %>%
+    dplyr::filter(date <= dt) %>%    
     arrange(date) %>%
     group_by(State) %>%
     mutate(
-      new = c(0, diff(confirmed)),
+      new = c(0, diff(local)),
       new_ma = sma(new, n)
     ) %>%
-    dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
+    dplyr::filter(local > 0, !is.na(new_ma)) %>%
     mutate(
       R = c(NA, new_ma[-1] / new_ma[-n()]),
       R = case_when(
@@ -594,17 +617,17 @@ gf <- list(
     ) %>%
     ungroup() %>%
     arrange(State),
-  confirmed %>%
-    dplyr::filter(Country == "Australia", date < dt) %>%
+  local %>%
+    dplyr::filter(date <= dt) %>%
     arrange(date) %>%
     group_by(Country, date) %>%
-    summarise_at(vars(confirmed), sum) %>%
+    summarise_at(vars(local), sum) %>%
     ungroup() %>%
     mutate(
-      new = c(0, diff(confirmed)),
+      new = c(0, diff(local)),
       new_ma = sma(new, n)
     ) %>%
-    dplyr::filter(confirmed > 0, !is.na(new_ma)) %>%
+    dplyr::filter(local > 0, !is.na(new_ma)) %>%
     mutate(
       R = c(NA, new_ma[-1] / new_ma[-n()]),
       R = case_when(
@@ -616,7 +639,7 @@ gf <- list(
     arrange(State)
 ) %>%
   bind_rows() %>%
-  dplyr::filter(date > ymd("2020-03-15")) %>%
+  dplyr::filter(date > ymd("2020-04-01")) %>%
   ggplot(aes(date, R, colour = State)) +
   geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
   geom_hline(yintercept = 1) +
@@ -640,11 +663,11 @@ gf <- list(
   ) +
   facet_wrap(~State, scales = "free_x") +
   theme(legend.position = "none") +
-  coord_cartesian(ylim = c(0.4, 2.1))
+  coord_cartesian(ylim = c(0.4, 2.5))#2.1))
 gf
 ```
 
-The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R, 2)` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), confirmed == max(confirmed))$R > 1, "**considerable cause for concern.**", "some degree of confidence that the spread of infections is relatively under control")`.
+The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == max(date), State == "All States")$R, 2)` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), State == "All States")$R > 1, "**considerable cause for concern.**", "some degree of confidence that the spread of infections is relatively under control")`.
 
 
 ## Testing Within Each State
