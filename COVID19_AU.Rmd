@@ -219,7 +219,10 @@ vic_aged <- "https://covidlive.com.au/report/daily-outbreaks-aged" %>%
 
 
 Data for confirmed cases, active cases, recoveries and fatalities was exclusively sourced from [COVID LIVE](https://covidlive.com.au/).
-Similarly, data for the Victorian Aged Care outbreak was obtained from [data based on press releases](https://covidlive.com.au/report/daily-outbreaks-aged)
+Reliable data sources were extremely challenging prior to April and as such, minimal data is available from the early stages of the outbreak.
+
+Similarly, data for the Victorian Aged Care outbreak was obtained from [data based on press releases](https://covidlive.com.au/report/daily-outbreaks-aged).
+
 
 
 ### International Data
@@ -586,13 +589,14 @@ list(
 
 ```{r cap4GF}
 n <- 14
+minCases <- 3
 cp <- glue(
   "*Growth factor for each State/Territory. 
-  This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. 
   __Values are calculated using only locally-acquired cases__.
   In order to try and minimise volatility a {n} day simple moving average was used, in contrast to the 5 day average as advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478).
   This enables assessment of the growth factor over an entire quarantine period.
-  If no new cases are observed over this period, the value is not able to be calculated.*"
+  This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. 
+  As a result, values are only shown when the {n}-day average of new __locally acquired cases__ exceeds {minCases}.*"
 )
 ```
 
@@ -612,7 +616,8 @@ gf <- list(
       R = c(NA, new_ma[-1] / new_ma[-n()]),
       R = case_when(
         is.nan(R) ~ NA_real_,
-        !is.nan(R) ~ R
+        new_ma < minCases ~ NA_real_,
+        TRUE ~ R
       )
     ) %>%
     ungroup() %>%
@@ -632,22 +637,23 @@ gf <- list(
       R = c(NA, new_ma[-1] / new_ma[-n()]),
       R = case_when(
         is.nan(R) ~ NA_real_,
-        !is.nan(R) ~ R
+        new_ma < minCases ~ NA_real_,
+        TRUE ~ R
       ),
       State = "All States"
     ) %>%
     arrange(State)
 ) %>%
   bind_rows() %>%
-  dplyr::filter(date > ymd("2020-04-01")) %>%
+  # dplyr::filter(date > ymd("2020-03-01")) %>%
   ggplot(aes(date, R, colour = State)) +
   geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
   geom_hline(yintercept = 1) +
-  geom_vline(
-    xintercept = ymd("2020-03-22"),
-    linetype = 2,
-    colour = "grey30"
-  ) +
+  # geom_vline(
+  #   xintercept = ymd("2020-03-22"),
+  #   linetype = 2,
+  #   colour = "grey30"
+  # ) +
   geom_label(
     aes(label = R),
     data = . %>%
@@ -663,7 +669,7 @@ gf <- list(
   ) +
   facet_wrap(~State, scales = "free_x") +
   theme(legend.position = "none") +
-  coord_cartesian(ylim = c(0.4, 2.5))#2.1))
+  coord_cartesian(ylim = c(0.5, 1.8))#2.1))
 gf
 ```
 
