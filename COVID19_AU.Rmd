@@ -589,7 +589,7 @@ list(
 
 ```{r cap4GF}
 n <- 14
-minCases <- 3
+minCases <- 1
 cp <- glue(
   "*Growth factor for each State/Territory. 
   __Values are calculated using only locally-acquired cases__.
@@ -649,15 +649,10 @@ gf <- list(
   ggplot(aes(date, R, colour = State)) +
   geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
   geom_hline(yintercept = 1) +
-  # geom_vline(
-  #   xintercept = ymd("2020-03-22"),
-  #   linetype = 2,
-  #   colour = "grey30"
-  # ) +
   geom_label(
     aes(label = R),
     data = . %>%
-      dplyr::filter(date == max(date)) %>%
+      dplyr::filter(date == max(date), !is.na(R)) %>%
       mutate(R = round(R, 2), date = date + 1),
     fill = rgb(1, 1, 1, 0.3),
     show.legend = FALSE,
