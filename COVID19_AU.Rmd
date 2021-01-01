@@ -75,8 +75,8 @@ getCovidTable <- function(
     `active-cases` = "ACTIVE",
     tests = "TESTS"
   )[[type]]
-  
-  url <- glue("https://covidlive.com.au/report/daily-{type}/{str_to_lower(state)}")
+
+    url <- glue("https://covidlive.com.au/report/daily-{type}/{str_to_lower(state)}")
   url %>%
     read_html() %>%
     html_nodes("body") %>%
@@ -89,7 +89,10 @@ getCovidTable <- function(
     dplyr::select(date = DATE, !!sym(type_name) := !!sym(col_name)) %>%
     separate(date, into = c("day", "month")) %>%
     mutate(
-      year = year(today()),
+      year = case_when(
+        month %in% c("Jan") & day < 25 ~ 2021L,
+        TRUE ~ 2020L
+      ),
       date = paste(year, month, day, sep = "-"),
       date = parse_date_time(date, orders = "%Y-%B-%d"),
       date = ymd(date),
@@ -156,7 +159,10 @@ getLocal <- function(
     dplyr::select(date = DATE, local = LOCAL) %>%
     separate(date, into = c("day", "month")) %>%
     mutate(
-      year = year(today()),
+      year = case_when(
+        month %in% c("Jan") & day < 25 ~ 2021L,
+        TRUE ~ 2020L
+      ),
       date = paste(year, month, day, sep = "-"),
       date = parse_date_time(date, orders = "%Y-%B-%d"),
       date = ymd(date),
@@ -194,7 +200,10 @@ vic_aged <- "https://covidlive.com.au/report/daily-outbreaks-aged" %>%
     dplyr::select(date = DATE, deaths = DEATHS, active = ACTIVE) %>%
     separate(date, into = c("day", "month")) %>%
     mutate(
-      year = year(today()),
+      year = case_when(
+        month %in% c("Jan") & day < 25 ~ 2021L,
+        TRUE ~ 2020L
+      ),
       date = paste(year, month, day, sep = "-"),
       date = parse_date_time(date, orders = "%Y-%b-%d"),
       date = ymd(date),
