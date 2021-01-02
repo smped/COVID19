@@ -80,7 +80,7 @@ if (as.numeric(format(Sys.time(), "%H")) <= 14){
 confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv") %>%
   read_csv() %>%
   pivot_longer(
-    cols = ends_with("20"),
+    cols = matches("2[01]$"),
     names_to = "date",
     values_to = "confirmed"
   )  %>%
@@ -116,7 +116,7 @@ confirmed <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
 recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_recovered_global.csv") %>%
   read_csv() %>%
   pivot_longer(
-    cols = ends_with("20"),
+    cols = matches("2[01]$"),
     names_to = "date",
     values_to = "recovered"
   )  %>%
@@ -148,7 +148,7 @@ recovered <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/mast
 deaths <- url("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv") %>%
   read_csv() %>%
   pivot_longer(
-    cols = ends_with("20"),
+    cols = matches("2[01]$"),
     names_to = "date",
     values_to = "deaths"
   )  %>%
@@ -1169,7 +1169,6 @@ minD <- 0.45
 dailyVsTotalDeaths <- deaths %>%
   group_by(Country, date) %>%
   summarise_at(vars(deaths), sum) %>%
-  dplyr::filter(deaths > 0) %>%
   split(f = .$Country) %>%
   lapply(function(x, n = 7){
     x %>%
@@ -1182,6 +1181,7 @@ dailyVsTotalDeaths <- deaths %>%
   }
   ) %>%
   bind_rows() %>%
+  dplyr::filter(!is.na(deaths)) %>%
   inner_join(wikiPops) %>%
   mutate(
     deaths = 1e6 * deaths / Population,
@@ -1189,7 +1189,7 @@ dailyVsTotalDeaths <- deaths %>%
     max_d = max(d, na.rm = TRUE)
   ) %>%
   ungroup() %>%
-  dplyr::filter(!is.na(deaths), !is.na(d)) %>%
+  dplyr::filter(!is.na(d)) %>%
   mutate_at(vars(deaths, d), round, 2) %>%
   dplyr::filter(
     Population > minPop | Country %in% alwaysShow,
