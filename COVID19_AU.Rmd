@@ -28,6 +28,7 @@ library(rvest)
 library(pander)
 library(plotly)
 library(QuantTools)
+library(jsonlite)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
 panderOptions("table.style", "rmarkdown")
@@ -49,7 +50,41 @@ auStates <- c(
 )
 ```
 
+```{r ausPops}
+ausPops <- tribble(
+  ~State, ~Population,
+  "New South Wales", 	8117976,
+  "Victoria", 6629870,
+  "Queensland", 5115451,
+  "South Australia", 1756494,
+  "Western Australia", 2630557,
+  "Tasmania", 535500,
+  "Northern Territory", 245562,
+  "Australian Capital Territory", 428060
+)
+```
+
+
 # Data Sources
+
+```{r}
+data <- fromJSON("https://covidlive.com.au/covid-live.json") %>%
+    as_tibble() %>%
+    mutate(
+        REPORT_DATE = ymd(REPORT_DATE)
+    )
+```
+
+```{r dt}
+dt <- data %>%
+    dplyr::filter(
+        CODE == "AUS", !is.na(LAST_UPDATED_DATE)
+    ) %>%
+    pull(REPORT_DATE) %>%
+    max()
+```
+
+
 
 ```{r getCovidTable}
 getCovidTable <- function(
@@ -181,14 +216,6 @@ local <- names(auStates) %>%
 ```
 
 
-```{r dt}
-dt <- max(confirmed$date)
-if (hour(Sys.time()) < 9) dt <- dt -1
-dt_char <- as.character(dt)
-```
-
-
-
 ```{r vic_aged}
 vic_aged <- "https://covidlive.com.au/report/daily-outbreaks-aged" %>%
   read_html() %>%
@@ -241,20 +268,6 @@ International data and figures [can be viewed here](COVID19_Progression.html)
 
 # Latest Australian Data {.tabset}
 
-```{r ausPops}
-ausPops <- tribble(
-  ~State, ~Population,
-  "New South Wales", 	8117976,
-  "Victoria", 6629870,
-  "Queensland", 5115451,
-  "South Australia", 1756494,
-  "Western Australia", 2630557,
-  "Tasmania", 535500,
-  "Northern Territory", 245562,
-  "Australian Capital Territory", 428060
-)
-```
-
 Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
 
 - Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(sum(dplyr::filter(confirmed, date == dt)$confirmed) / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / sum(dplyr::filter(confirmed, date == dt)$confirmed), 0))`. 
@@ -262,89 +275,51 @@ Australian State populations were taken from the [ABS Website](http://stat.data.
 
 
 ```{r latestAUTable}
-confirmed %>% 
-  left_join(recovered, by = c("State", "Country", "date")) %>%
-  left_join(deaths, by = c("State", "Country", "date")) %>%
-  left_join(active, by = c("State", "Country", "date")) %>%
-  bind_rows(vic_aged) %>%
-  dplyr::filter(
-    date %in% c(dt, dt -1)
-  ) %>%
-  mutate(
-    confirmed = case_when(
-      State == "Victoria" ~ confirmed - dplyr::filter(., State == "Victoria (Aged Care)")$confirmed,
-      TRUE ~ confirmed
-    ),
-    recovered = case_when(
-      State == "Victoria" ~ recovered - dplyr::filter(., State == "Victoria (Aged Care)")$recovered,
-      TRUE ~ recovered
-    ),
-    deaths = case_when(
-      State == "Victoria" ~ deaths - dplyr::filter(., State == "Victoria (Aged Care)")$deaths,
-      TRUE ~ deaths
-    ),
-    active = case_when(
-      State == "Victoria" ~ active - dplyr::filter(., State == "Victoria (Aged Care)")$active,
-      TRUE ~ active
-    ),
-    State = str_replace_all(State, "^Victoria$", "Victoria (Non-Aged Care)")
-  ) %>%
-  group_by(State) %>%
-  mutate(
-    Increase = c(NA, diff(confirmed)),
-    `% Increase` = Increase / min(confirmed),
-    recovered = c(NA, max(recovered)),
-    deaths = c(NA, max(deaths)),
-    active = c(NA, active[2])
-  ) %>%
-  ungroup() %>%
-  pivot_wider(
-    id_cols = State, 
-    names_from = date, 
-    values_from = c(confirmed, recovered, deaths, active, Increase, `% Increase`)
-  ) %>%
-  dplyr::select_if(function(x){sum(is.na(x)) <= 1}) %>%
-  rename_all(
-    str_remove_all, pattern = "confirmed_"
-  ) %>%
-  rename_all(str_remove_all, pattern = "_202[01].+") %>%
-  arrange(State) %>%
-  bind_rows(
-    tibble(
-      State = "National Total",
-      "{as.character(dt -1)}" := sum(.[[as.character(dt -1)]]),
-      "{dt_char}" := sum(.[[dt_char]]),
-      Increase = sum(.$Increase),
-      recovered = sum(.$recovered),
-      deaths = sum(.$deaths),
-      active = sum(.$active),
-      `% Increase` = Increase / !!sym(as.character(dt - 1))
+data %>%
+    dplyr::filter(
+        REPORT_DATE == dt
+    ) %>%
+    dplyr::mutate(
+        across(
+            ends_with("CNT"), as.numeric
+        ),
+        Increase = CASE_CNT - PREV_CASE_CNT,
+        `% Increase` = percent(Increase / PREV_CASE_CNT),
+        `Fatality Rate` = percent(DEATH_CNT / CASE_CNT),
+        `Recovery Rate` = percent(RECOV_CNT / CASE_CNT),
+        State = case_when(
+            CODE == "AUS" ~ "National Total",
+            TRUE ~ auStates[CODE]
+        ),
+        State = factor(State, levels = c(dplyr::arrange(ausPops, desc(Population))$State, "National Total"))
+    ) %>%
+    dplyr::rename(
+        Fatalities = DEATH_CNT,
+        Recovered = RECOV_CNT,
+        `Currently Active` = ACTIVE_CNT
+    ) %>%
+    dplyr::select(
+        State,
+        PREV_CASE_CNT, CASE_CNT,
+        contains("Increase"),
+        contains("Fatal"),
+        contains("Recov", ignore.case = FALSE),
+        `Currently Active`
+    ) %>%
+    dplyr::arrange(State) %>%
+    setNames(
+        str_replace_all(names(.), "PREV_CASE_CNT", as.character(dt - 1))
+    ) %>%
+    setNames(
+        str_replace_all(names(.), "CASE_CNT", as.character(dt))
+    ) %>%
+    pander(
+        justify = "lrrrrrrrrr",
+        caption = paste(
+            "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.*"
+        ),
+        emphasize.strong.rows = nrow(.)
     )
-  ) %>%
-  mutate(
-    `% Increase` = percent(`% Increase`, accuracy = 0.01),
-    `Fatality Rate` = percent(deaths / !!sym(dt_char), accuracy = 0.1),
-    `Recovery Rate` = percent(recovered / !!sym(dt_char), accuracy = 0.1),
-  ) %>%
-  rename(
-    Fatalities = deaths,
-    Recovered = recovered,
-    `Currently Active` = active
-  ) %>%
-  dplyr::select(
-    State, starts_with("20"), ends_with("Increase"), starts_with("Fatal"), starts_with("Recov"), `Currently Active`
-  ) %>%
-  pander(
-    justify = "lrrrrrrrrr",
-    caption = paste(
-      "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.",
-      "Given that the Victorian outbreak significantly impacted the Federally-run Aged Care facilities,", 
-      "Victorian statistics are broken down into those for which the Andrews government is responsible (Non-Aged Care),", 
-      "and those __for which the Morrisson government is reponsible (Aged Care)__.", 
-      "Detailed statistics on Aged Care are not currently available for other states.*"
-    ),
-    emphasize.strong.rows = nrow(.)
-  )
 ```
 
 ## Plot of Current Australian Values
