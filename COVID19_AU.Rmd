@@ -284,9 +284,9 @@ data %>%
             ends_with("CNT"), as.numeric
         ),
         Increase = CASE_CNT - PREV_CASE_CNT,
-        `% Increase` = percent(Increase / PREV_CASE_CNT),
-        `Fatality Rate` = percent(DEATH_CNT / CASE_CNT),
-        `Recovery Rate` = percent(RECOV_CNT / CASE_CNT),
+        `% Increase` = percent(Increase / PREV_CASE_CNT, accuracy = 0.1),
+        `Fatality Rate` = percent(DEATH_CNT / CASE_CNT, accuracy = 0.1),
+        `Recovery Rate` = percent(RECOV_CNT / CASE_CNT, accuracy = 0.1),
         State = case_when(
             CODE == "AUS" ~ "National Total",
             TRUE ~ auStates[CODE]
