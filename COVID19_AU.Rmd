@@ -71,7 +71,11 @@ ausPops <- tribble(
 data <- fromJSON("https://covidlive.com.au/covid-live.json") %>%
     as_tibble() %>%
     mutate(
-        REPORT_DATE = ymd(REPORT_DATE)
+      across(
+        .cols = ends_with("CNT"), 
+        .fns = as.numeric
+      ),
+      REPORT_DATE = ymd(REPORT_DATE)
     )
 ```
 
@@ -280,9 +284,6 @@ data %>%
         REPORT_DATE == dt
     ) %>%
     dplyr::mutate(
-        across(
-            ends_with("CNT"), as.numeric
-        ),
         Increase = CASE_CNT - PREV_CASE_CNT,
         `% Increase` = percent(Increase / PREV_CASE_CNT, accuracy = 0.1),
         `Fatality Rate` = percent(DEATH_CNT / CASE_CNT, accuracy = 0.1),
@@ -325,35 +326,33 @@ data %>%
 ## Plot of Current Australian Values
 
 ```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Loess curves through all points are shown as continuous lines. Data is only shown from 1^st^ April 2020 as this was the first date of complete data being available. Recovered patient information was also sparse in the early stages of data collection, and as a result estimates of active infections will be a significant underestimate until 6^th^ April. In particular, QLD only began reporting recovered cases on this date. NSW followed a fortnight after this date and as such, only the most recent numbers can be considered as accurate. Below this plot, the same figures can be seen broken down by state.*"
+ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Some data regarding recovered cases prior to 1^st^ May 2020 may be estimates.*"
 ```
 
 ```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
 ggplotly(
-  confirmed %>%
-    dplyr::filter(date <= dt) %>%
-    left_join(deaths, by = c("State", "Country", "date")) %>%
-    left_join(recovered, by = c("State", "Country", "date")) %>%
-    left_join(active, by = c("State", "Country", "date")) %>%
-    mutate_at(vars(confirmed, deaths, recovered, active), na_locf) %>%
-    group_by(Country, date) %>%
-    summarise_at(vars(confirmed, deaths, recovered, active), sum) %>%
-    ungroup() %>%
-    pivot_longer(
-      cols = c(active, confirmed, deaths, recovered),
-      names_to = "Status",
-      values_to = "Total"
-    ) %>%
-    arrange(Status, date) %>%
-    dplyr::filter(date > ymd("2020-04-01")) %>%
+  data %>% 
+    dplyr::filter(CODE == "AUS", REPORT_DATE <= dt, REPORT_DATE > "2020-03-01") %>% 
+    dplyr::select(
+      Date = REPORT_DATE, 
+      Confirmed = CASE_CNT,
+      Active = ACTIVE_CNT, 
+      Fatal = DEATH_CNT, 
+      Recovered = RECOV_CNT
+    ) %>% 
     mutate(
-      Status = str_to_title(Status),
-      Status = str_replace_all(Status, "Deaths", "Fatal"),
+      Active = case_when(
+        is.na(Active) ~ Confirmed - Fatal - Recovered,
+        TRUE ~ Active
+      )
+    )  %>%
+    pivot_longer(
+      cols = c("Active", "Fatal", "Recovered"), 
+      names_to = "Status", values_to = "Total"
+    ) %>%
+    mutate(
       Status = factor(Status, levels = c("Fatal", "Recovered", "Active"))
     ) %>%
-    dplyr::filter(Total > 0) %>%
-    rename_all(str_to_title) %>%
-    dplyr::filter(Status != "Confirmed") %>%
     ggplot(aes(Date, Total, fill = Status)) +
     geom_col() +
     geom_line(
@@ -383,44 +382,40 @@ ggplotly(
 
 ```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases have only recently begun being reported and up until the most recent dates, recovered/active values were very approximate for these states. The extreme drop for NSW active cases in early June is a function of the changed reporting strategy implemented by NSW Health.*"}
 ggplotly(
-  confirmed %>%
-    dplyr::filter(date <= dt) %>%    
-    left_join(deaths, by = c("State", "Country", "date")) %>%
-    left_join(recovered, by = c("State", "Country", "date")) %>%
-    left_join(active, by = c("State", "Country", "date")) %>%
-    mutate_at(vars(confirmed, deaths, recovered, active), na_locf) %>%
-    dplyr::filter(
-      date > ymd("2020-04-01"),
-    ) %>%
-    arrange(date) %>%
-    left_join(ausPops) %>%
-    pivot_longer(
-      cols = c(confirmed, deaths, recovered, active),
-      names_to = "status",
-      values_to = "count"
-    ) %>%
-    dplyr::filter(
-      count > 0,
-      !(State %in% c("Queensland", "New South Wales") & status == "recovered" & date < ymd("2020-04-06")),
-      !(State %in% c("South Australia") & status == "recovered" & date < ymd("2020-04-01")),    
-      !(State %in% c("Tasmania") & status == "recovered" & date < ymd("2020-04-02")),
-    ) %>%
-    dplyr::filter(status != "confirmed") %>%
+  data %>% 
+    dplyr::filter(CODE != "AUS", REPORT_DATE <= dt, REPORT_DATE > "2020-03-01") %>% 
+    dplyr::select(
+      CODE,
+      Date = REPORT_DATE, 
+      Confirmed = CASE_CNT,
+      Active = ACTIVE_CNT, 
+      Fatal = DEATH_CNT, 
+      Recovered = RECOV_CNT
+    ) %>% 
     mutate(
-      rate = 1e6*count/Population,
-      rate = round(rate, 2),
-      status = str_replace(status, "deaths", "fatal") %>% str_to_title(),
-      status = factor(status, levels = c("Fatal", "Recovered", "Active"))
+      Active = case_when(
+        is.na(Active) ~ Confirmed - Fatal - Recovered,
+        TRUE ~ Active
+      ),
+      State = auStates[CODE]
+    )  %>%
+    pivot_longer(
+      cols = c("Active", "Fatal", "Recovered"), 
+      names_to = "Status", values_to = "Total"
     ) %>%
-    rename_all(str_to_title) %>%
-    ggplot(aes(Date, Rate, fill = Status, label = Count)) +
+    left_join(ausPops) %>%
+    mutate(
+      Status = factor(Status, levels = c("Fatal", "Recovered", "Active")),
+      Rate = 1e6*Total / Population
+    ) %>%
+    ggplot(aes(Date, Rate, fill = Status, label = Total)) +
     geom_col() +
     geom_line(
       data = . %>%
         group_by(State, Date) %>%
         summarise(
           Rate = sum(Rate),
-          Count = sum(Count)
+          Total = sum(Total)
         ) %>%
         mutate(Status = "Confirmed"),
       colour = "blue"
