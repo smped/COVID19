@@ -220,51 +220,6 @@ local <- names(auStates) %>%
 ```
 
 
-```{r vic_aged}
-vic_aged <- "https://covidlive.com.au/report/daily-outbreaks-aged" %>%
-  read_html() %>%
-  html_nodes("body") %>%
-  xml_find_all("//table[contains(@class, 'DAILY-OUTBREAKS-AGED')]") %>% 
-    html_table() %>%
-    .[[1]] %>%
-    as_tibble() %>%
-    dplyr::select(date = DATE, deaths = DEATHS, active = ACTIVE) %>%
-    separate(date, into = c("day", "month")) %>%
-    mutate(
-      year = case_when(
-        month %in% c("Jan") & day < 25 ~ 2021L,
-        TRUE ~ 2020L
-      ),
-      date = paste(year, month, day, sep = "-"),
-      date = parse_date_time(date, orders = "%Y-%b-%d"),
-      date = ymd(date),
-      State = "Victoria (Aged Care)",
-      Country = "Australia"
-    ) %>%
-  arrange(date) %>%
-  mutate(
-    deaths = na_locf(deaths),
-    active = na_locf(active),
-    new = c(active[[1]], diff(active)),
-    new = ifelse(new < 0, 0, new),
-    confirmed = cumsum(new),
-    recovered = confirmed - deaths - active,
-    recovered = ifelse(recovered < 0, 0, recovered)
-  ) %>%
-  dplyr::filter(date <= dt) %>%
-  dplyr::select(
-    State, Country, date, deaths, confirmed, active, recovered
-  ) 
-```
-
-
-Data for confirmed cases, active cases, recoveries and fatalities was exclusively sourced from [COVID LIVE](https://covidlive.com.au/).
-Reliable data sources were extremely challenging prior to April and as such, minimal data is available from the early stages of the outbreak.
-
-Similarly, data for the Victorian Aged Care outbreak was obtained from [data based on press releases](https://covidlive.com.au/report/daily-outbreaks-aged).
-
-
-
 ### International Data
 
 International data and figures [can be viewed here](COVID19_Progression.html)
