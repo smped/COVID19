@@ -46,7 +46,8 @@ auStates <- c(
   SA = "South Australia",
   WA = "Western Australia",
   NT = "Northern Territory",
-  TAS = "Tasmania"
+  TAS = "Tasmania",
+  AUS = "All States"
 )
 ```
 
@@ -67,7 +68,7 @@ ausPops <- tribble(
 
 # Data Sources
 
-```{r}
+```{r data}
 data <- fromJSON("https://covidlive.com.au/covid-live.json") %>%
     as_tibble() %>%
     mutate(
@@ -148,32 +149,17 @@ getCovidTable <- function(
 ```
 
 
-```{r confirmed}
-confirmed <- names(auStates) %>%
-  lapply(getCovidTable, type = "cases") %>%
-  bind_rows()
-```
-
-```{r recovered}
-recovered <- names(auStates) %>%
-  lapply(getCovidTable, type = "recoveries") %>%
-  bind_rows()
-```
-
-```{r deaths}
-deaths <- names(auStates) %>%
-  lapply(getCovidTable, type = "deaths") %>%
-  bind_rows()
-```
 
 ```{r active}
 active <- names(auStates) %>%
+  str_subset("AUS", negate = TRUE) %>%
   lapply(getCovidTable, type = "active-cases") %>%
   bind_rows()
 ```
 
 ```{r tests}
 tested <- names(auStates) %>%
+  str_subset("AUS", negate = TRUE) %>%
   lapply(getCovidTable, type = "tests") %>%
   bind_rows() %>%
   dplyr::filter(!is.na(tests))
@@ -214,6 +200,7 @@ getLocal <- function(
     arrange(date) 
 }
 local <- names(auStates) %>%
+  str_subset("AUS", negate = TRUE) %>%
   lapply(getLocal) %>%
   bind_rows() %>%
   dplyr::filter(!is.na(local))
@@ -229,8 +216,8 @@ International data and figures [can be viewed here](COVID19_Progression.html)
 
 Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
 
-- Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(sum(dplyr::filter(confirmed, date == dt)$confirmed) / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / sum(dplyr::filter(confirmed, date == dt)$confirmed), 0))`. 
-- Within Victoria, that rises to one in every `r round(dplyr::filter(ausPops, State == "Victoria")$Population / dplyr::filter(confirmed, date == dt, State == "Victoria")$confirmed, 0)` having contracted the virus at some point
+- Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 0))`. 
+- Within Victoria, that rises to one in every `r round(dplyr::filter(ausPops, State == "Victoria")$Population / dplyr::filter(data, REPORT_DATE == dt, CODE == "VIC")$CASE_CNT, 0)` having contracted the virus at some point
 
 
 ```{r latestAUTable}
@@ -393,26 +380,19 @@ ggplotly(
 
 ```{r plotDailyAusCases, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day (blue) and 14-day (black) averages. Days which the 7-day average is above the 14-day average are highlighted in red.*"}
 ggplotly(
-  confirmed %>%
-    dplyr::filter(date <= dt) %>%    
-    group_by(State) %>%
-    mutate(daily = c(0, diff(confirmed))) %>%
-    ungroup() %>%
-    dplyr::filter(confirmed > 0) %>%
+  data %>% 
+    dplyr::select(
+      State = CODE, date = REPORT_DATE, 
+      confirmed = CASE_CNT, daily = NEW_CASE_CNT
+    ) %>%
     mutate(
-      daily = case_when(
-        daily < 0 ~ 0,
-        daily >= 0 ~ daily
-      )
+      State = auStates[State]
     ) %>%
-    bind_rows(
-      group_by(., date) %>%
-        summarise(daily = sum(daily)) %>%
-        ungroup() %>%
-        mutate(State = "All States")
-    ) %>%
+    arrange(State, date) %>%
     group_by(State) %>%
     mutate(
+      daily = c(0, diff(confirmed)),
+      daily = ifelse(daily < 0, 0, daily),
       MA = round(sma(daily, 7), 2),
       MA2 = round(sma(daily, 14), 2),
       `Above Average` = MA > MA2
@@ -466,41 +446,21 @@ cp <- glue(
 
 ```{r plotFR, fig.width=10, fig.height=6, fig.cap=cp}
 list(
-  confirmed %>%
-    dplyr::filter(date <= dt) %>%    
-    group_by(date) %>%
-    summarise_at("confirmed", sum) %>%
-    left_join(
-      deaths %>%
-        group_by(date) %>%
-        summarise_at("deaths", sum)
-    ) %>%
-    dplyr::filter(
-      date > minDate
-    ) %>%
+  data %>% 
+    dplyr::filter(CODE == "AUS", REPORT_DATE > minDate) %>% 
+    dplyr::select(date = REPORT_DATE, confirmed = CASE_CNT, deaths = DEATH_CNT)  %>% 
+    arrange(date) %>% 
+    mutate(fr = deaths / confirmed, type = "No Offset"),
+  data %>% 
+    dplyr::filter(CODE == "AUS") %>% 
+    dplyr::select(date = REPORT_DATE, confirmed = CASE_CNT, deaths = DEATH_CNT)  %>% 
+    arrange(date) %>% 
     mutate(
-      fr = deaths / confirmed,
-      type = "No Offset"
-    ),
-  confirmed %>%
-    dplyr::filter(date <= dt) %>%    
-    mutate(
-      date = date + offset 
-    ) %>%
-    group_by(date) %>%
-    summarise_at("confirmed", sum) %>%
-    left_join(
-      deaths %>%
-        group_by(date) %>%
-        summarise_at("deaths", sum) 
-    ) %>%
-    dplyr::filter(
-      date > minDate
-    ) %>%
-    mutate(
-      fr = deaths / confirmed,
+      confirmed = c(rep(NA, offset), confirmed[seq_len(nrow(.) - offset)]),
+      fr = deaths / confirmed, 
       type = glue("Offset ({offset} days)")
-    ) 
+    ) %>%
+    dplyr::filter(date > minDate)
 ) %>%
   bind_rows() %>%
   ggplot(
@@ -508,7 +468,7 @@ list(
   ) +
   geom_line() +
   scale_x_date(
-    expand = expansion(mult = 0, add = 0)
+    expand = expansion(mult = 0, add = 20)
   ) +
   scale_y_continuous(label = percent) +
   labs(
@@ -579,7 +539,6 @@ gf <- list(
     arrange(State)
 ) %>%
   bind_rows() %>%
-  # dplyr::filter(date > ymd("2020-03-01")) %>%
   ggplot(aes(date, R, colour = State)) +
   geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
   geom_hline(yintercept = 1) +
