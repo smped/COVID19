@@ -62,7 +62,13 @@ ausPops <- tribble(
   "Tasmania", 535500,
   "Northern Territory", 245562,
   "Australian Capital Territory", 428060
-)
+) %>%
+  bind_rows(
+    tibble(
+      State = "All States",
+      Population = sum(.$Population)
+    )
+  )
 ```
 
 
@@ -89,122 +95,6 @@ dt <- data %>%
     max()
 ```
 
-
-
-```{r getCovidTable}
-getCovidTable <- function(
-  state = c("ACT", "QLD", "NSW", "VIC", "SA", "WA", "NT", "TAS"),
-  type = c("cases", "recoveries", "deaths", "active-cases", "tests"),
-  .state_full = auStates
-){
-  
-  state <- match.arg(state)
-  
-  type <- match.arg(type)
-  type_name <- c(
-    cases = "confirmed",
-    recoveries = "recovered",
-    deaths = "deaths",
-    `active-cases` = "active",
-    tests = "tests"
-  )[[type]]
-  col_name <- c(
-    cases = "CASES",
-    recoveries = "RECOV",
-    deaths = "DEATHS",
-    `active-cases` = "ACTIVE",
-    tests = "TESTS"
-  )[[type]]
-
-    url <- glue("https://covidlive.com.au/report/daily-{type}/{str_to_lower(state)}")
-  url %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all(
-      glue("//table[contains(@class, 'DAILY-{str_to_upper(type)}')]")
-    ) %>% 
-    html_table() %>%
-    .[[1]] %>%
-    as_tibble() %>%
-    dplyr::select(date = DATE, !!sym(type_name) := !!sym(col_name)) %>%
-    separate(date, into = c("day", "month")) %>%
-    mutate(
-      year = case_when(
-        month %in% c("Jan") & day < 25 ~ 2021L,
-        TRUE ~ 2020L
-      ),
-      date = paste(year, month, day, sep = "-"),
-      date = parse_date_time(date, orders = "%Y-%B-%d"),
-      date = ymd(date),
-      State = .state_full[str_to_upper(state)],
-      Country = "Australia"
-    ) %>%
-    mutate_at(
-      .vars = type_name, 
-      .funs = function(x){as.integer(str_remove_all(x, ","))}
-    ) %>%
-    dplyr::select(State, Country, date, !!sym(type_name)) %>%
-    arrange(date) 
-}
-```
-
-
-
-```{r active}
-active <- names(auStates) %>%
-  str_subset("AUS", negate = TRUE) %>%
-  lapply(getCovidTable, type = "active-cases") %>%
-  bind_rows()
-```
-
-```{r tests}
-tested <- names(auStates) %>%
-  str_subset("AUS", negate = TRUE) %>%
-  lapply(getCovidTable, type = "tests") %>%
-  bind_rows() %>%
-  dplyr::filter(!is.na(tests))
-```
-
-```{r local}
-getLocal <- function(  
-  state = c("ACT", "QLD", "NSW", "VIC", "SA", "WA", "NT", "TAS"),  
-  .state_full = auStates
-){
-  
-  state <- match.arg(state)
-  
-  url <- glue("https://covidlive.com.au/report/daily-source-overseas/{str_to_lower(state)}")
-  url %>%
-    read_html() %>%
-    html_nodes("body") %>%
-    xml_find_all("//table[contains(@class, 'DAILY-SOURCE-OVERSEAS')]") %>% 
-    html_table() %>%
-    .[[1]] %>%
-    as_tibble() %>%
-    dplyr::select(date = DATE, local = LOCAL) %>%
-    separate(date, into = c("day", "month")) %>%
-    mutate(
-      year = case_when(
-        month %in% c("Jan") & day < 25 ~ 2021L,
-        TRUE ~ 2020L
-      ),
-      date = paste(year, month, day, sep = "-"),
-      date = parse_date_time(date, orders = "%Y-%B-%d"),
-      date = ymd(date),
-      State = .state_full[str_to_upper(state)],
-      Country = "Australia",
-      local = str_remove_all(local, ","),
-      local = as.integer(local)
-    ) %>%
-    dplyr::select(State, Country, date, local) %>%
-    arrange(date) 
-}
-local <- names(auStates) %>%
-  str_subset("AUS", negate = TRUE) %>%
-  lapply(getLocal) %>%
-  bind_rows() %>%
-  dplyr::filter(!is.na(local))
-```
 
 
 ### International Data
@@ -496,49 +386,33 @@ cp <- glue(
 
 
 ```{r plotGF, fig.width=10, fig.height=8, fig.cap=cp}
-gf <- list(
-  local %>%
-    dplyr::filter(date <= dt) %>%    
-    arrange(date) %>%
-    group_by(State) %>%
-    mutate(
-      new = c(0, diff(local)),
-      new_ma = sma(new, n)
-    ) %>%
-    dplyr::filter(local > 0, !is.na(new_ma)) %>%
-    mutate(
-      R = c(NA, new_ma[-1] / new_ma[-n()]),
-      R = case_when(
-        is.nan(R) ~ NA_real_,
-        new_ma < minCases ~ NA_real_,
-        TRUE ~ R
-      )
-    ) %>%
-    ungroup() %>%
-    arrange(State),
-  local %>%
-    dplyr::filter(date <= dt) %>%
-    arrange(date) %>%
-    group_by(Country, date) %>%
-    summarise_at(vars(local), sum) %>%
-    ungroup() %>%
-    mutate(
-      new = c(0, diff(local)),
-      new_ma = sma(new, n)
-    ) %>%
-    dplyr::filter(local > 0, !is.na(new_ma)) %>%
-    mutate(
-      R = c(NA, new_ma[-1] / new_ma[-n()]),
-      R = case_when(
-        is.nan(R) ~ NA_real_,
-        new_ma < minCases ~ NA_real_,
-        TRUE ~ R
-      ),
-      State = "All States"
-    ) %>%
-    arrange(State)
-) %>%
-  bind_rows() %>%
+gf <- data %>%
+  mutate(
+    local = CASE_CNT - SRC_OVERSEAS_CNT,
+    State = auStates[CODE]
+  ) %>%
+  dplyr::select(State, date = REPORT_DATE, local) %>%
+  arrange(date) %>%
+  dplyr::filter(
+    date >= "2020-03-28",
+    date <= dt
+  ) %>%
+  group_by(State) %>%
+  mutate(
+    new = c(0, diff(local)),
+    new_ma = sma(new, n)
+  ) %>%
+  dplyr::filter(local > 0, !is.na(new_ma)) %>%
+  mutate(
+    R = c(NA, new_ma[-1] / new_ma[-n()]),
+    R = case_when(
+      is.nan(R) ~ NA_real_,
+      new_ma < minCases ~ NA_real_,
+      TRUE ~ R
+    )
+  ) %>%
+  ungroup() %>%
+  arrange(State)  %>%
   ggplot(aes(date, R, colour = State)) +
   geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
   geom_hline(yintercept = 1) +
@@ -557,7 +431,7 @@ gf <- list(
   ) +
   facet_wrap(~State, scales = "free_x") +
   theme(legend.position = "none") +
-  coord_cartesian(ylim = c(0.5, 1.8))#2.1))
+  coord_cartesian(ylim = c(0.5, 1.8))
 gf
 ```
 
@@ -568,24 +442,25 @@ The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == m
 
 
 ```{r propTest}
-tested %>% 
-  left_join(confirmed, by = c("State", "Country", "date") ) %>%
-  dplyr::filter(date == dt) %>%
-  left_join(ausPops,  by = "State") %>%
-  bind_rows(
-    tibble(
-      State = "National Total",
-      date = dt,
-      Population = sum(.$Population, na.rm = TRUE),
-      confirmed = sum(.$confirmed, na.rm = TRUE),
-      tests = sum(.$tests, na.rm = TRUE)
+# tested %>% 
+#   left_join(confirmed, by = c("State", "Country", "date") ) %>%
+data %>%
+  dplyr::filter(REPORT_DATE == dt) %>%
+  mutate(
+    State = auStates[CODE],
+    TEST_CNT = case_when(
+      is.na(TEST_CNT) ~ PREV_TEST_CNT,
+      !is.na(TEST_CNT) ~ TEST_CNT
     )
-  ) %>%
+  ) %>% 
+  dplyr::select(date = REPORT_DATE, State, tests = TEST_CNT, confirmed = CASE_CNT)  %>%
+  left_join(ausPops,  by = "State") %>%
   mutate(
     `Tests / '000` = round(1e3 * tests / Population, 2),
     Positive = confirmed / tests,
     Negative = 1 - Positive,
-    isTotal = grepl("Total", State)
+    isTotal = grepl("Total", State),
+    State = str_replace(State, "All States", "National Total")
   ) %>%
   dplyr::select(
     State, Population,
@@ -604,6 +479,8 @@ tested %>%
   mutate_at(
     vars(starts_with("%")), percent, accuracy = 0.01
   ) %>%
+  split(f = .$State == "National Total") %>%
+  bind_rows() %>%
   pander(
     justify = "lrrrrrr",
     missing = "",
