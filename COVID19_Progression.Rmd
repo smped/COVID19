@@ -868,8 +868,8 @@ confirmed %>%
   ) %>%
   mutate(
     lab_y = case_when(
-      name == "confirmed" ~ value + 2.1e6,
-      name != "confirmed" ~ value + 5.1e3
+      name == "confirmed" ~ value + 3.4e6,
+      name != "confirmed" ~ value + 6.5e3
     )
   ) %>%
   ggplot(aes(Country, value, fill = Country)) +
@@ -1276,7 +1276,7 @@ a <- topDeaths %>%
   ggplot(aes(Country, rate, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = rate + 110, label = round(rate, 0)),
+    aes(y = rate + 130, label = round(rate, 0)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
@@ -1289,7 +1289,7 @@ b <- topDeaths %>%
   ggplot(aes(Country, deaths, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = deaths + 3.1e4, label = comma(deaths, accuracy = 1)),
+    aes(y = deaths + 4.5e4, label = comma(deaths, accuracy = 1)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
@@ -1689,8 +1689,8 @@ ggplotly(p4)
 
 # US Data
 
-A very brief breakdown of US data reveals that the governing party has had no effect on how hard a state has been impacted by COVID-19.
-Instead, it is very clear that population density is the main driving factor behind the severity of the outbreaks, as measured by the total fatality rate.
+A very brief breakdown of US data reveals that the governing party has now had an effect on how hard a state has been impacted by COVID-19.
+It is also very clear that population density is a key driving factor behind the severity of the outbreaks, as measured by the total fatality rate.
 
 ```{r loadUSStates}
 csvFile <- dt %>%
@@ -1758,6 +1758,43 @@ dens <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_Uni
 
 ```
 
+```{r boxplotRates, fig.height=7, fig.width=8, fig.cap = "*Infection rates scaled by population showing the influence of governing party. The p-values from a simple t-test is provided in the plot window.*"}
+tTest <- df %>% 
+  left_join(gov, by = c("Province_State" = "State")) %>%
+  mutate(
+    Party = str_extract(Party, "Democrat|Republican"),
+  ) %>%
+  with(
+    t.test(Incident_Rate ~ Party)
+  )
+df %>% 
+  left_join(gov, by = c("Province_State" = "State")) %>%
+  mutate(
+    Party = str_extract(Party, "Democrat|Republican"),
+    State = fct_inorder(Province_State),
+    Incident_Rate = 0.1*Incident_Rate
+  ) %>%
+  ggplot(
+    aes(Party, Incident_Rate, fill = Party)
+  ) +
+  geom_boxplot() +
+  geom_text(
+    aes(x, Incident_Rate, label = label),
+    data = . %>%
+      dplyr::filter(
+        Incident_Rate == max(Incident_Rate)
+      ) %>%
+      mutate(
+        x = 1,
+        label = paste("p =", round(tTest$p.value, 3))
+      ),
+    inherit.aes = FALSE
+  ) +
+  scale_fill_manual(values = c(Democrat = "blue", Republican = "red")) +
+  labs(y = "Confirmed Infections / Million")
+```
+
+
 ```{r plotUSRates, fig.height=8, fig.width=8, fig.cap = "*Fatality rate from confirmed infections, shown as a function of the confirmed cases per million. The combined national fatality rate is shown as a horizontal dashed line.*"}
 df %>% 
   mutate(
@@ -1769,7 +1806,7 @@ df %>%
   mutate(
     Party = str_extract(Party, "Democrat|Republican"),
     State = fct_inorder(Province_State)
-  ) %>% 
+  ) %>%
   ggplot(
     aes(Incident_Rate/10, Deaths / Confirmed, colour = Party)
   ) +
