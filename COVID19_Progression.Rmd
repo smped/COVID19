@@ -36,6 +36,7 @@ library(cowplot)
 library(QuantTools)
 library(ggfortify)
 library(readxl)
+library(broom)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
 panderOptions("table.style", "rmarkdown")
@@ -1687,7 +1688,7 @@ p4 <- confirmed %>%
 ggplotly(p4)
 ```
 
-# US Data
+# US Data {.tabset}
 
 A very brief breakdown of US data reveals that the governing party has now had an effect on how hard a state has been impacted by COVID-19.
 It is also very clear that population density is a key driving factor behind the severity of the outbreaks, as measured by the total fatality rate.
@@ -1755,48 +1756,11 @@ dens <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_Uni
     Area = str_remove_all(Area, ",|\\.") %>% as.numeric(),
     Density = Population / Area
   )
-
-```
-
-```{r boxplotRates, fig.height=7, fig.width=8, fig.cap = "*Infection rates scaled by population showing the influence of governing party. The p-values from a simple t-test is provided in the plot window.*"}
-tTest <- df %>% 
-  left_join(gov, by = c("Province_State" = "State")) %>%
-  mutate(
-    Party = str_extract(Party, "Democrat|Republican"),
-  ) %>%
-  with(
-    t.test(Incident_Rate ~ Party)
-  )
-df %>% 
-  left_join(gov, by = c("Province_State" = "State")) %>%
-  mutate(
-    Party = str_extract(Party, "Democrat|Republican"),
-    State = fct_inorder(Province_State),
-    Incident_Rate = 0.1*Incident_Rate
-  ) %>%
-  ggplot(
-    aes(Party, Incident_Rate, fill = Party)
-  ) +
-  geom_boxplot() +
-  geom_text(
-    aes(x, Incident_Rate, label = label),
-    data = . %>%
-      dplyr::filter(
-        Incident_Rate == max(Incident_Rate)
-      ) %>%
-      mutate(
-        x = 1,
-        label = paste("p =", round(tTest$p.value, 3))
-      ),
-    inherit.aes = FALSE
-  ) +
-  scale_fill_manual(values = c(Democrat = "blue", Republican = "red")) +
-  labs(y = "Confirmed Infections / Million")
 ```
 
 
-```{r plotUSRates, fig.height=8, fig.width=8, fig.cap = "*Fatality rate from confirmed infections, shown as a function of the confirmed cases per million. The combined national fatality rate is shown as a horizontal dashed line.*"}
-df %>% 
+```{r update_df}
+df <- df %>% 
   mutate(
     pop = (Incident_Rate *1e-5 / Confirmed)^(-1), 
     Death_Rate = round(pop / Deaths, 0)
@@ -1806,42 +1770,15 @@ df %>%
   mutate(
     Party = str_extract(Party, "Democrat|Republican"),
     State = fct_inorder(Province_State)
-  ) %>%
-  ggplot(
-    aes(Incident_Rate/10, Deaths / Confirmed, colour = Party)
-  ) +
-  geom_point() +
-  geom_text_repel(aes(label = Province_State), show.legend = FALSE)  +
-  geom_hline(
-    yintercept = sum(df$Deaths) / sum(df$Confirmed),
-    linetype = 2
-  ) +
-  scale_colour_manual(values = c(Democrat = "blue", Republican = "red")) +
-  scale_y_continuous(labels = percent) +
-  labs(
-    x = "Confirmed Infections / Million",
-    y = "Fatality Rate",
-    colour = "Governor"
-  ) +
-  theme(
-    legend.position = c(0.99, 0.99),
-    legend.justification = c(1, 1)
-  )
+  ) 
 ```
 
-
+## State-Level Fatalities
 
 ```{r plotDeathsPerP, fig.height = 9, fig.width=8, fig.cap="*States shown by how many people in the state for each fatality. The District of Columbia has no Governor but votes strongly Democratic and was nominally ascribed a Democratic governor.*"}
 df %>% 
-  mutate(
-    pop = (Incident_Rate *1e-5 / Confirmed)^(-1), 
-    Death_Rate = round(pop / Deaths, 0)
-  ) %>% 
-  dplyr::select(pop, Death_Rate, everything()) %>%
   arrange(Death_Rate) %>%
-  left_join(gov, by = c("Province_State" = "State")) %>%
   mutate(
-    Party = str_extract(Party, "Democrat|Republican"),
     State = fct_inorder(Province_State)
   ) %>% 
   ggplot(aes(State, Death_Rate)) + 
@@ -1863,21 +1800,44 @@ df %>%
 ```
 
 
+## Infections By Population Density
+
+
+```{r plotCasesDensity, fig.height=8, fig.width=8, fig.cap = "*Cases Per Million shown as a function of Population Density. Regression lines are drawn for each governing party, with a clear difference in slopes and intercepts (see analysis below).*"}
+df %>% 
+  ggplot(aes(Density, Incident_Rate/10, colour = Party)) +
+  geom_point() +
+  geom_text_repel(aes(label = State), show.legend = FALSE) +
+  # geom_smooth(method = "lm", show.legend = FALSE) +
+  geom_smooth(method = "glm") +
+  scale_colour_manual(values = c(Democrat = "blue", Republican = "red")) +
+  scale_x_log10(labels = scales::comma, ) +
+  scale_y_log10(labels = scales::comma, breaks = c(1, 2, 4, 10, 20)*100, expand = expansion(c(0.05, 0.005))) +
+  labs(
+    x = expression(paste("Population / ", km^2)),
+    y = "Cases / Million",
+    colour = "Governor"
+  ) +
+  theme(
+    legend.position = c(0.99, 0.01),
+    legend.justification = c(1, 0)
+  )
+```
+
+
+
+
+## Fatalities By Population Density
+
+
 ```{r plotDeathsDensity, fig.height=8, fig.width=8, fig.cap = "*Deaths Per Million shown as a function of Population Density. Regression lines are drawn for each governing party, with no significant difference in slopes or intercepts determined by linear regression analysis. The pattern of increasing fatality rates with increasing population density is clearly evident. Both axes are shown on a logarithmic scale.*"}
 df %>% 
   mutate(
-    pop = (Incident_Rate *1e-5 / Confirmed)^(-1), 
     Death_Rate = round(pop / Deaths, 0),
     DPM = 1e6/ Death_Rate
   ) %>% 
   dplyr::select(pop, Death_Rate, everything()) %>%
   arrange(Death_Rate) %>%
-  left_join(gov, by = c("Province_State" = "State")) %>%
-  left_join(dens, by = c("Province_State" = "State")) %>%
-  mutate(
-    Party = str_extract(Party, "Democrat|Republican"),
-    State = fct_inorder(Province_State)
-  ) %>%
   ggplot(aes(Density, DPM, colour = Party)) +
   geom_point() +
   geom_text_repel(aes(label = State), show.legend = FALSE) +
@@ -1895,6 +1855,67 @@ df %>%
     legend.justification = c(1, 0)
   )
 ```
+
+## Statistical Analysis
+
+A Poisson regression was fitted using Generalised Linear Models for both confirmed case numbers and fatalities
+
+```{r}
+glm(Confirmed ~ Party * Density, family = "poisson", offset = log(Population), data= df) %>%
+  tidy() %>%
+  mutate(
+    estimate = round(estimate, 3),
+    ` ` = gtools::stars.pval(p.value),
+    p.value = sprintf("%.2e", p.value)
+  ) %>%
+  dplyr::select(
+    Term = term, Estimate = estimate, p = p.value, ` `
+  ) %>%
+  pander(
+    caption = "
+    *Results fitting __confirmed cases__ as a function of governing party and population density.
+    Surprisingly, a subtle decrease in case numbers was found for increasing population density, 
+    with this decrease being even stronger in states with a Republican governor.
+    The key interpretaion is that for states with a lower population density, having a 
+    Republican governor was strongly associated with a higher infection rate.*
+    "
+  )
+glm(Deaths ~ Party * Density, family = "poisson", offset = log(Population), data = df) %>%
+  tidy() %>%
+  mutate(
+    estimate = round(estimate, 3),
+    ` ` = gtools::stars.pval(p.value),
+    p.value = sprintf("%.2e", p.value)
+  ) %>%
+  dplyr::select(
+    Term = term, Estimate = estimate, p = p.value, ` `
+  ) %>%
+  pander(
+    caption = "
+    *Results fitting __total fatalities__ as a function of governing party and population density.
+    A small decrease in the number of fatalities was found for states with a Republican governor,
+    however, this became an increase with increasing population density.*
+    "
+  )
+glm(Deaths ~ Party * Density, family = "poisson", offset = log(Confirmed), data = df) %>%
+  tidy() %>%
+  mutate(
+    estimate = round(estimate, 3),
+    ` ` = gtools::stars.pval(p.value),
+    p.value = sprintf("%.2e", p.value)
+  ) %>%
+  dplyr::select(
+    Term = term, Estimate = estimate, p = p.value, ` `
+  ) %>%
+  pander(
+    caption = "
+    *Results fitting __fatality rate within confirmed cases__ as a function of governing party and population density.
+    A decrease in the fatility rate was found for states with a Republican governor,
+    however, this was again found to become an increase with increasing population density*
+    "
+  )
+```
+
 
 
 # Australian Data
