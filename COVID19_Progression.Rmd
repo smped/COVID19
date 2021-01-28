@@ -1876,7 +1876,7 @@ glm(Confirmed ~ Party * Density, family = "poisson", offset = log(Population), d
     *Results fitting __confirmed cases__ as a function of governing party and population density.
     Surprisingly, a subtle decrease in case numbers was found for increasing population density, 
     with this decrease being even stronger in states with a Republican governor.
-    The key interpretaion is that for states with a lower population density, having a 
+    The key interpretation is that for states with a lower population density, having a 
     Republican governor was strongly associated with a higher infection rate.*
     "
   )
