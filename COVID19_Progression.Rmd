@@ -380,7 +380,7 @@ ggplotly(
     ) %>%
     ungroup() %>%
     dplyr::filter(
-      daily > 0 | confirmed > 0,
+      daily > 0,
       date < dt
     ) %>%
     mutate(
@@ -590,21 +590,21 @@ p <- confirmed %>%
   ggplot(
     aes(Days, Rate, colour = Country, Date = Date, Confirmed = Confirmed)
   ) +
-  geom_segment(
-    aes(x, y, xend = xmax, yend = ymax),
-    data = . %>%
-      dplyr::slice(seq_along(refRate)) %>%
-      dplyr::select(ymax) %>%
-      mutate(
-        ymax = ymax*1.2,
-        x = 0,
-        y = startingPoint,
-        xmax =  refRate*log2(ymax / startingPoint)
-      ),
-    inherit.aes = FALSE,
-    colour = "grey80",
-    linetype = 2
-  ) +
+  # geom_segment(
+  #   aes(x, y, xend = xmax, yend = ymax),
+  #   data = . %>%
+  #     dplyr::slice(seq_along(refRate)) %>%
+  #     dplyr::select(ymax) %>%
+  #     mutate(
+  #       ymax = ymax*1.2,
+  #       x = 0,
+  #       y = startingPoint,
+  #       xmax =  refRate*log2(ymax / startingPoint)
+  #     ),
+  #   inherit.aes = FALSE,
+  #   colour = "grey80",
+  #   linetype = 2
+  # ) +
   geom_line() +
   scale_x_continuous(
     expand = expansion(mult = c(0, 0.05)),
@@ -846,7 +846,7 @@ confirmed %>%
   inner_join(wikiPops) %>%
   dplyr::filter(Population > minPop) %>%
   mutate(
-    `Infection Rate` = 1e6*confirmed / Population,
+    `Infection Rate` = confirmed / Population,
     TotalRank = rank(1/confirmed),
     RateRank = rank(1/`Infection Rate`),
     AveRank = (TotalRank + RateRank) / 2,
@@ -870,13 +870,17 @@ confirmed %>%
   mutate(
     lab_y = case_when(
       name == "confirmed" ~ value + 6e6,
-      name != "confirmed" ~ value + 2e4
+      name != "confirmed" ~ value + 0.01 
+    ),
+    label = case_when(
+      name == "confirmed" ~ comma(value, 1),
+      name != "confirmed" ~ percent(value, 0.1)
     )
   ) %>%
   ggplot(aes(Country, value, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = lab_y, label = comma_format(1)(value)), 
+    aes(y = lab_y, label = label), 
     alpha = 0.3
   ) +
   facet_grid(
@@ -884,7 +888,7 @@ confirmed %>%
     scales = "free", space = "free_y", 
     labeller = as_labeller(
       c(
-        `Infection Rate` = "Confirmed Cases / Million",
+        `Infection Rate` = "Confirmed Cases (% Population)",
         confirmed = "Total Confirmed Cases",
         structure(levels(wikiPops$Continent), names = levels(wikiPops$Continent))
       )
@@ -1260,7 +1264,7 @@ topDeaths <- deaths %>%
   inner_join(wikiPops) %>%
   dplyr::filter(Population > minPop) %>%
   mutate(
-    rate = 1e6*deaths / Population,
+    rate = deaths / Population,
     totalRank = nrow(.) - rank(deaths) + 1,
     rateRank = nrow(.) - rank(rate) + 1,
     aveRank = (totalRank + rateRank)/2,
@@ -1277,12 +1281,12 @@ a <- topDeaths %>%
   ggplot(aes(Country, rate, fill = Country)) +
   geom_col(colour = "black") +
   geom_label(
-    aes(y = rate + 400, label = round(rate, 0)),
+    aes(y = rate + 0.001, label = percent(rate, 0.01)),
     fill = "white", alpha = 0.5
   ) +
   scale_fill_viridis_d(option = "magma", direction = 1) +
-  scale_y_continuous(expand = expansion(c(0, 0.08))) +
-  labs(y = "Fatalities / Million") +
+  scale_y_continuous(expand = expansion(c(0, 0.08)), labels = percent) +
+  labs(y = "Fatalities (% Population)") +
   coord_flip() +
   facet_grid(Continent~., scales = "free_y", space = "free_y") +
   theme(legend.position = "none")
@@ -1611,82 +1615,6 @@ ggplotly(
 ```
 
 
-## Summary of All Rates
-
-
-```{r p4}
-minPop <- 8e6
-p4 <- confirmed %>%
-  dplyr::filter(
-    confirmed > 0
-  ) %>%
-  left_join(deaths) %>%
-  group_by(Country, date) %>%
-  summarise_at(vars(confirmed, deaths), sum) %>%
-  dplyr::filter(date == max(date)) %>%
-  left_join(
-    recovered %>%
-      group_by(Country, date) %>%
-      summarise_at(vars(recovered), sum)
-  ) %>%
-  ungroup() %>%
-  inner_join(
-    wikiPops %>% dplyr::filter(Population > minPop | Country %in% alwaysShow)
-  ) %>%
-  mutate(rate = 1e6 * confirmed / Population) %>%
-  dplyr::filter(rate > startingPoint) %>% 
-  group_by(Country) %>%
-  mutate(
-    active = confirmed - recovered - deaths,
-    active = 100*active / confirmed,
-    recovered = 100*recovered / confirmed,
-    fatalities = 100*deaths / confirmed
-  ) %>%
-  dplyr::filter(max(recovered) > 1) %>%
-  ungroup() %>%
-  dplyr::filter(active < 100) %>%
-  arrange(active) %>% 
-  mutate(Country = fct_inorder(Country)) %>%
-  pivot_longer(
-    cols = c(active, recovered, fatalities),
-    names_to = "Status",
-    values_to = "Percentage"
-  ) %>%
-  mutate(
-    Status = str_to_title(Status),
-    Status = factor(
-      Status, 
-      levels = c("Active", "Recovered", "Fatalities")
-    ),
-    Percentage = round(Percentage, 2)
-  ) %>%
-  mutate(confirmed = comma(confirmed)) %>%
-  rename(Confirmed = confirmed) %>%
-  ggplot(
-    aes(
-      Country, Percentage,
-      fill = Status, cases = Confirmed
-    )
-  ) +
-  geom_col() +
-  scale_fill_manual(
-    values = c(
-      Active = "blue",
-      Recovered = "green",
-      Fatalities = "red"
-    )
-  ) +
-  scale_y_continuous(expand = expansion(0, 0)) +
-  coord_flip() +
-  labs(x = c()) +
-  theme(
-    legend.position = "none"
-  )
-```
-
-```{r plotP4, fig.height=9, fig.width=8, fig.cap = glue("*Fatality, Recovery and Active Infection rates for countries which have exceeded {startingPoint} confirmed cases / million, and with a population size > {comma(minPop)}. Countries are ordered by the percentage of cases that remain active. Only countries with a reported recovery rate > 1% are shown*")}
-ggplotly(p4)
-```
 
 # US Data {.tabset}
 
@@ -1748,7 +1676,7 @@ dens <- "https://en.wikipedia.org/wiki/List_of_states_and_territories_of_the_Uni
   dplyr::slice(-(1:2)) %>%
   dplyr::select(
     State = `State etc.`,
-    Population = `Population Numbers`,
+    Population = `Population People`,
     Area = `Land area km2`
   ) %>%
   mutate(
@@ -1784,7 +1712,7 @@ df %>%
   ggplot(aes(State, Death_Rate)) + 
   geom_col(aes(fill = Party), colour = "black", size = 1/4) + 
   geom_text(aes(label = Death_Rate, colour = Party), nudge_y = 150, show.legend = FALSE) +
-  geom_hline(yintercept = 1000, colour = "black", linetype = 2) + 
+  geom_hline(yintercept = c(500, 1000), colour = "black", linetype = 2) + 
   coord_flip() + 
   scale_y_continuous(expand = expansion(c(0, 0.05)), breaks = seq(1, 10)*1e3) + 
   scale_fill_manual(values = c(Democrat = "blue", Republican = "red")) +
