@@ -28,7 +28,11 @@ library(rvest)
 library(pander)
 library(plotly)
 library(QuantTools)
+library(httr)
 library(jsonlite)
+library(DT)
+library(reactable)
+library(htmltools)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
 panderOptions("table.style", "rmarkdown")
@@ -54,14 +58,14 @@ auStates <- c(
 ```{r ausPops}
 ausPops <- tribble(
   ~State, ~Population,
-  "New South Wales", 	8117976,
-  "Victoria", 6629870,
-  "Queensland", 5115451,
-  "South Australia", 1756494,
-  "Western Australia", 2630557,
-  "Tasmania", 535500,
-  "Northern Territory", 245562,
-  "Australian Capital Territory", 428060
+  "New South Wales", 	8167532,
+  "Victoria", 6696670,
+  "Queensland", 5176186,
+  "Western Australia", 2663561,
+  "South Australia", 1770375,
+  "Tasmania", 540780,
+  "Northern Territory", 246413,
+  "Australian Capital Territory", 431380
 ) %>%
   bind_rows(
     tibble(
@@ -97,220 +101,532 @@ dt <- data %>%
 
 
 
-### International Data
-
-International data and figures [can be viewed here](COVID19_Progression.html)
-
-
 # Latest Australian Data {.tabset}
 
-Australian State populations were taken from the [ABS Website](http://stat.data.abs.gov.au/Index.aspx?DataSetCode=ERP_QUARTERLY) and were accurate in Sept 2019.
+All values are current as of `r format(Sys.time(), "%H:%M, %d %b %Y")`
 
-- Using an estimated population size of `r comma(sum(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / sum(ausPops$Population))`, or one person in every `r comma(round(sum(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 0))`. 
-- Within Victoria, that rises to one in every `r round(dplyr::filter(ausPops, State == "Victoria")$Population / dplyr::filter(data, REPORT_DATE == dt, CODE == "VIC")$CASE_CNT, 0)` having contracted the virus at some point
+Australian State populations were taken from the [ABS Website](https://explore.data.abs.gov.au/vis?fs[0]=ABS%20Topics%2C1%7CPEOPLE%23PEOPLE%23%7CPopulation%23POPULATION%23&fs[1]=Measure%2C0%7CEstimated%20Resident%20Population%23ERP%23&pg=0&fc=Measure&df[ds]=ABS_ABS_TOPICS&df[id]=ABS_ANNUAL_ERP_LGA2020&df[ag]=ABS&df[vs]=1.0.0) and were accurate on 1^st^ Jan 2022.
+
+- Using an estimated population size of `r comma(max(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / max(ausPops$Population))`, or one person in every `r comma(round(max(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 0))`. 
+
+## Active Cases
 
 
 ```{r latestAUTable}
-data %>%
-    dplyr::filter(
-        REPORT_DATE == dt
-    ) %>%
-    dplyr::mutate(
-        Increase = CASE_CNT - PREV_CASE_CNT,
-        `% Increase` = percent(Increase / PREV_CASE_CNT, accuracy = 0.1),
-        `Fatality Rate` = percent(DEATH_CNT / CASE_CNT, accuracy = 0.1),
-        `Recovery Rate` = percent(RECOV_CNT / CASE_CNT, accuracy = 0.1),
-        State = case_when(
-            CODE == "AUS" ~ "National Total",
-            TRUE ~ auStates[CODE]
-        ),
-        State = factor(State, levels = c(dplyr::arrange(ausPops, desc(Population))$State, "National Total"))
-    ) %>%
-    dplyr::rename(
-        Fatalities = DEATH_CNT,
-        Recovered = RECOV_CNT,
-        `Currently Active` = ACTIVE_CNT
-    ) %>%
-    dplyr::select(
-        State,
-        PREV_CASE_CNT, CASE_CNT,
-        contains("Increase"),
-        contains("Fatal"),
-        contains("Recov", ignore.case = FALSE),
-        `Currently Active`
-    ) %>%
-    dplyr::arrange(State) %>%
-    setNames(
-        str_replace_all(names(.), "PREV_CASE_CNT", as.character(dt - 1))
-    ) %>%
-    setNames(
-        str_replace_all(names(.), "CASE_CNT", as.character(dt))
-    ) %>%
-    pander(
-        justify = "lrrrrrrrrr",
-        caption = paste(
-            "*Confirmed cases, fatalities and recoveries reported by each state at time of preparation.*"
-        ),
-        emphasize.strong.rows = nrow(.)
-    )
-```
+addSign <- function(x, .f = comma, .accuracy = 1) {
+  out <- x
+  out[is.na(x)] <- ""
+  out[which(x > 0)] <- paste0("+", .f(x[which(x > 0)], accuracy = .accuracy))
+  out[which(x <= 0)] <- .f(x[which(x <= 0)], accuracy = .accuracy)
+  out
+}
+bar_chart <- function(label, width = "100%", height = "16px", fill = "#00bfc4", background = NULL) {
+  bar <- div(style = list(background = fill, width = width, height = height))
+  chart <- div(style = list(flexGrow = 1, marginLeft = "8px", background = background), bar)
+  div(style = list(display = "flex", alignItems = "left"), label, chart)
+}
+bar_chart_pos_neg <- function(label, value, max_value = 1, height = "16px",
+                              pos_fill = "#005ab5", neg_fill = "#dc3220") {
+  neg_chart <- div(style = list(flex = "1 1 0"))
+  pos_chart <- div(style = list(flex = "1 1 0"))
+  width <- paste0(abs(value / max_value) * 100, "%")
 
-## Plot of Current Australian Values
+  if (value < 0) {
+    bar <- div(style = list(marginLeft = "8px", background = neg_fill, width = width, height = height))
+    chart <- div(style = list(display = "flex", alignItems = "center", justifyContent = "flex-end"), label, bar)
+    neg_chart <- tagAppendChild(neg_chart, chart)
+  } else {
+    bar <- div(style = list(marginRight = "8px", background = pos_fill, width = width, height = height))
+    chart <- div(style = list(display = "flex", alignItems = "center"), bar, label)
+    pos_chart <- tagAppendChild(pos_chart, chart)
+  }
 
-```{r ausStatsCap}
-ausStatsCap <- "*Current confirmed and recovered cases, along with fatalities for Australia only. Active cases are shown as confirmed cases excluding fatalities and those classed as recovered. Some data regarding recovered cases prior to 1^st^ May 2020 may be estimates.*"
-```
-
-```{r showAusStatsPlot, fig.height=6, fig.width=8, fig.cap=ausStatsCap}
-ggplotly(
-  data %>% 
-    dplyr::filter(CODE == "AUS", REPORT_DATE <= dt, REPORT_DATE > "2020-03-01") %>% 
-    dplyr::select(
-      Date = REPORT_DATE, 
-      Confirmed = CASE_CNT,
-      Active = ACTIVE_CNT, 
-      Fatal = DEATH_CNT, 
-      Recovered = RECOV_CNT
-    ) %>% 
-    mutate(
-      Active = case_when(
-        is.na(Active) ~ Confirmed - Fatal - Recovered,
-        TRUE ~ Active
-      )
-    )  %>%
-    pivot_longer(
-      cols = c("Active", "Fatal", "Recovered"), 
-      names_to = "Status", values_to = "Total"
-    ) %>%
-    mutate(
-      Status = factor(Status, levels = c("Fatal", "Recovered", "Active"))
-    ) %>%
-    ggplot(aes(Date, Total, fill = Status)) +
-    geom_col() +
-    geom_line(
-      data = . %>%
-        group_by(Date) %>%
-        summarise(
-          Total = sum(Total)
-        ) %>%
-        mutate(Status = "Confirmed"),
-      colour = "blue"
-    ) +
-    scale_fill_manual(
-      values = c(
-        Active = rgb(0, 0, 0),
-        Confirmed = rgb(0, 0.3, 0.7),
-        Fatal = rgb(0.8, 0.2, 0.2),
-        Recovered = rgb(0.2, 0.7, 0.4)
-      )
-    ) +
-    scale_x_date(expand = expansion(c(0, 0.03))) +
-    scale_y_continuous(expand = expansion(c(0, 0.05))) +
-    labs("Total Cases")
-)
-```
-
-
-
-```{r plotStates, fig.width=10, fig.height=8, fig.cap="*Breakdown of individual states. Victorian recovered numbers began to be accurately reported from 22^nd^ March, with other states gradually providing this information. NSW/QLD recovered cases have only recently begun being reported and up until the most recent dates, recovered/active values were very approximate for these states. The extreme drop for NSW active cases in early June is a function of the changed reporting strategy implemented by NSW Health.*"}
-ggplotly(
-  data %>% 
-    dplyr::filter(CODE != "AUS", REPORT_DATE <= dt, REPORT_DATE > "2020-03-01") %>% 
-    dplyr::select(
-      CODE,
-      Date = REPORT_DATE, 
-      Confirmed = CASE_CNT,
-      Active = ACTIVE_CNT, 
-      Fatal = DEATH_CNT, 
-      Recovered = RECOV_CNT
-    ) %>% 
-    mutate(
-      Active = case_when(
-        is.na(Active) ~ Confirmed - Fatal - Recovered,
-        TRUE ~ Active
-      ),
-      State = auStates[CODE]
-    )  %>%
-    pivot_longer(
-      cols = c("Active", "Fatal", "Recovered"), 
-      names_to = "Status", values_to = "Total"
-    ) %>%
-    left_join(ausPops) %>%
-    mutate(
-      Status = factor(Status, levels = c("Fatal", "Recovered", "Active")),
-      Rate = 1e6*Total / Population
-    ) %>%
-    ggplot(aes(Date, Rate, fill = Status, label = Total)) +
-    geom_col() +
-    geom_line(
-      data = . %>%
-        group_by(State, Date) %>%
-        summarise(
-          Rate = sum(Rate),
-          Total = sum(Total)
-        ) %>%
-        mutate(Status = "Confirmed"),
-      colour = "blue"
-    ) +
-    facet_wrap(~State, ncol = 4) + 
-    scale_fill_manual(
-      values = c(
-        Active = rgb(0, 0, 0),
-        Confirmed = rgb(0, 0.3, 0.7),
-        Fatal = rgb(0.8, 0.2, 0.2),
-        Recovered = rgb(0.2, 0.7, 0.4)
-      )
-    ) +
-    scale_x_date(expand = expansion(c(0, 0.03))) +
-    labs(y = "Rate (Cases / Million)")
-)
-```
-
-## Daily New Cases
-
-```{r plotDailyAusCases, fig.width=10, fig.height=8, fig.cap="*Daily new cases for each state shown against the 7-day (blue) and 14-day (black) averages. Days which the 7-day average is above the 14-day average are highlighted in red.*"}
-ggplotly(
-  data %>% 
-    dplyr::select(
-      State = CODE, date = REPORT_DATE, 
-      confirmed = CASE_CNT, daily = NEW_CASE_CNT
-    ) %>%
-    mutate(
-      State = auStates[State]
-    ) %>%
-    arrange(State, date) %>%
-    group_by(State) %>%
-    mutate(
-      daily = c(0, diff(confirmed)),
-      daily = ifelse(daily < 0, 0, daily),
-      MA = round(sma(daily, 7), 2),
-      MA2 = round(sma(daily, 14), 2),
-      `Above Average` = MA > MA2
-    ) %>%
-    dplyr::filter(date > "2020-03-01") %>%
-    ggplot(aes(date, daily)) +
-    geom_col(
-      aes(fill = `Above Average`, colour = `Above Average`),
-      data = . %>% dplyr::filter(!is.na(`Above Average`)),
-      width = 1/2
-    ) +
-    geom_line(aes(y = MA), colour = "blue") +
-    geom_line(aes(y = MA2), colour = "black") +
-    facet_wrap(~State, scales = "free_y") +
-    labs(
-      x = "Date",
-      y = "Daily New Cases",
-      fill = "\nAbove\nAverage"
-    ) +
-    scale_fill_manual(values = c("white", rgb(1, 0.2, 0.2))) +
-    scale_colour_manual(values = c("grey50", rgb(1, 0.2, 0.2))),
-  tooltip = c(
-    "date", "daily", "MA"
+  div(style = list(display = "flex"), neg_chart, pos_chart)
+}
+bar_style <- function(width = 1, fill = "#e6e6e6", height = "75%", align = c("left", "right"), color = NULL) {
+  align <- match.arg(align)
+  if (align == "left") {
+    position <- paste0(width * 100, "%")
+    image <- sprintf("linear-gradient(90deg, %1$s %2$s, transparent %2$s)", fill, position)
+  } else {
+    position <- paste0(100 - width * 100, "%")
+    image <- sprintf("linear-gradient(90deg, transparent %1$s, %2$s %1$s)", position, fill)
+  }
+  list(
+    backgroundImage = image,
+    backgroundSize = paste("100%", height),
+    backgroundRepeat = "no-repeat",
+    backgroundPosition = "center",
+    color = color
   )
+}
+df <- data %>%
+  dplyr::filter(REPORT_DATE == dt) %>%
+  dplyr::mutate(
+    `Daily Change` = CASE_CNT - PREV_CASE_CNT,
+    `% Change` = `Daily Change` / PREV_ACTIVE_CNT,
+    State = case_when(
+      CODE == "AUS" ~ "All States",
+      TRUE ~ auStates[CODE]
+    ),
+    State = factor(State, levels = ausPops$State)
+  ) %>%
+  left_join(ausPops) %>% 
+  mutate(
+    Rate = 1e5 * ACTIVE_CNT / Population,
+    `% Total` = CASE_CNT / Population,
+    `% Active` = ACTIVE_CNT / CASE_CNT,
+    PPI = 1e5/Rate
+  ) %>% 
+  dplyr::select(
+    State = CODE, CASE_CNT, `% Total`, `% Active`,
+    ACTIVE_CNT, `Daily Change`, `% Change`, contains("Rate"), 
+    PPI
+  ) %>%
+  dplyr::arrange(State) 
+tbl <- df %>%
+  dplyr::filter(State != "AUS") %>% 
+  reactable(
+    columns = list(
+      State = colDef(footer = "Total", maxWidth = 60),
+      CASE_CNT = colDef(
+        name = "Total",
+        cell = function(value) comma(value, 1),
+        maxWidth = 100,
+        footer = comma(
+          dplyr::filter(df, State == "AUS")[["CASE_CNT"]]
+        )
+      ),
+      `% Total` = colDef(
+        name = "% of Population",
+        cell = function(value) percent(value, 0.1),
+        footer = percent(
+          dplyr::filter(df, State == "AUS")[["% Total"]],
+          0.1
+        )
+      ),
+      `% Active` = colDef(
+        format = colFormat(percent = TRUE, digits = 1),
+        style = function(value) bar_style(width = value),
+        maxWidth = 100,
+        align = "right",
+        footer = percent(
+          dplyr::filter(df, State == "AUS")[["% Active"]],
+          0.1
+        )
+      ),
+      ACTIVE_CNT = colDef(
+        name = "Total",
+        cell = function(value) comma(value, 1),
+        maxWidth = 100,
+        footer = comma(
+          dplyr::filter(df, State == "AUS")[["ACTIVE_CNT"]]
+        )
+      ),
+      `Daily Change` = colDef(
+        cell = function(value) addSign(value),
+        style = function(value) {
+          color <- "black"
+          color <- if (value < 0) {
+            "#008000"
+          } else if (value > 0) {
+            "#e00000"
+          }
+          list(fontWeight = 600, color = color)
+        },
+        footer = addSign(
+          dplyr::filter(df, State == "AUS")[["Daily Change"]] 
+        )
+      ),
+      `% Change` = colDef(
+        cell = function(value) addSign(value, percent, 1),
+        maxWidth = 90,
+        style = function(value) {
+          color <- "black"
+          color <- if (value < 0) {
+            "#008000"
+          } else if (value > 0) {
+            "#e00000"
+          }
+          list(fontWeight = 600, color = color)
+        },
+        footer = addSign(
+          dplyr::filter(df, State == "AUS")[["% Change"]],
+          percent, 1
+        )
+      ),
+      Rate = colDef(
+        name = "Active Cases per 100,000",
+        format = colFormat(digits = 0, separators = TRUE),
+        style = function(value) bar_style(width = 0.5*value/max(df$Rate)),
+        maxWidth = 90,
+        align = "right",
+        # cell = function(value) comma(value, 1),
+        footer = comma(dplyr::filter(df, State == "AUS")[["Rate"]], 1)
+      ),
+      PPI = colDef(
+        name = "People Per Active Case",
+        cell = function(value) comma(value, 1),
+        maxWidth = 90,
+        footer = comma(dplyr::filter(df, State == "AUS")[["PPI"]], 1)
+      )
+    ),
+    columnGroups = list(
+      colGroup(name = "Cumulative Cases", columns = c("CASE_CNT", "% Total")),
+      colGroup(name = "Active Cases", columns = c("% Active", "ACTIVE_CNT", "Daily Change", "% Change")),
+      colGroup(name = "Infection Rates", columns = c("Rate", "PPI"))
+    ),
+    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+  )
+cp <- glue(
+  "% Active indicates how many of the total cases are currently active. ",
+  "Importantly, given problems with testing in many states, the number of ",
+  "active cases will be an underestimate."
+)
+div(class = "active-cases",
+  div(class = "active-cases-header",
+    h2(class = "active-cases-title", "Summary of Active Infections"),
+    cp
+  ),
+  tbl
 )
 ```
 
-## Australian Fatality Rate
+## Hospitalisations
+
+```{r hospTable}
+hosp_off <- 7
+df <- data %>%
+  dplyr::filter(REPORT_DATE == dt) %>%
+  dplyr::mutate(
+    State = case_when(
+      CODE == "AUS" ~ "All States",
+      TRUE ~ auStates[CODE]
+    ),
+    State = factor(State, levels = ausPops$State)
+  ) %>%
+  left_join(ausPops, by = "State") %>% 
+  dplyr::select(
+    CODE, State, Population,
+    contains("HOSP"), contains("ICU"), contains("VENT")
+  ) %>% 
+  left_join(
+    dplyr::filter(data, REPORT_DATE == dt - hosp_off + 1) %>% 
+      dplyr::select(CODE, ACTIVE_CNT),
+    by = "CODE"
+  ) %>% 
+  mutate(
+    change_hosp = MED_HOSP_CNT - PREV_MED_HOSP_CNT,
+    perc_change_hosp = change_hosp / PREV_MED_HOSP_CNT,
+    total_perc_hosp = MED_HOSP_CNT / ACTIVE_CNT,
+    change_icu = MED_ICU_CNT - PREV_MED_ICU_CNT,
+    perc_change_icu = change_icu / PREV_MED_ICU_CNT,
+    perc_hosp_icu = MED_ICU_CNT / MED_HOSP_CNT,
+    change_vent = MED_VENT_CNT - PREV_MED_VENT_CNT,
+    perc_change_vent = change_vent / PREV_MED_VENT_CNT,
+    perc_hosp_vent = MED_VENT_CNT / MED_HOSP_CNT,
+    across(
+      contains("perc"), function(x) {
+        x[is.nan(x)] <- 0
+        x[is.infinite(x)] <- NA_real_
+        x
+      }
+    )
+  ) %>% 
+  dplyr::select(
+    State = CODE, hospitalised = MED_HOSP_CNT,
+    ends_with("hosp"), contains("icu"), contains("vent"),
+    -starts_with("PREV")
+  ) %>% 
+  arrange(State) %>% 
+  split(f = .$State == "AUS") %>% 
+  setNames(c("states", "national"))
+tbl <- df$states %>% 
+  reactable(
+    columns = list(
+      State = colDef(footer = "Total", maxWidth = 60),
+      hospitalised = colDef(
+        name = "Total",
+        cell = function(value) comma(value, 1),
+        maxWidth = 80,
+        footer = comma(df$national$hospitalised)
+      ),
+      change_hosp = colDef(
+        name = "Change",
+          cell = function(value) addSign(value),
+          style = function(value) {
+            color <- case_when(
+            is.na(value) ~ "white",
+            value > 0 ~ "#e00000",
+            value < 0 ~ "#008000",
+            TRUE ~ "black"
+            )
+          wt <- ifelse(value == 0, 400, 600)
+          list(fontWeight = wt, color = color)
+          },
+        maxWidth = 80,
+        footer = addSign(df$national$change_hosp)
+      ),
+      perc_change_hosp = colDef(
+        name = "% Change",
+        maxWidth = 80,
+        cell = function(value) percent(value, 0.1),
+        style = function(value) {
+          color <- case_when(
+            is.na(value) ~ "white",
+            value > 0 ~ "#e00000",
+            value < 0 ~ "#008000",
+            TRUE ~ "black"
+          )
+          wt <- ifelse(value == 0, 400, 600)
+          list(fontWeight = wt, color = color)
+        },
+        footer = percent(df$national$perc_change_hosp, 0.1)
+      ),
+      total_perc_hosp = colDef(
+        name = "% Cases (Offset)",
+        maxWidth = 80,
+        format = colFormat(digits = 1, percent = TRUE),
+        style = function(value) bar_style(width = value , fill = "#C53270"),
+        align = "right",
+        footer = percent(df$national$perc_hosp_vent, 0.1)
+      ),
+      MED_ICU_CNT = colDef(
+        name = "Total",
+        maxWidth = 60,
+        cell = function(value) comma(value, 1),
+        footer = comma(df$national$MED_ICU_CNT)
+      ),
+      change_icu = colDef(
+        name = "Change",
+        maxWidth = 70,
+        cell = function(value) addSign(value),
+        style = function(value) {
+          color <- case_when(
+            is.na(value) ~ "white",
+            value > 0 ~ "#e00000",
+            value < 0 ~ "#008000",
+            TRUE ~ "black"
+          )
+          wt <- ifelse(value == 0, 400, 600)
+          list(fontWeight = wt, color = color)
+        },
+        footer = addSign(df$national$change_icu)
+      ),
+      perc_change_icu = colDef(
+        name = "% Change",
+        maxWidth = 80,
+        cell = function(value) percent(value, 0.1),
+        style = function(value) {
+          color <- case_when(
+            is.na(value) ~ "white",
+            value > 0 ~ "#e00000",
+            value < 0 ~ "#008000",
+            TRUE ~ "black"
+          )
+          wt <- ifelse(value == 0, 400, 600)
+          list(fontWeight = wt, color = color)
+        },
+        footer = percent(df$national$perc_change_icu, 0.1)
+      ),
+      perc_hosp_icu = colDef(
+        name = "% Of Hosp.",
+        maxWidth = 90,
+        format = colFormat(digits = 1, percent = TRUE),
+        style = function(value) bar_style(width = value*2, fill = "#F69422"),
+        align = "right",
+        footer = percent(df$national$perc_hosp_icu, 0.1)
+      ),
+      MED_VENT_CNT = colDef(
+        name = "Total",
+        maxWidth = 70,
+        cell = function(value) comma(value, 1),
+        footer = comma(df$national$MED_VENT_CNT)
+      ),
+      change_vent = colDef(
+        name = "Change",
+        maxWidth = 70,
+        cell = function(value) addSign(value),
+        style = function(value) {
+          color <- case_when(
+            is.na(value) ~ "white",
+            value > 0 ~ "#e00000",
+            value < 0 ~ "#008000",
+            TRUE ~ "black"
+          )
+          wt <- ifelse(value == 0, 400, 600)
+          list(fontWeight = wt, color = color)
+        },
+        footer = addSign(df$national$change_vent)
+      ),
+      perc_change_vent = colDef(
+        name = "% Change",
+        maxWidth = 80,
+        cell = function(value) percent(value, 0.1),
+        style = function(value) {
+          color <- case_when(
+            is.na(value) ~ "white",
+            value > 0 ~ "#e00000",
+            value < 0 ~ "#008000",
+            TRUE ~ "black"
+          )
+          wt <- ifelse(value == 0, 400, 600)
+          list(fontWeight = wt, color = color)
+        },
+        footer = percent(df$national$perc_change_vent, 0.1)
+      ),
+      perc_hosp_vent = colDef(
+        name = "% Of Hosp.",
+        maxWidth = 90,
+        format = colFormat(digits = 1, percent = TRUE),
+        style = function(value) bar_style(width = value *2, fill = "#FFFE9E"),
+        align = "right",
+        footer = percent(df$national$perc_hosp_vent, 0.1)
+      )
+    ),
+    columnGroups = list(
+      colGroup(name = "Hospitalised", columns = str_subset(colnames(df$states), "(^hosp|hosp$)")),
+      colGroup(name = "ICU", columns = str_subset(colnames(df$states), "ICU|icu")),
+      colGroup(name = "Ventilated", str_subset(colnames(df$states), "VENT|vent"))
+    ),
+    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+  )
+cp <- glue(
+  "The % Cases Hospitalised column uses active cases with a {hosp_off} day ", 
+  "offset and as such is a crude estimate. This is confounded by the ", 
+  "difference in lag between exposure and hospitalisation for each strain. ",
+  "The % of currently hospitlaised cases which are in ICU or being ventilated ",
+  "is also given. ",
+  "Figures from the NT are as reported federally and these are highly ", 
+  "divergent from state-reported figures. The reason for this is unknown."
+)
+div(class = "hospitalisations",
+    div(class = "hospitalisations-header",
+        h2(class = "hospitalisations-title", "Summary of hospitalisations"),
+        cp
+    ),
+    tbl
+)
+```
+
+## Fatalities
+
+```{r fatalTable}
+death_off <- 14
+df <- data %>% 
+  dplyr::filter(REPORT_DATE == dt) %>%
+  dplyr::mutate(
+    State = case_when(
+      CODE == "AUS" ~ "All States",
+      TRUE ~ auStates[CODE]
+    ),
+    State = factor(State, levels = ausPops$State)
+  ) %>%
+  left_join(ausPops, by = "State") %>% 
+  dplyr::select(CODE, State, contains("DEATH"), `Total Cases` = CASE_CNT) %>% 
+  left_join(
+    data %>% 
+      dplyr::filter(REPORT_DATE == dt - death_off + 1) %>% 
+      dplyr::select(CODE, CASE_CNT)
+  ) %>% 
+  mutate(
+    `Daily Fatalities` = DEATH_CNT - PREV_DEATH_CNT,
+    `Fatality Rate` = DEATH_CNT / CASE_CNT
+  ) %>% 
+  dplyr::select(
+    State = CODE, `Total Cases`, `Total Fatalities` = DEATH_CNT, contains("Fatal")
+  ) %>% 
+  split(.$State == "AUS") %>% 
+  setNames(c("states", "national"))
+tbl <- df$states %>% 
+  reactable(
+    columns = list(
+      State = colDef(maxWidth = 80, footer = "Total"),
+      `Total Cases` = colDef(
+        format = colFormat(separators = TRUE),
+        footer = comma(df$national$`Total Cases`)
+      ),
+      `Total Fatalities` = colDef(
+        format = colFormat(separators = TRUE),
+        footer = comma(df$national$`Total Fatalities`)
+      ),
+      `Daily Fatalities` = colDef(
+        format = colFormat(separators = TRUE),
+        cell = function(value) addSign(value),
+        style = function(value) {
+          color <- case_when(
+            is.na(value) ~ "white",
+            value > 0 ~ "#e00000",
+            value < 0 ~ "#008000",
+            TRUE ~ "black"
+          )
+          wt <- ifelse(value == 0, 400, 600)
+          list(fontWeight = wt, color = color)
+        },
+        footer = comma(df$national$`Daily Fatalities`)
+      ),
+      `Fatality Rate` = colDef(
+        format = colFormat(percent = TRUE, digits = 1),
+        style = function(value) bar_style(width = 3*value),
+        footer = percent(df$national[["Fatality Rate"]], 0.1)
+      )
+    ),
+    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+  )
+cp <- glue(
+  "Summary of fatalities since the beginning of the pandemic. ", 
+  "The fatality rate is calculated using the total cases offset by {death_off} days."
+)
+div(class = "fatalities",
+    div(class = "fatalities-header",
+        h2(class = "fatalities-title", "Summary of Fatalities"),
+        cp
+    ),
+    tbl
+)
+```
+
+
+
+# Plot of Current Australian Values {.tabset}
+
+## Active Infections
+
+```{r plotActive, fig.width=10, fig.height=6, fig.cap = "Plot of active infections against time for the last year. Double-click on a state in the legend to only see that state, or single-click individually to add or remove."}
+plotly::ggplotly(
+  data %>% 
+    dplyr::mutate(
+      State = case_when(
+        CODE == "AUS" ~ "All States",
+        TRUE ~ auStates[CODE]
+      ),
+      State = factor(State, levels = ausPops$State)
+    ) %>% 
+    left_join(ausPops) %>% 
+    mutate(
+      State = factor(State, levels = ausPops$State),
+      `% Active` = percent(ACTIVE_CNT / Population, 0.01),
+      Active = comma(ACTIVE_CNT, accuracy = 1)
+    ) %>% 
+    dplyr::rename(Date = REPORT_DATE) %>% 
+    ggplot(
+      aes(label = `% Active`, key = Active, group = 1)
+    ) +
+    geom_line(
+      aes(Date, ACTIVE_CNT / Population, colour = State)
+    ) +
+    coord_cartesian(xlim = c(dt - 1.5*365, dt)) +
+    scale_y_continuous(labels = percent, trans = "sqrt") +
+    scale_colour_brewer(palette = "Set1") +
+    labs(
+      x = "Date", y = "% Of Population Currently Infected"
+    ),
+  tooltip = c("State", "Date", "% Active", "Active")
+) %>% 
+  plotly::style(visible = "legendonly", traces = c(6:9))
+```
+
+## Fatality Rate
 
 ```{r frOffset}
 inc <- 6
@@ -329,13 +645,14 @@ cp <- glue(
   When using the offset, the fatality rate is calculated as the number of recorded fatalities on a given date, divided by by the number of cases from {offset} days ago.
   Whilst still flawed this may give a less biased estimate on the true fatality rate, and importantly, will always be higher than the alternative calculation.
   The intial fatality rate spiked above 30% during the intial outbreak under the offset approach, and as such, data is only shown after {format(ymd(minDate), '%d %b, %Y')}.
+  The red line indicates the proportaion of the total Australian population which has received at least one vaccine dose.
   All times used for estimation the offset were obtained from [here](https://wwwnc.cdc.gov/eid/article/26/6/20-0320_article)*"
 )
 ```
 
 
 ```{r plotFR, fig.width=10, fig.height=6, fig.cap=cp}
-list(
+df <- list(
   data %>% 
     dplyr::filter(CODE == "AUS", REPORT_DATE > minDate) %>% 
     dplyr::select(date = REPORT_DATE, confirmed = CASE_CNT, deaths = DEATH_CNT)  %>% 
@@ -352,144 +669,46 @@ list(
     ) %>%
     dplyr::filter(date > minDate)
 ) %>%
-  bind_rows() %>%
+  bind_rows() %>% 
+  left_join(
+    dplyr::filter(data, CODE == "AUS") %>% 
+      dplyr::select(date = REPORT_DATE, VACC_FIRST_DOSE_CNT)
+  ) %>% 
+  mutate(
+    vacc = VACC_FIRST_DOSE_CNT / max(ausPops$Population),
+    vacc_scaled = vacc * max(fr)
+  )
+df %>% 
   ggplot(
     aes(date, fr, colour = type)
   ) +
   geom_line() +
+  geom_line(
+    aes(date, y = vacc_scaled),
+    data = . %>% 
+      dplyr::filter(type == "No Offset", vacc > 0),
+    inherit.aes = FALSE,
+    colour = "red"
+  ) +
   scale_x_date(
     expand = expansion(mult = 0, add = 20)
   ) +
-  scale_y_continuous(label = percent) +
+  scale_y_continuous(
+    label = percent,
+    sec.axis = sec_axis(
+      ~ (.) / max(df$fr), labels = percent, name = "% Population >= 1 Dose"
+    )
+  ) +
+  scale_colour_brewer(palette = "Paired") +
   labs(
     x = "Date",
     y = "Estimated Fatality Rate",
     colour = "Calculation"
-  )
-```
-
-
-## Current Growth Factor
-
-```{r cap4GF}
-n <- 14
-minCases <- 1
-cp <- glue(
-  "*Growth factor for each State/Territory. 
-  __Values are calculated using only locally-acquired cases__.
-  In order to try and minimise volatility a {n} day simple moving average was used, in contrast to the 5 day average as advocated [here](https://www.abc.net.au/news/2020-04-10/coronavirus-data-australia-growth-factor-covid-19/12132478).
-  This enables assessment of the growth factor over an entire quarantine period.
-  This value becomes volatile when daily new cases approach zero as is commonly observed in small populations, and at the end stages of an outbreak. 
-  As a result, values are only shown when the {n}-day average of new __locally acquired cases__ exceeds {minCases}.*"
-)
-```
-
-
-```{r plotGF, fig.width=10, fig.height=8, fig.cap=cp}
-gf <- data %>%
-  mutate(
-    local = CASE_CNT - SRC_OVERSEAS_CNT,
-    State = auStates[CODE]
-  ) %>%
-  dplyr::select(State, date = REPORT_DATE, local) %>%
-  arrange(date) %>%
-  dplyr::filter(
-    date >= "2020-03-28",
-    date <= dt
-  ) %>%
-  group_by(State) %>%
-  mutate(
-    new = c(0, diff(local)),
-    new_ma = sma(new, n)
-  ) %>%
-  dplyr::filter(local > 0, !is.na(new_ma)) %>%
-  mutate(
-    R = c(NA, new_ma[-1] / new_ma[-n()]),
-    R = case_when(
-      is.nan(R) ~ NA_real_,
-      new_ma < minCases ~ NA_real_,
-      TRUE ~ R
-    )
-  ) %>%
-  ungroup() %>%
-  arrange(State)  %>%
-  ggplot(aes(date, R, colour = State)) +
-  geom_ribbon(aes(ymin = 1, ymax = R), alpha = 0.1) +
-  geom_hline(yintercept = 1) +
-  geom_label(
-    aes(label = R),
-    data = . %>%
-      dplyr::filter(date == max(date), !is.na(R)) %>%
-      mutate(R = round(R, 2), date = date + 1),
-    fill = rgb(1, 1, 1, 0.3),
-    show.legend = FALSE,
-    nudge_y = 0.3,
-    size = 4
   ) +
-  labs(
-    x = "Date", y = "Growth Factor"
-  ) +
-  facet_wrap(~State, scales = "free_x") +
-  theme(legend.position = "none") +
-  coord_cartesian(ylim = c(0.5, 1.8))
-gf
-```
-
-The current `r n` day growth factor is `r round(dplyr::filter(gf$data, date == max(date), State == "All States")$R, 2)` which gives `r ifelse(dplyr::filter(gf$data, date == max(date), State == "All States")$R > 1, "**considerable cause for concern.**", "some degree of confidence that the spread of infections is relatively under control")`.
-
-
-## Testing Within Each State
-
-
-```{r propTest}
-# tested %>% 
-#   left_join(confirmed, by = c("State", "Country", "date") ) %>%
-data %>%
-  dplyr::filter(REPORT_DATE == dt) %>%
-  mutate(
-    State = auStates[CODE],
-    TEST_CNT = case_when(
-      is.na(TEST_CNT) ~ PREV_TEST_CNT,
-      !is.na(TEST_CNT) ~ TEST_CNT
-    )
-  ) %>% 
-  dplyr::select(date = REPORT_DATE, State, tests = TEST_CNT, confirmed = CASE_CNT)  %>%
-  left_join(ausPops,  by = "State") %>%
-  mutate(
-    `Tests / '000` = round(1e3 * tests / Population, 2),
-    Positive = confirmed / tests,
-    Negative = 1 - Positive,
-    isTotal = grepl("Total", State),
-    State = str_replace(State, "All States", "National Total")
-  ) %>%
-  dplyr::select(
-    State, Population,
-    Confirmed = confirmed,
-    Tests = tests, 
-    contains("000"), 
-    ends_with("ive"),
-    isTotal
-  ) %>%
-  arrange(isTotal, desc(`Tests / '000`)) %>%
-  dplyr::select(-isTotal) %>%
-  dplyr::rename(
-    `% Positive Tests` = Positive,
-    `% Negative Tests` = Negative
-  ) %>%
-  mutate_at(
-    vars(starts_with("%")), percent, accuracy = 0.01
-  ) %>%
-  split(f = .$State == "National Total") %>%
-  bind_rows() %>%
-  pander(
-    justify = "lrrrrrr",
-    missing = "",
-    caption = glue(
-      "*COVID-19 testing scaled by state population size.
-      Confirmed cases are assumed to be the tests returning a positive result.
-      The current numbers available for some states are a lower limit, and as such, the proportion of the population tested is likely to be higher, as is the proportion of tests returning a negative result.*"
-    ),
-    emphasize.strong.rows = nrow(.)
+  theme(
+    axis.title.y.right = element_text(colour = "red"),
+    axis.text.y.right = element_text(colour = "red"),
+    axis.ticks.y.right = element_line(colour = "red")
   )
 ```
 
