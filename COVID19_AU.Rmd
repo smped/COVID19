@@ -86,7 +86,8 @@ data <- fromJSON("https://covidlive.com.au/covid-live.json") %>%
         .cols = ends_with("CNT"), 
         .fns = as.numeric
       ),
-      REPORT_DATE = ymd(REPORT_DATE)
+      REPORT_DATE = ymd(REPORT_DATE),
+      LAST_UPDATED_DATE = as_datetime(LAST_UPDATED_DATE, tz = Sys.timezone())
     )
 ```
 
@@ -99,15 +100,18 @@ dt <- data %>%
     max()
 ```
 
-
-
-# Latest Australian Data {.tabset}
+All Data was taken from [COVID-Live](https://covidlive.com.au) which is itself taken from the federally reported numbers.
+*Discrepancies between state and federal numbers are common and generally known*, however, given that these are the official figures numbers are taken at face value.
+No manual effort has bene undertaken to correct these as that is a potentially endless and overwhelming task.
 
 All values are current as of `r format(Sys.time(), "%H:%M, %d %b %Y")`
 
 Australian State populations were taken from the [ABS Website](https://explore.data.abs.gov.au/vis?fs[0]=ABS%20Topics%2C1%7CPEOPLE%23PEOPLE%23%7CPopulation%23POPULATION%23&fs[1]=Measure%2C0%7CEstimated%20Resident%20Population%23ERP%23&pg=0&fc=Measure&df[ds]=ABS_ABS_TOPICS&df[id]=ABS_ANNUAL_ERP_LGA2020&df[ag]=ABS&df[vs]=1.0.0) and were accurate on 1^st^ Jan 2022.
 
-- Using an estimated population size of `r comma(max(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / max(ausPops$Population))`, or one person in every `r comma(round(max(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 0))`. 
+
+# Latest Australian Data {.tabset}
+
+Using an estimated population size of `r comma(max(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected at some point* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / max(ausPops$Population))`, or one person in every `r comma(round(max(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 0))`. 
 
 ## Active Cases
 
@@ -143,6 +147,7 @@ bar_chart_pos_neg <- function(label, value, max_value = 1, height = "16px",
 
   div(style = list(display = "flex"), neg_chart, pos_chart)
 }
+fs <- "12px"
 bar_style <- function(width = 1, fill = "#e6e6e6", height = "75%", align = c("left", "right"), color = NULL) {
   align <- match.arg(align)
   if (align == "left") {
@@ -157,13 +162,17 @@ bar_style <- function(width = 1, fill = "#e6e6e6", height = "75%", align = c("le
     backgroundSize = paste("100%", height),
     backgroundRepeat = "no-repeat",
     backgroundPosition = "center",
-    color = color
+    color = color,
+    fontSize = fs
   )
 }
+hs <- list(fontWeight = "bold", fontSize = fs)
 df <- data %>%
   dplyr::filter(REPORT_DATE == dt) %>%
   dplyr::mutate(
-    `Daily Change` = CASE_CNT - PREV_CASE_CNT,
+    CASE_CNT = ifelse(is.na(CASE_CNT), PREV_CASE_CNT, CASE_CNT),
+    ACTIVE_CNT = ifelse(is.na(ACTIVE_CNT), PREV_ACTIVE_CNT, ACTIVE_CNT),
+    `Daily Change` = NEW_CASE_CNT,
     `% Change` = `Daily Change` / PREV_ACTIVE_CNT,
     State = case_when(
       CODE == "AUS" ~ "All States",
@@ -173,13 +182,14 @@ df <- data %>%
   ) %>%
   left_join(ausPops) %>% 
   mutate(
+    CODE_UP = ifelse(is.na(LAST_UPDATED_DATE), paste0(CODE, "*"), CODE),
     Rate = 1e5 * ACTIVE_CNT / Population,
     `% Total` = CASE_CNT / Population,
     `% Active` = ACTIVE_CNT / CASE_CNT,
     PPI = 1e5/Rate
   ) %>% 
   dplyr::select(
-    State = CODE, CASE_CNT, `% Total`, `% Active`,
+    State = CODE_UP, CASE_CNT, `% Total`, `% Active`,
     ACTIVE_CNT, `Daily Change`, `% Change`, contains("Rate"), 
     PPI
   ) %>%
@@ -188,7 +198,7 @@ tbl <- df %>%
   dplyr::filter(State != "AUS") %>% 
   reactable(
     columns = list(
-      State = colDef(footer = "Total", maxWidth = 60),
+      State = colDef(footer = "Total", maxWidth = 65),
       CASE_CNT = colDef(
         name = "Total",
         cell = function(value) comma(value, 1),
@@ -206,6 +216,7 @@ tbl <- df %>%
         )
       ),
       `% Active` = colDef(
+        name = "% Currently Active",
         format = colFormat(percent = TRUE, digits = 1),
         style = function(value) bar_style(width = value),
         maxWidth = 100,
@@ -226,13 +237,14 @@ tbl <- df %>%
       `Daily Change` = colDef(
         cell = function(value) addSign(value),
         style = function(value) {
-          color <- "black"
-          color <- if (value < 0) {
-            "#008000"
-          } else if (value > 0) {
-            "#e00000"
-          }
-          list(fontWeight = 600, color = color)
+            color <- case_when(
+              is.na(value) ~ "white",
+              value > 0 ~ "#e00000",
+              value < 0 ~ "#008000",
+              TRUE ~ "black"
+            )
+            wt <- ifelse(value == 0, 400, 600)
+            list(fontWeight = wt, color = color, fontSize = fs)
         },
         footer = addSign(
           dplyr::filter(df, State == "AUS")[["Daily Change"]] 
@@ -242,13 +254,14 @@ tbl <- df %>%
         cell = function(value) addSign(value, percent, 1),
         maxWidth = 90,
         style = function(value) {
-          color <- "black"
-          color <- if (value < 0) {
-            "#008000"
-          } else if (value > 0) {
-            "#e00000"
-          }
-          list(fontWeight = 600, color = color)
+            color <- case_when(
+              is.na(value) ~ "white",
+              value > 0 ~ "#e00000",
+              value < 0 ~ "#008000",
+              TRUE ~ "black"
+            )
+            wt <- ifelse(value == 0, 400, 600)
+            list(fontWeight = wt, color = color, fontSize = fs)
         },
         footer = addSign(
           dplyr::filter(df, State == "AUS")[["% Change"]],
@@ -272,16 +285,29 @@ tbl <- df %>%
       )
     ),
     columnGroups = list(
-      colGroup(name = "Cumulative Cases", columns = c("CASE_CNT", "% Total")),
-      colGroup(name = "Active Cases", columns = c("% Active", "ACTIVE_CNT", "Daily Change", "% Change")),
-      colGroup(name = "Infection Rates", columns = c("Rate", "PPI"))
+      colGroup(
+        name = "Cumulative Cases", columns = c("CASE_CNT", "% Total"),
+        headerStyle = hs
+      ),
+      colGroup(
+        name = "Active Cases", 
+        columns = c("% Active", "ACTIVE_CNT", "Daily Change", "% Change"),
+        headerStyle = hs
+      ),
+      colGroup(
+        name = "Infection Rates", columns = c("Rate", "PPI"),
+        headerStyle = hs
+      )
     ),
-    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+    defaultColDef = colDef(
+      headerStyle = hs, footerStyle = hs, style = list(fontSize = fs)
+    )
   )
 cp <- glue(
   "% Active indicates how many of the total cases are currently active. ",
   "Importantly, given problems with testing in many states, the number of ",
-  "active cases will be an underestimate."
+  "active cases will be an underestimate. ",
+  "States which are yet to report daily numbers are highlighted with an asterisk."
 )
 div(class = "active-cases",
   div(class = "active-cases-header",
@@ -299,15 +325,19 @@ hosp_off <- 7
 df <- data %>%
   dplyr::filter(REPORT_DATE == dt) %>%
   dplyr::mutate(
+    MED_HOSP_CNT = ifelse(is.na(MED_HOSP_CNT), PREV_MED_HOSP_CNT, MED_HOSP_CNT),
+    MED_ICU_CNT = ifelse(is.na(MED_ICU_CNT), PREV_MED_ICU_CNT, MED_ICU_CNT),
+    MED_VENT_CNT = ifelse(is.na(MED_VENT_CNT), PREV_MED_VENT_CNT, MED_VENT_CNT),
     State = case_when(
       CODE == "AUS" ~ "All States",
       TRUE ~ auStates[CODE]
     ),
-    State = factor(State, levels = ausPops$State)
+    State = factor(State, levels = ausPops$State),
+    CODE_UP = ifelse(is.na(LAST_UPDATED_DATE), paste0(CODE, "*"), CODE)
   ) %>%
   left_join(ausPops, by = "State") %>% 
   dplyr::select(
-    CODE, State, Population,
+    CODE, CODE_UP, State, Population,
     contains("HOSP"), contains("ICU"), contains("VENT")
   ) %>% 
   left_join(
@@ -321,10 +351,12 @@ df <- data %>%
     total_perc_hosp = MED_HOSP_CNT / ACTIVE_CNT,
     change_icu = MED_ICU_CNT - PREV_MED_ICU_CNT,
     perc_change_icu = change_icu / PREV_MED_ICU_CNT,
-    perc_hosp_icu = MED_ICU_CNT / MED_HOSP_CNT,
+    # perc_hosp_icu = MED_ICU_CNT / MED_HOSP_CNT,
+    perc_hosp_icu = MED_ICU_CNT / PREV_MED_HOSP_CNT,
     change_vent = MED_VENT_CNT - PREV_MED_VENT_CNT,
     perc_change_vent = change_vent / PREV_MED_VENT_CNT,
-    perc_hosp_vent = MED_VENT_CNT / MED_HOSP_CNT,
+    # perc_hosp_vent = MED_VENT_CNT / MED_HOSP_CNT,
+    perc_hosp_vent = MED_VENT_CNT / PREV_MED_HOSP_CNT,
     across(
       contains("perc"), function(x) {
         x[is.nan(x)] <- 0
@@ -334,7 +366,7 @@ df <- data %>%
     )
   ) %>% 
   dplyr::select(
-    State = CODE, hospitalised = MED_HOSP_CNT,
+    State = CODE_UP, hospitalised = MED_HOSP_CNT,
     ends_with("hosp"), contains("icu"), contains("vent"),
     -starts_with("PREV")
   ) %>% 
@@ -356,13 +388,13 @@ tbl <- df$states %>%
           cell = function(value) addSign(value),
           style = function(value) {
             color <- case_when(
-            is.na(value) ~ "white",
-            value > 0 ~ "#e00000",
-            value < 0 ~ "#008000",
-            TRUE ~ "black"
+              is.na(value) ~ "white",
+              value > 0 ~ "#e00000",
+              value < 0 ~ "#008000",
+              TRUE ~ "black"
             )
-          wt <- ifelse(value == 0, 400, 600)
-          list(fontWeight = wt, color = color)
+            wt <- ifelse(value == 0, 400, 600)
+            list(fontWeight = wt, color = color, fontSize = fs)
           },
         maxWidth = 80,
         footer = addSign(df$national$change_hosp)
@@ -379,7 +411,7 @@ tbl <- df$states %>%
             TRUE ~ "black"
           )
           wt <- ifelse(value == 0, 400, 600)
-          list(fontWeight = wt, color = color)
+          list(fontWeight = wt, color = color, fontSize = fs)
         },
         footer = percent(df$national$perc_change_hosp, 0.1)
       ),
@@ -399,7 +431,7 @@ tbl <- df$states %>%
       ),
       change_icu = colDef(
         name = "Change",
-        maxWidth = 70,
+        maxWidth = 80,
         cell = function(value) addSign(value),
         style = function(value) {
           color <- case_when(
@@ -409,7 +441,7 @@ tbl <- df$states %>%
             TRUE ~ "black"
           )
           wt <- ifelse(value == 0, 400, 600)
-          list(fontWeight = wt, color = color)
+          list(fontWeight = wt, color = color, fontSize = fs)
         },
         footer = addSign(df$national$change_icu)
       ),
@@ -425,13 +457,13 @@ tbl <- df$states %>%
             TRUE ~ "black"
           )
           wt <- ifelse(value == 0, 400, 600)
-          list(fontWeight = wt, color = color)
+          list(fontWeight = wt, color = color, fontSize = fs)
         },
         footer = percent(df$national$perc_change_icu, 0.1)
       ),
       perc_hosp_icu = colDef(
         name = "% Of Hosp.",
-        maxWidth = 90,
+        maxWidth = 75,
         format = colFormat(digits = 1, percent = TRUE),
         style = function(value) bar_style(width = value*2, fill = "#F69422"),
         align = "right",
@@ -445,7 +477,7 @@ tbl <- df$states %>%
       ),
       change_vent = colDef(
         name = "Change",
-        maxWidth = 70,
+        maxWidth = 80,
         cell = function(value) addSign(value),
         style = function(value) {
           color <- case_when(
@@ -455,7 +487,7 @@ tbl <- df$states %>%
             TRUE ~ "black"
           )
           wt <- ifelse(value == 0, 400, 600)
-          list(fontWeight = wt, color = color)
+          list(fontWeight = wt, color = color, fontSize = fs)
         },
         footer = addSign(df$national$change_vent)
       ),
@@ -471,13 +503,13 @@ tbl <- df$states %>%
             TRUE ~ "black"
           )
           wt <- ifelse(value == 0, 400, 600)
-          list(fontWeight = wt, color = color)
+          list(fontWeight = wt, color = color, fontSize = fs)
         },
         footer = percent(df$national$perc_change_vent, 0.1)
       ),
       perc_hosp_vent = colDef(
         name = "% Of Hosp.",
-        maxWidth = 90,
+        maxWidth = 75,
         format = colFormat(digits = 1, percent = TRUE),
         style = function(value) bar_style(width = value *2, fill = "#FFFE9E"),
         align = "right",
@@ -485,20 +517,32 @@ tbl <- df$states %>%
       )
     ),
     columnGroups = list(
-      colGroup(name = "Hospitalised", columns = str_subset(colnames(df$states), "(^hosp|hosp$)")),
-      colGroup(name = "ICU", columns = str_subset(colnames(df$states), "ICU|icu")),
-      colGroup(name = "Ventilated", str_subset(colnames(df$states), "VENT|vent"))
+      colGroup(
+        name = "Hospitalised", columns = str_subset(colnames(df$states), "(^hosp|hosp$)"), 
+        headerStyle = hs
+      ),
+      colGroup(
+        name = "ICU", columns = str_subset(colnames(df$states), "ICU|icu"),
+        headerStyle = hs
+      ),
+      colGroup(
+        name = "Ventilated", str_subset(colnames(df$states), "VENT|vent"),
+        headerStyle = hs
+      )
     ),
-    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+    defaultColDef = colDef(
+      footerStyle = hs, headerStyle = hs, style = list(fontSize = fs)
+    )
   )
 cp <- glue(
   "The % Cases Hospitalised column uses active cases with a {hosp_off} day ", 
   "offset and as such is a crude estimate. This is confounded by the ", 
   "difference in lag between exposure and hospitalisation for each strain. ",
-  "The % of currently hospitlaised cases which are in ICU or being ventilated ",
-  "is also given. ",
+  "The % of currently hospitlised cases which are in ICU or being ventilated ",
+  "is also given, using a 1-day offset. ",
   "Figures from the NT are as reported federally and these are highly ", 
-  "divergent from state-reported figures. The reason for this is unknown."
+  "divergent from state-reported figures. The reason for this is unknown. ",
+  "States which are yet to report are indicated with an asterisk. "
 )
 div(class = "hospitalisations",
     div(class = "hospitalisations-header",
@@ -520,10 +564,13 @@ df <- data %>%
       CODE == "AUS" ~ "All States",
       TRUE ~ auStates[CODE]
     ),
-    State = factor(State, levels = ausPops$State)
+    State = factor(State, levels = ausPops$State),
+    CODE_UP = ifelse(is.na(LAST_UPDATED_DATE), paste0(CODE, "*"), CODE),
+    CASE_CNT = ifelse(is.na(CASE_CNT), PREV_CASE_CNT, CASE_CNT),
+    DEATH_CNT = ifelse(is.na(DEATH_CNT), PREV_DEATH_CNT, DEATH_CNT),
   ) %>%
   left_join(ausPops, by = "State") %>% 
-  dplyr::select(CODE, State, contains("DEATH"), `Total Cases` = CASE_CNT) %>% 
+  dplyr::select(CODE, CODE_UP, State, contains("DEATH"), `Total Cases` = CASE_CNT) %>% 
   left_join(
     data %>% 
       dplyr::filter(REPORT_DATE == dt - death_off + 1) %>% 
@@ -534,7 +581,7 @@ df <- data %>%
     `Fatality Rate` = DEATH_CNT / CASE_CNT
   ) %>% 
   dplyr::select(
-    State = CODE, `Total Cases`, `Total Fatalities` = DEATH_CNT, contains("Fatal")
+    State = CODE_UP, `Total Cases`, `Total Fatalities` = DEATH_CNT, contains("Fatal")
   ) %>% 
   split(.$State == "AUS") %>% 
   setNames(c("states", "national"))
@@ -561,7 +608,7 @@ tbl <- df$states %>%
             TRUE ~ "black"
           )
           wt <- ifelse(value == 0, 400, 600)
-          list(fontWeight = wt, color = color)
+          list(fontWeight = wt, color = color, fontSize = fs)
         },
         footer = comma(df$national$`Daily Fatalities`)
       ),
@@ -571,7 +618,7 @@ tbl <- df$states %>%
         footer = percent(df$national[["Fatality Rate"]], 0.1)
       )
     ),
-    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+    defaultColDef = colDef(footerStyle = hs, headerStyle = hs, style = list(fontSize = fs))
   )
 cp <- glue(
   "Summary of fatalities since the beginning of the pandemic. ", 
@@ -690,6 +737,16 @@ df %>%
     inherit.aes = FALSE,
     colour = "red"
   ) +
+  geom_label_repel(
+    aes(label = percent(fr, 0.1)),
+    data = . %>% dplyr::filter(date == max(date), type != "No Offset"),
+    size = 3.5, show.legend = FALSE
+  ) +
+  geom_label_repel(
+    aes(y = vacc_scaled, label = percent(vacc, 0.1)),
+    data = . %>% dplyr::filter(date == max(date), type != "No Offset"),
+    colour = "red", size = 3.5, show.legend = FALSE
+  ) +
   scale_x_date(
     expand = expansion(mult = 0, add = 20)
   ) +
@@ -710,6 +767,47 @@ df %>%
     axis.text.y.right = element_text(colour = "red"),
     axis.ticks.y.right = element_line(colour = "red")
   )
+```
+
+## Test Positivity
+
+```{r plotTestPos, fig.width=10, fig.height=7, fig.cap = "Test Positivity Rate. A single click in the plot legend will show/hide that State. The 5% rate, below which the pandemic is considered manageable by the WHO is shown as a dashed line."}
+plotly::ggplotly(
+  data %>% 
+    dplyr::filter(CASE_CNT > 100) %>% 
+    dplyr::select(ends_with("DATE"), CODE, contains("TEST"), NEW_CASE_CNT) %>% 
+    mutate(
+      NEW_CASE_CNT = ifelse(is.na(NEW_CASE_CNT), 0, NEW_CASE_CNT),
+      TEST_CNT = ifelse(is.na(TEST_CNT), PREV_TEST_CNT, TEST_CNT),
+      Tests = TEST_CNT - PREV_TEST_CNT,
+      PR = NEW_CASE_CNT / Tests,
+      PR = case_when(
+        is.nan(PR) ~ NA_real_,
+        is.infinite(PR) ~ NA_real_,
+        PR > 1 ~ NA_real_,
+        PR < 0 ~ NA_real_,
+        TRUE ~ PR
+      ),
+      State = case_when(
+        CODE == "AUS" ~ "All States",
+        TRUE ~ auStates[CODE]
+      ),
+      State = factor(State, levels = ausPops$State),
+      `Test Positivity` = percent(PR, 0.01)
+    ) %>% 
+    dplyr::rename(Date = REPORT_DATE) %>% 
+    ggplot(
+      aes(Date, PR, colour = State, label = `Test Positivity`)
+    ) +
+    geom_line() +
+    geom_hline(yintercept = 0.05, linetype = 2) +
+    coord_cartesian(xlim = c(dt - 180, dt)) +
+    scale_colour_brewer(palette = "Set1") +
+    scale_y_continuous(labels = percent) +
+    labs(x = "Test Positivity Rate"),
+  tooltip = c("Date", "State", "Test Positivity")
+) %>% 
+ plotly::style(visible = "legendonly", traces = c(6:9))
 ```
 
 
