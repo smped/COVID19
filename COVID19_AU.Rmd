@@ -102,7 +102,8 @@ dt <- data %>%
 
 All Data was taken from [COVID-Live](https://covidlive.com.au) which is itself taken from the federally reported numbers.
 *Discrepancies between state and federal numbers are common and generally known*, however, given that these are the official figures numbers are taken at face value.
-No manual effort has bene undertaken to correct these as that is a potentially endless and overwhelming task.
+No manual effort has been undertaken to correct these as that is a potentially endless and overwhelming task.
+Delays updating individual fields can occur often, such that the reported data is periodically incomplete during the day.
 
 All values are current as of `r format(Sys.time(), "%H:%M, %d %b %Y")`
 
