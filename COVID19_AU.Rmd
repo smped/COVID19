@@ -173,7 +173,10 @@ df <- data %>%
   dplyr::mutate(
     CASE_CNT = ifelse(is.na(CASE_CNT), PREV_CASE_CNT, CASE_CNT),
     ACTIVE_CNT = ifelse(is.na(ACTIVE_CNT), PREV_ACTIVE_CNT, ACTIVE_CNT),
-    `Daily Change` = NEW_CASE_CNT,
+    `Daily Change` = case_when(
+      is.na(NEW_CASE_CNT) ~ CASE_CNT - PREV_CASE_CNT,
+      TRUE ~ NEW_CASE_CNT
+    ),
     `% Change` = `Daily Change` / PREV_ACTIVE_CNT,
     State = case_when(
       CODE == "AUS" ~ "All States",
