@@ -325,7 +325,7 @@ div(class = "active-cases",
 ## Hospitalisations
 
 ```{r hospTable}
-hosp_off <- 7
+hosp_off <- 10
 df <- data %>%
   dplyr::filter(REPORT_DATE == dt) %>%
   dplyr::mutate(
@@ -560,7 +560,7 @@ div(class = "hospitalisations",
 ## Fatalities
 
 ```{r fatalTable}
-death_off <- 14
+death_off <- 21
 df <- data %>% 
   dplyr::filter(REPORT_DATE == dt) %>%
   dplyr::mutate(
@@ -641,6 +641,7 @@ div(class = "fatalities",
 
 # Plot of Current Australian Values {.tabset}
 
+
 ## Active Infections
 
 ```{r plotActive, fig.width=10, fig.height=6, fig.cap = "Plot of active infections against time for the last year. Double-click on a state in the legend to only see that state, or single-click individually to add or remove."}
@@ -677,13 +678,171 @@ plotly::ggplotly(
   plotly::style(visible = "legendonly", traces = c(6:9))
 ```
 
+## Daily Cases
+
+```{r plotDaily, fig.width=10, fig.height=8, fig.cap = "Plot of daily new cases for the last year. Coloured lines represent 7 day averages."}
+plotly::ggplotly(
+  data %>% 
+    dplyr::filter(REPORT_DATE <= dt, CASE_CNT > 0) %>% 
+    arrange(CODE, REPORT_DATE) %>% 
+    mutate(NEW_CASE_CNT = ifelse(is.na(NEW_CASE_CNT), 0, NEW_CASE_CNT)) %>%
+    dplyr::select(REPORT_DATE, CODE, NEW_CASE_CNT, CASE_CNT) %>% 
+    group_by(CODE) %>% 
+    mutate(
+      MA7 = sma(NEW_CASE_CNT, 7),
+      State = case_when(
+        CODE == "AUS" ~ "All States",
+        TRUE ~ auStates[CODE]
+      ),
+      State = factor(State, levels = ausPops$State)
+    ) %>% 
+    ungroup() %>%
+    mutate(MA7 = round(MA7, 2)) %>% 
+    dplyr::rename(
+      Date = REPORT_DATE, `New Cases` = NEW_CASE_CNT, `7 Day Average` = MA7
+    ) %>% 
+    ggplot(aes(Date, colour = State)) + 
+    geom_point(aes(y = `New Cases`), alpha = 0.5, colour = "grey", size = 1/2) +
+    geom_segment(
+      aes(xend = Date, y = 0, yend = `New Cases`),
+      colour = "grey", alpha = 0.5
+    ) +
+    geom_line(aes(y = `7 Day Average`)) +
+    facet_wrap(~State, scales = "free_y") +
+    coord_cartesian(xlim = c(dt - 365, dt)) +
+    scale_colour_brewer(palette = "Set1") +
+    labs(x = "Date", y = "Daily Cases")
+)
+```
+
+## Test Positivity
+
+```{r plotTestPos, fig.width=10, fig.height=7, fig.cap = "Test Positivity Rate. A single click in the plot legend will show/hide that State. The 5% rate, below which the pandemic is considered manageable by the WHO is shown as a dashed line."}
+plotly::ggplotly(
+  data %>% 
+    dplyr::filter(CASE_CNT > 100) %>% 
+    dplyr::select(ends_with("DATE"), CODE, contains("TEST"), NEW_CASE_CNT) %>% 
+    mutate(
+      NEW_CASE_CNT = ifelse(is.na(NEW_CASE_CNT), 0, NEW_CASE_CNT),
+      TEST_CNT = ifelse(is.na(TEST_CNT), PREV_TEST_CNT, TEST_CNT),
+      Tests = TEST_CNT - PREV_TEST_CNT,
+      PR = NEW_CASE_CNT / Tests,
+      PR = case_when(
+        is.nan(PR) ~ NA_real_,
+        is.infinite(PR) ~ NA_real_,
+        PR > 1 ~ NA_real_,
+        PR < 0 ~ NA_real_,
+        TRUE ~ PR
+      ),
+      State = case_when(
+        CODE == "AUS" ~ "All States",
+        TRUE ~ auStates[CODE]
+      ),
+      State = factor(State, levels = ausPops$State),
+      `Test Positivity` = percent(PR, 0.01)
+    ) %>% 
+    dplyr::rename(Date = REPORT_DATE) %>% 
+    ggplot(
+      aes(Date, PR, colour = State, label = `Test Positivity`)
+    ) +
+    geom_line() +
+    geom_hline(yintercept = 0.05, linetype = 2) +
+    coord_cartesian(xlim = c(dt - 180, dt)) +
+    scale_colour_brewer(palette = "Set1") +
+    scale_y_continuous(labels = percent) +
+    labs(x = "Test Positivity Rate"),
+  tooltip = c("Date", "State", "Test Positivity")
+) %>% 
+ plotly::style(visible = "legendonly", traces = c(6:9))
+```
+
+
+
+
+## Hospitalisations
+
+```{r plotHosp, fig.width=10, fig.height=8, fig.cap = "Plot of daily new hospitalisations for the last year. Coloured lines represent 7 day averages."}
+plotly::ggplotly(
+  data %>% 
+    dplyr::filter(REPORT_DATE <= dt, CASE_CNT > 0) %>% 
+    arrange(CODE, REPORT_DATE) %>% 
+    mutate(MED_HOSP_CNT = ifelse(is.na(MED_HOSP_CNT), 0, MED_HOSP_CNT)) %>%
+    dplyr::select(REPORT_DATE, CODE, MED_HOSP_CNT, CASE_CNT) %>% 
+    group_by(CODE) %>% 
+    mutate(
+      MA7 = sma(MED_HOSP_CNT, 7),
+      State = case_when(
+        CODE == "AUS" ~ "All States",
+        TRUE ~ auStates[CODE]
+      ),
+      State = factor(State, levels = ausPops$State)
+    ) %>% 
+    ungroup() %>%
+    mutate(MA7 = round(MA7, 2)) %>% 
+    dplyr::rename(
+      Date = REPORT_DATE, Hospitalisations = MED_HOSP_CNT, `7 Day Average` = MA7
+    ) %>% 
+    ggplot(aes(Date, colour = State)) + 
+    geom_point(aes(y = Hospitalisations), alpha = 0.5, colour = "grey", size = 1/2) +
+    geom_segment(
+      aes(xend = Date, y = 0, yend = Hospitalisations),
+      colour = "grey", alpha = 0.5
+    ) +
+    geom_line(aes(y = `7 Day Average`)) +
+    facet_wrap(~State, scales = "free_y") +
+    coord_cartesian(xlim = c(dt - 365, dt)) +
+    scale_colour_brewer(palette = "Set1") +
+    labs(x = "Date", y = "Hospitalisations")
+)
+```
+
+## Fatalities
+
+```{r plotDeath, fig.width=10, fig.height=8, fig.cap = "Plot of daily fatalities for the last year. Coloured lines represent 7 day averages."}
+plotly::ggplotly(
+  data %>% 
+    dplyr::filter(REPORT_DATE <= dt, CASE_CNT > 0) %>% 
+    arrange(CODE, REPORT_DATE) %>% 
+    mutate(
+      Fatalities = DEATH_CNT - PREV_DEATH_CNT,
+      Fatalities = ifelse(is.na(Fatalities), 0, Fatalities)
+    ) %>%
+    # dplyr::select(REPORT_DATE, CODE, DEATH_CNT, CASE_CNT) %>% 
+    group_by(CODE) %>% 
+    mutate(
+      MA7 = sma(Fatalities, 7),
+      State = case_when(
+        CODE == "AUS" ~ "All States",
+        TRUE ~ auStates[CODE]
+      ),
+      State = factor(State, levels = ausPops$State)
+    ) %>% 
+    ungroup() %>%
+    mutate(MA7 = round(MA7, 2)) %>% 
+    dplyr::rename(
+      Date = REPORT_DATE, `7 Day Average` = MA7
+    ) %>% 
+    ggplot(aes(Date, colour = State)) + 
+    geom_point(aes(y = Fatalities), alpha = 0.5, colour = "grey", size = 1/2) +
+    geom_segment(
+      aes(xend = Date, y = 0, yend = Fatalities),
+      colour = "grey", alpha = 0.5
+    ) +
+    geom_line(aes(y = `7 Day Average`)) +
+    facet_wrap(~State, scales = "free_y") +
+    coord_cartesian(xlim = c(dt - 365, dt)) +
+    scale_colour_brewer(palette = "Set1") +
+    labs(x = "Date", y = "Fatalities")
+)
+```
+
 ## Fatality Rate
 
 ```{r frOffset}
-inc <- 6
-icu <- 11
+inc <- 5
+icu <- 10
 d <- 7
-offset <- icu + d 
+offset <- icu + d + inc - 1
 minDate <- "2020-04-20"
 ```
 
@@ -772,48 +931,6 @@ df %>%
     axis.ticks.y.right = element_line(colour = "red")
   )
 ```
-
-## Test Positivity
-
-```{r plotTestPos, fig.width=10, fig.height=7, fig.cap = "Test Positivity Rate. A single click in the plot legend will show/hide that State. The 5% rate, below which the pandemic is considered manageable by the WHO is shown as a dashed line."}
-plotly::ggplotly(
-  data %>% 
-    dplyr::filter(CASE_CNT > 100) %>% 
-    dplyr::select(ends_with("DATE"), CODE, contains("TEST"), NEW_CASE_CNT) %>% 
-    mutate(
-      NEW_CASE_CNT = ifelse(is.na(NEW_CASE_CNT), 0, NEW_CASE_CNT),
-      TEST_CNT = ifelse(is.na(TEST_CNT), PREV_TEST_CNT, TEST_CNT),
-      Tests = TEST_CNT - PREV_TEST_CNT,
-      PR = NEW_CASE_CNT / Tests,
-      PR = case_when(
-        is.nan(PR) ~ NA_real_,
-        is.infinite(PR) ~ NA_real_,
-        PR > 1 ~ NA_real_,
-        PR < 0 ~ NA_real_,
-        TRUE ~ PR
-      ),
-      State = case_when(
-        CODE == "AUS" ~ "All States",
-        TRUE ~ auStates[CODE]
-      ),
-      State = factor(State, levels = ausPops$State),
-      `Test Positivity` = percent(PR, 0.01)
-    ) %>% 
-    dplyr::rename(Date = REPORT_DATE) %>% 
-    ggplot(
-      aes(Date, PR, colour = State, label = `Test Positivity`)
-    ) +
-    geom_line() +
-    geom_hline(yintercept = 0.05, linetype = 2) +
-    coord_cartesian(xlim = c(dt - 180, dt)) +
-    scale_colour_brewer(palette = "Set1") +
-    scale_y_continuous(labels = percent) +
-    labs(x = "Test Positivity Rate"),
-  tooltip = c("Date", "State", "Test Positivity")
-) %>% 
- plotly::style(visible = "legendonly", traces = c(6:9))
-```
-
 
 
 # R Session Information
