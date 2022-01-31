@@ -708,10 +708,11 @@ plotly::ggplotly(
       colour = "grey", alpha = 0.5
     ) +
     geom_line(aes(y = `7 Day Average`)) +
-    facet_wrap(~State, scales = "free_y") +
-    coord_cartesian(xlim = c(dt - 365, dt)) +
+    facet_wrap(~State, scales = "free_y", ncol = 1) +
+    coord_cartesian(xlim = c(dt - 365/2, dt)) +
     scale_colour_brewer(palette = "Set1") +
-    labs(x = "Date", y = "Daily Cases")
+    labs(x = "Date", y = "Daily Cases") +
+    theme(legend.position = "none")
 )
 ```
 
@@ -789,10 +790,11 @@ plotly::ggplotly(
       colour = "grey", alpha = 0.5
     ) +
     geom_line(aes(y = `7 Day Average`)) +
-    facet_wrap(~State, scales = "free_y") +
-    coord_cartesian(xlim = c(dt - 365, dt)) +
+    facet_wrap(~State, scales = "free_y", ncol = 1) +
+    coord_cartesian(xlim = c(dt - 365/2, dt)) +
     scale_colour_brewer(palette = "Set1") +
-    labs(x = "Date", y = "Hospitalisations")
+    labs(x = "Date", y = "Hospitalisations") +
+    theme(legend.position = "none")
 )
 ```
 
@@ -829,10 +831,11 @@ plotly::ggplotly(
       colour = "grey", alpha = 0.5
     ) +
     geom_line(aes(y = `7 Day Average`)) +
-    facet_wrap(~State, scales = "free_y") +
+    facet_wrap(~State, scales = "free_y", ncol = 1) +
     coord_cartesian(xlim = c(dt - 365, dt)) +
     scale_colour_brewer(palette = "Set1") +
-    labs(x = "Date", y = "Fatalities")
+    labs(x = "Date", y = "Fatalities") +
+    theme(legend.position = "none")
 )
 ```
 
