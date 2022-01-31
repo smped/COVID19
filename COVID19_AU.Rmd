@@ -680,7 +680,7 @@ plotly::ggplotly(
 
 ## Daily Cases
 
-```{r plotDaily, fig.width=10, fig.height=8, fig.cap = "Plot of daily new cases for the last year. Coloured lines represent 7 day averages."}
+```{r plotDaily, fig.width=10, fig.height=10, fig.cap = "Plot of daily new cases. Coloured lines represent 7 day averages."}
 plotly::ggplotly(
   data %>% 
     dplyr::filter(REPORT_DATE <= dt, CASE_CNT > 0) %>% 
@@ -709,7 +709,7 @@ plotly::ggplotly(
     ) +
     geom_line(aes(y = `7 Day Average`)) +
     facet_wrap(~State, scales = "free_y", ncol = 1) +
-    coord_cartesian(xlim = c(dt - 365/2, dt)) +
+    coord_cartesian(xlim = c(dt - 365/4, dt)) +
     scale_colour_brewer(palette = "Set1") +
     labs(x = "Date", y = "Daily Cases") +
     theme(legend.position = "none")
@@ -718,7 +718,7 @@ plotly::ggplotly(
 
 ## Test Positivity
 
-```{r plotTestPos, fig.width=10, fig.height=7, fig.cap = "Test Positivity Rate. A single click in the plot legend will show/hide that State. The 5% rate, below which the pandemic is considered manageable by the WHO is shown as a dashed line."}
+```{r plotTestPos, fig.width=10, fig.height=8, fig.cap = "Test Positivity Rate. A single click in the plot legend will show/hide that State. The 5% rate, below which the pandemic is considered manageable by the WHO is shown as a dashed line."}
 plotly::ggplotly(
   data %>% 
     dplyr::filter(CASE_CNT > 100) %>% 
@@ -748,7 +748,7 @@ plotly::ggplotly(
     ) +
     geom_line() +
     geom_hline(yintercept = 0.05, linetype = 2) +
-    coord_cartesian(xlim = c(dt - 180, dt)) +
+    coord_cartesian(xlim = c(dt - 365/4, dt)) +
     scale_colour_brewer(palette = "Set1") +
     scale_y_continuous(labels = percent) +
     labs(x = "Test Positivity Rate"),
@@ -762,7 +762,7 @@ plotly::ggplotly(
 
 ## Hospitalisations
 
-```{r plotHosp, fig.width=10, fig.height=8, fig.cap = "Plot of daily new hospitalisations for the last year. Coloured lines represent 7 day averages."}
+```{r plotHosp, fig.width=10, fig.height=10, fig.cap = "Plot of daily new hospitalisations for the last year. Coloured lines represent 7 day averages."}
 plotly::ggplotly(
   data %>% 
     dplyr::filter(REPORT_DATE <= dt, CASE_CNT > 0) %>% 
@@ -791,7 +791,7 @@ plotly::ggplotly(
     ) +
     geom_line(aes(y = `7 Day Average`)) +
     facet_wrap(~State, scales = "free_y", ncol = 1) +
-    coord_cartesian(xlim = c(dt - 365/2, dt)) +
+    coord_cartesian(xlim = c(dt - 365/4, dt)) +
     scale_colour_brewer(palette = "Set1") +
     labs(x = "Date", y = "Hospitalisations") +
     theme(legend.position = "none")
@@ -800,7 +800,7 @@ plotly::ggplotly(
 
 ## Fatalities
 
-```{r plotDeath, fig.width=10, fig.height=8, fig.cap = "Plot of daily fatalities for the last year. Coloured lines represent 7 day averages."}
+```{r plotDeath, fig.width=10, fig.height=10, fig.cap = "Plot of daily fatalities for the last year. Coloured lines represent 7 day averages."}
 plotly::ggplotly(
   data %>% 
     dplyr::filter(REPORT_DATE <= dt, CASE_CNT > 0) %>% 
@@ -832,7 +832,7 @@ plotly::ggplotly(
     ) +
     geom_line(aes(y = `7 Day Average`)) +
     facet_wrap(~State, scales = "free_y", ncol = 1) +
-    coord_cartesian(xlim = c(dt - 365, dt)) +
+    coord_cartesian(xlim = c(dt - 365/4, dt)) +
     scale_colour_brewer(palette = "Set1") +
     labs(x = "Date", y = "Fatalities") +
     theme(legend.position = "none")
