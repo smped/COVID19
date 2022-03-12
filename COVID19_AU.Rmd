@@ -644,9 +644,16 @@ div(class = "fatalities",
 
 ## Active Infections
 
-```{r plotActive, fig.width=10, fig.height=6, fig.cap = "Plot of active infections against time for the last year. Double-click on a state in the legend to only see that state, or single-click individually to add or remove."}
+```{r plotActive, fig.width=10, fig.height=6, fig.cap = "Plot of estimated active infections against time for the last year. Active infections are estimated as the lastest total infections minus the value from 10 days prior. Double-click on a state in the legend to only see that state, or single-click individually to add or remove."}
 plotly::ggplotly(
   data %>% 
+    arrange(CODE, REPORT_DATE) %>% 
+    group_by(CODE) %>% 
+    mutate(
+      active = CASE_CNT - lag(CASE_CNT, 10)
+    ) %>% 
+    ungroup() %>% 
+    arrange(desc(REPORT_DATE)) %>% 
     dplyr::mutate(
       State = case_when(
         CODE == "AUS" ~ "All States",
@@ -657,15 +664,15 @@ plotly::ggplotly(
     left_join(ausPops) %>% 
     mutate(
       State = factor(State, levels = ausPops$State),
-      `% Active` = percent(ACTIVE_CNT / Population, 0.01),
-      Active = comma(ACTIVE_CNT, accuracy = 1)
+      `% Active` = percent(active / Population, 0.01),
+      Active = comma(active, 1)
     ) %>% 
     dplyr::rename(Date = REPORT_DATE) %>% 
     ggplot(
       aes(label = `% Active`, key = Active, group = 1)
     ) +
     geom_line(
-      aes(Date, ACTIVE_CNT / Population, colour = State)
+      aes(Date, active / Population, colour = State)
     ) +
     coord_cartesian(xlim = c(dt - 1.5*365, dt)) +
     scale_y_continuous(labels = percent, trans = "sqrt") +
@@ -806,35 +813,36 @@ plotly::ggplotly(
     dplyr::filter(REPORT_DATE <= dt, CASE_CNT > 0) %>% 
     arrange(CODE, REPORT_DATE) %>% 
     mutate(
-      Fatalities = DEATH_CNT - PREV_DEATH_CNT,
-      Fatalities = ifelse(is.na(Fatalities), 0, Fatalities)
+      `Daily Fatalities` = DEATH_CNT - PREV_DEATH_CNT,
+      `Daily Fatalities` = ifelse(is.na(`Daily Fatalities`), 0, `Daily Fatalities`)
     ) %>%
     # dplyr::select(REPORT_DATE, CODE, DEATH_CNT, CASE_CNT) %>% 
     group_by(CODE) %>% 
     mutate(
-      MA7 = sma(Fatalities, 7),
+      MA7 = sma(`Daily Fatalities`, 7),
       State = case_when(
         CODE == "AUS" ~ "All States",
         TRUE ~ auStates[CODE]
       ),
-      State = factor(State, levels = ausPops$State)
+      State = factor(State, levels = ausPops$State),
+      `Cumulative Total` = comma(DEATH_CNT, 1)
     ) %>% 
     ungroup() %>%
     mutate(MA7 = round(MA7, 2)) %>% 
     dplyr::rename(
       Date = REPORT_DATE, `7 Day Average` = MA7
     ) %>% 
-    ggplot(aes(Date, colour = State)) + 
-    geom_point(aes(y = Fatalities), alpha = 0.5, colour = "grey", size = 1/2) +
+    ggplot(aes(Date, colour = State, label = `Cumulative Total`)) + 
+    geom_point(aes(y = `Daily Fatalities`), alpha = 0.5, colour = "grey", size = 1/2) +
     geom_segment(
-      aes(xend = Date, y = 0, yend = Fatalities),
+      aes(xend = Date, y = 0, yend = `Daily Fatalities`),
       colour = "grey", alpha = 0.5
     ) +
     geom_line(aes(y = `7 Day Average`)) +
     facet_wrap(~State, scales = "free_y", ncol = 1) +
     coord_cartesian(xlim = c(dt - 365/4, dt)) +
     scale_colour_brewer(palette = "Set1") +
-    labs(x = "Date", y = "Fatalities") +
+    labs(x = "Date", y = "Daily Fatalities") +
     theme(legend.position = "none")
 )
 ```
