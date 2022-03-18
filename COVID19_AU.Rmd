@@ -676,7 +676,9 @@ plotly::ggplotly(
     ) +
     coord_cartesian(xlim = c(dt - 1.5*365, dt)) +
     scale_y_continuous(labels = percent, trans = "sqrt") +
-    scale_colour_brewer(palette = "Set1") +
+    scale_color_manual(
+      values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
+    ) +
     labs(
       x = "Date", y = "% Of Population Currently Infected"
     ),
@@ -717,7 +719,9 @@ plotly::ggplotly(
     geom_line(aes(y = `7 Day Average`)) +
     facet_wrap(~State, scales = "free_y", ncol = 1) +
     coord_cartesian(xlim = c(dt - 365/4, dt)) +
-    scale_colour_brewer(palette = "Set1") +
+    scale_color_manual(
+      values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
+    ) +
     labs(x = "Date", y = "Daily Cases") +
     theme(legend.position = "none")
 )
@@ -756,7 +760,9 @@ plotly::ggplotly(
     geom_line() +
     geom_hline(yintercept = 0.05, linetype = 2) +
     coord_cartesian(xlim = c(dt - 365/4, dt)) +
-    scale_colour_brewer(palette = "Set1") +
+    scale_color_manual(
+      values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
+    ) +
     scale_y_continuous(labels = percent) +
     labs(x = "Test Positivity Rate"),
   tooltip = c("Date", "State", "Test Positivity")
@@ -799,7 +805,9 @@ plotly::ggplotly(
     geom_line(aes(y = `7 Day Average`)) +
     facet_wrap(~State, scales = "free_y", ncol = 1) +
     coord_cartesian(xlim = c(dt - 365/4, dt)) +
-    scale_colour_brewer(palette = "Set1") +
+    scale_color_manual(
+      values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
+    ) +
     labs(x = "Date", y = "Hospitalisations") +
     theme(legend.position = "none")
 )
@@ -841,7 +849,9 @@ plotly::ggplotly(
     geom_line(aes(y = `7 Day Average`)) +
     facet_wrap(~State, scales = "free_y", ncol = 1) +
     coord_cartesian(xlim = c(dt - 365/4, dt)) +
-    scale_colour_brewer(palette = "Set1") +
+    scale_color_manual(
+      values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
+    ) +
     labs(x = "Date", y = "Daily Fatalities") +
     theme(legend.position = "none")
 )
