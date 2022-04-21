@@ -669,13 +669,13 @@ plotly::ggplotly(
     ) %>% 
     dplyr::rename(Date = REPORT_DATE) %>% 
     ggplot(
-      aes(label = `% Active`, key = Active, group = 1)
+      aes(label = `% Active`, key = Active, group = State)
     ) +
     geom_line(
       aes(Date, active / Population, colour = State)
     ) +
-    coord_cartesian(xlim = c(dt - 1.5*365, dt)) +
-    scale_y_continuous(labels = percent, trans = "sqrt") +
+    coord_cartesian(xlim = c(dt - .5*365, dt)) +
+    scale_y_continuous(labels = percent) +
     scale_color_manual(
       values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
     ) +
@@ -683,9 +683,111 @@ plotly::ggplotly(
       x = "Date", y = "% Of Population Currently Infected"
     ),
   tooltip = c("State", "Date", "% Active", "Active")
-) %>% 
+) %>%
   plotly::style(visible = "legendonly", traces = c(6:9))
 ```
+
+## 7 Day Totals
+
+```{r active-by-state, fig.width=10, fig.height=8, fig.cap = "Cumulative infections over 7 days, separated by state, including the day mask restrictions were lifted (dashed lines) and school term dates, with commencement indicated as the up-pointing triangle and term end as the downward pointing triangle."}
+terms <- tribble(
+  ~State, ~Start, ~End,
+  "New South Wales", "2022-02-04", "2022-04-08",
+  "New South Wales", "2022-04-26", "2022-07-01",
+  "Queensland", "2022-02-07", "2022-04-01",
+  "Queensland", "2022-04-19", "2022-06-24",
+  "Victoria", "2022-01-31", "2022-04-08",
+  "Victoria", "2022-04-26", "2022-06-24",
+  "Western Australia", "2022-01-31", "2022-04-08",
+  "Western Australia", "2022-04-26", "2022-07-01",
+  "South Australia", "2022-01-31", "2022-04-14",
+  "South Australia", "2022-05-02", "2022-07-08",
+  "Tasmania", "2022-02-09", "2022-04-14",
+  "Tasmania", "2022-05-02","2022-07-08",
+  "Northern Territory", "2022-01-31", "2022-04-08",
+  "Northern Territory", "2022-04-19", "2022-06-24",
+  "Australian Capital Territory", "2022-01-31", "2022-04-08",
+  "Australian Capital Territory", "2022-04-26", "2022-07-01"
+) %>% 
+  mutate(
+    State = factor(State, levels = ausPops$State),
+    Start = ymd(Start),
+    End = ymd(End)
+  ) 
+masks <- tribble(
+  ~State, ~Date,
+  "Victoria", "2022-02-21",
+  "New South Wales", "2022-02-28",
+  "Queensland", "2022-03-04",
+  "South Australia", "2022-04-14",
+  "Tasmania", "2022-03-11",
+  "Northern Territory", "2022-03-06",
+  "Australian Capital Territory", "2022-02-25"
+) %>% 
+   mutate(
+    State = factor(State, levels = ausPops$State),
+    Date = ymd(Date)
+   )
+data %>% 
+  arrange(CODE, REPORT_DATE) %>%
+  group_by(CODE) %>% 
+  mutate(
+    NEW_CASE_CNT = case_when(
+      is.na(NEW_CASE_CNT) ~ 0,
+      TRUE ~ NEW_CASE_CNT
+    ),
+    active = sma(NEW_CASE_CNT, 7)*7
+  ) %>% 
+  ungroup() %>% 
+  arrange(desc(REPORT_DATE)) %>% 
+  dplyr::mutate(
+    State = case_when(
+      CODE == "AUS" ~ "All States",
+      TRUE ~ auStates[CODE]
+    ),
+    State = factor(State, levels = ausPops$State)
+  ) %>% 
+  left_join(ausPops) %>% 
+  mutate(
+    State = factor(State, levels = ausPops$State),
+    `% Active` = percent(active / Population, 0.01),
+    Active = comma(active, 1)
+  ) %>% 
+  dplyr::rename(Date = REPORT_DATE) %>% 
+  ggplot(
+    aes(label = `% Active`, key = Active, group = State)
+  ) +
+  geom_line(
+    aes(Date, active, colour = State)
+  ) +
+  geom_point(
+    aes(x = Date, y = active),
+    data = . %>% 
+      inner_join(terms, by = c("State" = "State", "Date" = "Start")),
+    shape = 2
+  ) +
+  geom_point(
+    aes(x = Date, y = active),
+    data = . %>% 
+      inner_join(terms, by = c("State" = "State", "Date" = "End")),
+    shape = 25
+  ) +
+  geom_vline(
+    aes(xintercept = Date, colour = State), data = masks, inherit.aes = FALSE,
+    linetype = 2, show.legend = FALSE
+  ) +
+  facet_wrap(~State, scales = "free_y") +
+  coord_cartesian(xlim = c(dt - .5*365, dt)) +
+  scale_y_continuous(labels = comma) +
+  scale_color_manual(
+    values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
+  ) +
+  labs(
+    x = "Date", y = "Total Infected Over 7 Day Period"
+  ) +
+  theme(legend.position = "none")
+```
+
 
 ## Daily Cases
 
