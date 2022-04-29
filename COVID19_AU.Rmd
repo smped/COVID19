@@ -722,7 +722,8 @@ masks <- tribble(
   "South Australia", "2022-04-14",
   "Tasmania", "2022-03-11",
   "Northern Territory", "2022-03-06",
-  "Australian Capital Territory", "2022-02-25"
+  "Australian Capital Territory", "2022-02-25",
+  "Western Australia", "2022-04-29"
 ) %>% 
    mutate(
     State = factor(State, levels = ausPops$State),
