@@ -27,18 +27,38 @@ library(glue)
 library(rvest)
 library(pander)
 library(plotly)
-library(QuantTools)
 library(httr)
 library(jsonlite)
-library(DT)
 library(reactable)
 library(htmltools)
+library(Rcpp)
 panderOptions("big.mark", ",")
 panderOptions("table.split.table", Inf)
 panderOptions("table.style", "rmarkdown")
 panderOptions("missing", "")
 theme_set(theme_bw())
 ```
+
+```{r sma}
+cppFunction(
+  'NumericVector sma(NumericVector x, int n) {
+    int m = x.size();
+    NumericVector out(m);
+    double ma_ = 0.0;
+    
+    for (int i = n - 1; i < m; i++) {
+      ma_ = 0.0;
+      for (int j = i - n + 1; j <= i; j++) {
+          ma_ += x[j];
+          out[i] = ma_ / n; 
+      }
+    }
+    
+    return out;
+    
+  }')
+```
+
 
 
 ```{r ausStates}
