@@ -775,6 +775,7 @@ data %>%
     Active = comma(active, 1)
   ) %>% 
   dplyr::rename(Date = REPORT_DATE) %>% 
+  dplyr::filter(Date <= dt) %>% 
   ggplot(
     aes(label = `% Active`, key = Active, group = State)
   ) +
