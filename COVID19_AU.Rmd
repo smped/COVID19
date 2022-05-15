@@ -134,7 +134,7 @@ Australian State populations were taken from the [ABS Website](https://explore.d
 
 Using an estimated population size of `r comma(max(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected at some point* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / max(ausPops$Population))`, or one person in every `r comma(round(max(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 0))`. 
 
-## Active Cases
+## Active Cases (Official)
 
 
 ```{r latestAUTable}
@@ -329,6 +329,7 @@ tbl <- df %>%
   )
 cp <- glue(
   "% Active indicates how many of the total cases are currently active. ",
+  "Numbers are as reported by the States, which is known to be subject to changing methodologies at various points. ",
   "Importantly, given problems with testing in many states, the number of ",
   "active cases will be an underestimate. ",
   "States which are yet to report daily numbers are highlighted with an asterisk."
@@ -664,13 +665,13 @@ div(class = "fatalities",
 
 ## Active Infections
 
-```{r plotActive, fig.width=10, fig.height=6, fig.cap = "Plot of estimated active infections against time for the last year. Active infections are estimated as the lastest total infections minus the value from 10 days prior. Double-click on a state in the legend to only see that state, or single-click individually to add or remove."}
+```{r plotActive, fig.width=10, fig.height=6, fig.cap = "Plot of estimated active infections against time for the last year. Active infections are estimated as the sum of all new cases over a 7-day period. Double-click on a state in the legend to only see that state, or single-click individually to add or remove."}
 plotly::ggplotly(
   data %>% 
     arrange(CODE, REPORT_DATE) %>% 
     group_by(CODE) %>% 
     mutate(
-      active = CASE_CNT - lag(CASE_CNT, 10)
+      active = sma(NEW_CASE_CNT, 7)*7
     ) %>% 
     ungroup() %>% 
     arrange(desc(REPORT_DATE)) %>% 
@@ -851,50 +852,6 @@ plotly::ggplotly(
 )
 ```
 
-## Test Positivity
-
-```{r plotTestPos, fig.width=10, fig.height=8, fig.cap = "Test Positivity Rate. A single click in the plot legend will show/hide that State. The 5% rate, below which the pandemic is considered manageable by the WHO is shown as a dashed line."}
-plotly::ggplotly(
-  data %>% 
-    dplyr::filter(CASE_CNT > 100) %>% 
-    dplyr::select(ends_with("DATE"), CODE, contains("TEST"), NEW_CASE_CNT) %>% 
-    mutate(
-      NEW_CASE_CNT = ifelse(is.na(NEW_CASE_CNT), 0, NEW_CASE_CNT),
-      TEST_CNT = ifelse(is.na(TEST_CNT), PREV_TEST_CNT, TEST_CNT),
-      Tests = TEST_CNT - PREV_TEST_CNT,
-      PR = NEW_CASE_CNT / Tests,
-      PR = case_when(
-        is.nan(PR) ~ NA_real_,
-        is.infinite(PR) ~ NA_real_,
-        PR > 1 ~ NA_real_,
-        PR < 0 ~ NA_real_,
-        TRUE ~ PR
-      ),
-      State = case_when(
-        CODE == "AUS" ~ "All States",
-        TRUE ~ auStates[CODE]
-      ),
-      State = factor(State, levels = ausPops$State),
-      `Test Positivity` = percent(PR, 0.01)
-    ) %>% 
-    dplyr::rename(Date = REPORT_DATE) %>% 
-    ggplot(
-      aes(Date, PR, colour = State, label = `Test Positivity`)
-    ) +
-    geom_line() +
-    geom_hline(yintercept = 0.05, linetype = 2) +
-    coord_cartesian(xlim = c(dt - 365/4, dt)) +
-    scale_color_manual(
-      values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
-    ) +
-    scale_y_continuous(labels = percent) +
-    labs(x = "Test Positivity Rate"),
-  tooltip = c("Date", "State", "Test Positivity")
-) %>% 
- plotly::style(visible = "legendonly", traces = c(6:9))
-```
-
-
 
 
 ## Hospitalisations
@@ -981,100 +938,25 @@ plotly::ggplotly(
 )
 ```
 
-## Fatality Rate
+<!-- ## Weekly Change -->
 
-```{r frOffset}
-inc <- 5
-icu <- 10
-d <- 7
-offset <- icu + d + inc - 1
-minDate <- "2020-04-20"
-```
-
-```{r frCP, echo=FALSE}
-cp <- glue(
-  "*Fatality rate for Australian cases as calculated using two methods.
-  Where no offset is included, the rate shown is simply the number of fatalities divided by the total number of reported cases on the same date.
-  When cases increase during a new outbreak, this will skew the fatality rate lower.
-  An alternative is to use an offset based on the fact the the median time from infection to symptom onset is {inc} days, the median time from symptom onset to ICU admission is {icu} days, and the median time from ICU admission to mortality is {d} days.
-  When using the offset, the fatality rate is calculated as the number of recorded fatalities on a given date, divided by by the number of cases from {offset} days ago.
-  Whilst still flawed this may give a less biased estimate on the true fatality rate, and importantly, will always be higher than the alternative calculation.
-  The intial fatality rate spiked above 30% during the intial outbreak under the offset approach, and as such, data is only shown after {format(ymd(minDate), '%d %b, %Y')}.
-  The red line indicates the proportaion of the total Australian population which has received at least one vaccine dose.
-  All times used for estimation the offset were obtained from [here](https://wwwnc.cdc.gov/eid/article/26/6/20-0320_article)*"
-)
-```
-
-
-```{r plotFR, fig.width=10, fig.height=6, fig.cap=cp}
-df <- list(
-  data %>% 
-    dplyr::filter(CODE == "AUS", REPORT_DATE > minDate) %>% 
-    dplyr::select(date = REPORT_DATE, confirmed = CASE_CNT, deaths = DEATH_CNT)  %>% 
-    arrange(date) %>% 
-    mutate(fr = deaths / confirmed, type = "No Offset"),
-  data %>% 
-    dplyr::filter(CODE == "AUS") %>% 
-    dplyr::select(date = REPORT_DATE, confirmed = CASE_CNT, deaths = DEATH_CNT)  %>% 
-    arrange(date) %>% 
-    mutate(
-      confirmed = c(rep(NA, offset), confirmed[seq_len(nrow(.) - offset)]),
-      fr = deaths / confirmed, 
-      type = glue("Offset ({offset} days)")
-    ) %>%
-    dplyr::filter(date > minDate)
-) %>%
-  bind_rows() %>% 
-  left_join(
-    dplyr::filter(data, CODE == "AUS") %>% 
-      dplyr::select(date = REPORT_DATE, VACC_FIRST_DOSE_CNT)
-  ) %>% 
+```{r, eval = FALSE}
+data %>% 
+  arrange(CODE, REPORT_DATE) %>%
+  group_by(CODE) %>% 
   mutate(
-    vacc = VACC_FIRST_DOSE_CNT / max(ausPops$Population),
-    vacc_scaled = vacc * max(fr)
-  )
-df %>% 
+    weekly_change = NEW_CASE_CNT / lag(NEW_CASE_CNT, 7),
+    MA7 = sma(weekly_change, 7)
+  ) %>% 
+  ungroup() %>%
+  dplyr::filter(REPORT_DATE > dt - 100) %>% 
   ggplot(
-    aes(date, fr, colour = type)
+    aes(REPORT_DATE, weekly_change, colour = CODE)
   ) +
   geom_line() +
-  geom_line(
-    aes(date, y = vacc_scaled),
-    data = . %>% 
-      dplyr::filter(type == "No Offset", vacc > 0),
-    inherit.aes = FALSE,
-    colour = "red"
-  ) +
-  geom_label_repel(
-    aes(label = percent(fr, 0.1)),
-    data = . %>% dplyr::filter(date == max(date), type != "No Offset"),
-    size = 3.5, show.legend = FALSE
-  ) +
-  geom_label_repel(
-    aes(y = vacc_scaled, label = percent(vacc, 0.1)),
-    data = . %>% dplyr::filter(date == max(date), type != "No Offset"),
-    colour = "red", size = 3.5, show.legend = FALSE
-  ) +
-  scale_x_date(
-    expand = expansion(mult = 0, add = 20)
-  ) +
-  scale_y_continuous(
-    label = percent,
-    sec.axis = sec_axis(
-      ~ (.) / max(df$fr), labels = percent, name = "% Population >= 1 Dose"
-    )
-  ) +
-  scale_colour_brewer(palette = "Paired") +
-  labs(
-    x = "Date",
-    y = "Estimated Fatality Rate",
-    colour = "Calculation"
-  ) +
-  theme(
-    axis.title.y.right = element_text(colour = "red"),
-    axis.text.y.right = element_text(colour = "red"),
-    axis.ticks.y.right = element_line(colour = "red")
-  )
+  geom_line(aes(y = MA7), colour = "grey30", linetype = 2) +
+  geom_hline(yintercept = 1) +
+  facet_wrap(~CODE, scales = "free")
 ```
 
 
