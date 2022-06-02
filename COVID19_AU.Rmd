@@ -959,6 +959,30 @@ data %>%
   facet_wrap(~CODE, scales = "free")
 ```
 
+## Hospitalisation Rate
+
+```{r, fig.width=10, fig.height=10, fig.cap = "Hospitalisation rate using the 7-day total number of new cases to represent active cases, and projecting hospitalisations back onto the total active case estimates from 1 week prior."}
+data %>% 
+  dplyr::select(
+    date = REPORT_DATE, CODE, State = NAME, active = ACTIVE_CNT,
+    hosp = MED_HOSP_CNT, new = NEW_CASE_CNT
+  ) %>% 
+  arrange(State, date) %>% 
+  group_by(State) %>% 
+  mutate(
+    total = sma(new, 7) * 7,
+    p_hosp = hosp / lag(total, 6),
+    ma = sma(p_hosp, 7)
+  ) %>% 
+  ungroup() %>% 
+  # dplyr::filter(year(date) >= 2022) %>% 
+  dplyr::filter(date > today() - 135) %>% 
+  ggplot(aes(date, p_hosp, colour = State)) +
+  geom_line()  +
+  facet_wrap(~State, scales = "free_y") +
+  scale_y_log10(labels = percent)
+```
+
 
 # R Session Information
 
