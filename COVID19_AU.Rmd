@@ -894,6 +894,47 @@ plotly::ggplotly(
 )
 ```
 
+## Hospitalisation Rate
+
+```{r plot-hosp-rate, fig.width=10, fig.height=8, fig.cap = "Hospitalisation rate using the 7-day total number of new cases to represent active cases, and projecting hospitalisations back onto the total active case estimates from 1 week prior. High hospitalisation rates may indicate under-reporting of cases, or a more severe phase of the pandemic. Data is only shown for the last 4 months."}
+plotly::ggplotly(
+data %>% 
+  dplyr::select(
+    date = REPORT_DATE, CODE, State = NAME, active = ACTIVE_CNT,
+    hosp = MED_HOSP_CNT, new = NEW_CASE_CNT
+  ) %>% 
+  arrange(State, date) %>% 
+  group_by(State) %>% 
+  mutate(
+    total = sma(new, 7) * 7,
+    p_hosp = hosp / lag(total, 6),
+    ma = sma(p_hosp, 7),
+    State = case_when(
+      CODE == "AUS" ~ "All States",
+      TRUE ~ auStates[CODE]
+    ),
+    State = factor(State, levels = ausPops$State),
+    `Hospitalisation Rate` = percent(p_hosp, accuracy = 0.01)
+  ) %>% 
+  ungroup() %>% 
+  # dplyr::filter(year(date) >= 2022) %>% 
+  dplyr::filter(date > today() - 122, p_hosp > 0) %>% 
+  dplyr::rename(Date = date, `In Hospital` = hosp) %>% 
+  ggplot(
+    aes(Date, p_hosp, colour = State, label = `Hospitalisation Rate`, key = `In Hospital`)
+  ) +
+  geom_line()  +
+  facet_wrap(~fct_rev(State), scales = "free_y") +
+  scale_color_manual(
+      values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
+  ) +
+  scale_y_continuous(labels = percent) +
+  theme(legend.position = "none") +
+  labs(y = "Hospitalisation Rate"),
+ tooltip = c("State", "Date", "In Hospital", "Hospitalisation Rate")
+)
+```
+
 ## Fatalities
 
 ```{r plotDeath, fig.width=10, fig.height=10, fig.cap = "Plot of daily fatalities for the last year. Coloured lines represent 7 day averages."}
@@ -959,29 +1000,57 @@ data %>%
   facet_wrap(~CODE, scales = "free")
 ```
 
-## Hospitalisation Rate
 
-```{r, fig.width=10, fig.height=10, fig.cap = "Hospitalisation rate using the 7-day total number of new cases to represent active cases, and projecting hospitalisations back onto the total active case estimates from 1 week prior."}
-data %>% 
-  dplyr::select(
-    date = REPORT_DATE, CODE, State = NAME, active = ACTIVE_CNT,
-    hosp = MED_HOSP_CNT, new = NEW_CASE_CNT
-  ) %>% 
-  arrange(State, date) %>% 
-  group_by(State) %>% 
-  mutate(
-    total = sma(new, 7) * 7,
-    p_hosp = hosp / lag(total, 6),
-    ma = sma(p_hosp, 7)
-  ) %>% 
-  ungroup() %>% 
-  # dplyr::filter(year(date) >= 2022) %>% 
-  dplyr::filter(date > today() - 135) %>% 
-  ggplot(aes(date, p_hosp, colour = State)) +
-  geom_line()  +
-  facet_wrap(~State, scales = "free_y") +
-  scale_y_log10(labels = percent)
+
+## Monthly Fatalities
+
+```{r plot-monthly-fatal,  fig.width=10, fig.height=8,fig.cap = "Monthly Fatalities throughout the course of the pandemic."}
+plotly::ggplotly(
+  data %>% 
+    mutate(
+      year = year(REPORT_DATE),
+      month = month.abb[month(REPORT_DATE)],
+      month = factor(month, levels = month.abb),
+      week = week(REPORT_DATE),
+      daily_deaths = DEATH_CNT - PREV_DEATH_CNT
+    ) %>% 
+    arrange(month, year) %>% 
+    group_by(year, month, CODE, NAME) %>% 
+    summarise(
+      Total = sum(daily_deaths, na.rm = TRUE),
+      .groups = "drop"
+    ) %>% 
+    mutate(
+      Date = paste(month, year, sep = "-") %>% fct_inorder(),
+      State = case_when(
+        CODE == "AUS" ~ "All States",
+        TRUE ~ auStates[CODE]
+      ),
+      State = factor(State, levels = ausPops$State)
+    ) %>% 
+    ggplot(aes(Date, Total, fill = State)) +
+    geom_col(
+      aes(Date, Total),
+      data = . %>% 
+        dplyr::filter(CODE == "AUS"),
+      colour = "black",
+      inherit.aes = FALSE
+    ) +
+    geom_col(
+      data = . %>% 
+        dplyr::filter(CODE != "AUS"),
+    ) +
+    scale_y_continuous(expand = expansion(c(0, 0.05))) +
+    scale_fill_manual(
+      values = hcl.colors(length(ausPops$State) - 1, "Dark 3")
+    ) +
+    labs(x = "Month", y = "Total Fatalities") +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+    )
+)
 ```
+
 
 
 # R Session Information
