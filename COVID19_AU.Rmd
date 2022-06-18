@@ -979,27 +979,6 @@ plotly::ggplotly(
 )
 ```
 
-<!-- ## Weekly Change -->
-
-```{r, eval = FALSE}
-data %>% 
-  arrange(CODE, REPORT_DATE) %>%
-  group_by(CODE) %>% 
-  mutate(
-    weekly_change = NEW_CASE_CNT / lag(NEW_CASE_CNT, 7),
-    MA7 = sma(weekly_change, 7)
-  ) %>% 
-  ungroup() %>%
-  dplyr::filter(REPORT_DATE > dt - 100) %>% 
-  ggplot(
-    aes(REPORT_DATE, weekly_change, colour = CODE)
-  ) +
-  geom_line() +
-  geom_line(aes(y = MA7), colour = "grey30", linetype = 2) +
-  geom_hline(yintercept = 1) +
-  facet_wrap(~CODE, scales = "free")
-```
-
 
 
 ## Monthly Fatalities
@@ -1049,6 +1028,151 @@ plotly::ggplotly(
       axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
     )
 )
+```
+
+
+
+## Weekly Fatalities
+
+```{r plot-weekly-fatal,  fig.width=10, fig.height=8,fig.cap = "Weekly Fatalities since 1-July, 2021. Horizontal lines indicate the capacity of a 767 and 747-400 respectively."}
+weekly_df <- data %>% 
+    mutate(
+      year = year(REPORT_DATE),
+      month = month.abb[month(REPORT_DATE)],
+      month = factor(month, levels = month.abb),
+      week = week(REPORT_DATE),
+      daily_deaths = DEATH_CNT - PREV_DEATH_CNT
+    ) %>% 
+    group_by(year, week, CODE, NAME)  %>% 
+    summarise(
+      Total = sum(daily_deaths, na.rm = TRUE),
+      Date = max(REPORT_DATE),
+      .groups = "drop"
+    ) %>% 
+    mutate(
+      State = case_when(
+        CODE == "AUS" ~ "All States",
+        TRUE ~ auStates[CODE]
+      ),
+      State = factor(State, levels = ausPops$State)
+      
+    ) %>% 
+    dplyr::filter(Date > ymd("2021-07-01"))
+plotly::ggplotly(
+   weekly_df %>% 
+     dplyr::filter(Date < today()) %>% 
+    ggplot(aes(Date, Total, fill = State)) +
+    geom_col(
+      aes(Date, Total),
+      data = . %>% 
+        dplyr::filter(CODE == "AUS"),
+      colour = "black",
+      inherit.aes = FALSE,
+      width = 3
+    ) +
+    geom_col(
+      data = . %>% 
+        dplyr::filter(CODE != "AUS"),
+      width = 3
+    ) +
+     geom_hline(yintercept = 269, linetype = 2, col = "grey30") +
+     geom_hline(yintercept = 416, col = "grey30") +
+    scale_y_continuous(expand = expansion(c(0, 0.05))) +
+    scale_fill_manual(
+      values = hcl.colors(length(ausPops$State) - 1, "Dark 3")
+    ) +
+    labs(x = "Month", y = "Weekly Fatalities") +
+    theme(
+      axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+    )
+)
+```
+
+## Wave Momentum
+
+```{r momentum, fig.width=10, fig.height=8, fig.cap = "Wave momentum as calculated by dividing each day's value by the same day one week ago, then log2~2~ transforming and smoothing with 3 and 7-day moving averages. Each unit on the y-axis indicates a doubling or halving of cases. When the 7-day smoothed average (black line) is above zero, a wave is likely to be underway."}
+momentum_df <- data %>% 
+  dplyr::filter(REPORT_DATE <= dt, CASE_CNT > 0) %>% 
+  arrange(CODE, REPORT_DATE) %>% 
+  mutate(
+    `Daily Fatalities` = DEATH_CNT - PREV_DEATH_CNT,
+    `Daily Fatalities` = ifelse(is.na(`Daily Fatalities`), 0, `Daily Fatalities`),
+    State = case_when(
+      CODE == "AUS" ~ "All States",
+      TRUE ~ auStates[CODE]
+    ),
+    State = factor(State, levels = ausPops$State)
+  ) %>%
+  # dplyr::select(REPORT_DATE, CODE, DEATH_CNT, CASE_CNT) %>% 
+  group_by(CODE) %>% 
+  mutate(
+    weekly_change = log2(NEW_CASE_CNT / lag(NEW_CASE_CNT, 7)),
+    MA3 = round(sma(weekly_change, 3), 2),
+    MA7 = round(sma(weekly_change, 7), 2)
+  ) %>% 
+  ungroup() %>%
+  dplyr::rename(Date = REPORT_DATE) %>% 
+  mutate(
+    Status = case_when(
+      MA3 >= MA7 & MA7 > 0 ~ "Wave Underway",
+      MA3 < MA7 & MA7 > 0 ~ "Momentum Slowing",
+      MA3 <= 0 & MA7 <= 0 ~ "Wave Receding",
+      MA3 > MA7 & MA3 > 0 & MA7 <= 0 ~ "Potential Wave Forming"
+    )
+  )
+plotly::ggplotly(
+  momentum_df %>% 
+    # dplyr::filter(Date > dt - 150) %>% 
+    dplyr::filter(Date > ymd("2021-09-01")) %>% 
+    ggplot(
+      aes(Date, MA3, colour = State, label = Status)
+    ) +
+    geom_line() +
+    geom_line(aes(y = MA7), colour = "grey30", linetype = 3) +
+    geom_hline(yintercept = 0) +
+    facet_wrap(~State) +#, scales = "free") +
+    labs(
+      x = "Date", 
+      y = "Smoothed log2 Weekly Change"
+    ) +
+    ylim(-1, 3)
+)
+```
+
+#
+
+The current wave status for each state is:
+
+```{r tab-status, echo = FALSE}
+momentum_df %>% 
+  dplyr::filter(!is.na(Status)) %>% 
+  group_by(State) %>% 
+  mutate(
+    stat_fact = as.factor(Status),
+    d = c(NA, diff(as.numeric(stat_fact)))
+  ) %>% 
+  dplyr::filter(d != 0) %>% 
+  dplyr::filter(Date == max(Date)) %>% 
+  ungroup() %>% 
+  dplyr::select(Date, State, Status) %>% 
+  arrange(State) %>% 
+  reactable(
+    columns = list(
+      Date = colDef(name = "Signal Date"),
+      Status = colDef(
+        style = function(value) {
+          color <- case_when(
+            str_detect(value, "Underway") ~ rgb(0.9, 0, 0),
+            str_detect(value, "Receding") ~ rgb(0, 0.6, 0),
+            str_detect(value, "Potential") ~ rgb(0.7, 0.4, 0),
+            TRUE ~ "black"
+          )
+          wt <- ifelse(str_detect(value, "Underway|Potential"), 600, 400)
+          list(color = color, fontWeight = wt)
+        }, 
+      )
+    )
+  )
 ```
 
 
