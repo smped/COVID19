@@ -907,7 +907,7 @@ data %>%
   group_by(State) %>% 
   mutate(
     total = sma(new, 7) * 7,
-    p_hosp = hosp / lag(total, 6),
+    p_hosp = hosp / lag(total, 7),
     ma = sma(p_hosp, 7),
     State = case_when(
       CODE == "AUS" ~ "All States",
