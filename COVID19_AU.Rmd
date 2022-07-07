@@ -1123,7 +1123,7 @@ momentum_df <- data %>%
 plotly::ggplotly(
   momentum_df %>% 
     # dplyr::filter(Date > dt - 150) %>% 
-    dplyr::filter(Date > ymd("2021-09-01")) %>% 
+    dplyr::filter(Date > dt - 60) %>% 
     ggplot(
       aes(Date, MA3, colour = State, label = Status)
     ) +
