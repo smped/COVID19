@@ -1134,8 +1134,7 @@ plotly::ggplotly(
     labs(
       x = "Date", 
       y = "Smoothed log2 Weekly Change"
-    ) +
-    ylim(-1, 3)
+    ) 
 )
 ```
 
