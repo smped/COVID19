@@ -346,7 +346,7 @@ div(class = "active-cases",
 ## Hospitalisations
 
 ```{r hospTable}
-hosp_off <- 10
+hosp_off <- 7
 df <- data %>%
   dplyr::filter(REPORT_DATE == dt) %>%
   dplyr::mutate(
@@ -565,8 +565,7 @@ cp <- glue(
   "difference in lag between exposure and hospitalisation for each strain. ",
   "The % of currently hospitlised cases which are in ICU or being ventilated ",
   "is also given, using a 1-day offset. ",
-  "Figures from the NT are as reported federally and these are highly ", 
-  "divergent from state-reported figures. The reason for this is unknown. ",
+  "Some states do not report Ventilation numbers. ",
   "States which are yet to report are indicated with an asterisk. "
 )
 div(class = "hospitalisations",
@@ -1060,7 +1059,7 @@ weekly_df <- data %>%
     dplyr::filter(Date > ymd("2021-07-01"))
 plotly::ggplotly(
    weekly_df %>% 
-     dplyr::filter(Date < today()) %>% 
+     dplyr::filter(Date <= today()) %>% 
     ggplot(aes(Date, Total, fill = State)) +
     geom_col(
       aes(Date, Total),
@@ -1087,6 +1086,35 @@ plotly::ggplotly(
     )
 )
 ```
+
+## 2020 Fatalities: Population Scaled
+
+```{r plot-annual, fig.height=8, fig.width=10, fig.cap = "State-level Fatalities for 2020 scaled by estimated population."}
+ggplotly(
+  weekly_df %>% 
+    left_join(ausPops, by = "State") %>% 
+    dplyr::filter(year >= 2022) %>% #, CODE != "AUS") %>% 
+    group_by(State) %>% 
+    mutate(
+      Total = cumsum(Total),
+      Rate = round(1e6 * Total / Population, 2),
+      Total = comma(Total)
+    ) %>% 
+    ungroup() %>% 
+    mutate(State = factor(State, levels = ausPops$State)) %>% 
+    ggplot(
+      aes(Date, Rate, colour = State, label = Total)
+    ) +
+    geom_line() +
+    scale_colour_manual(
+      values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
+    ) +
+    labs(x = "Date", y = "Total Deaths / Million (2020 Only)"),
+  tooltip = c("State", "Date", "Rate", "Total")
+)
+```
+
+
 
 ## Wave Momentum
 
