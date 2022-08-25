@@ -132,7 +132,7 @@ Australian State populations were taken from the [ABS Website](https://explore.d
 
 # Latest Australian Data {.tabset}
 
-Using an estimated population size of `r comma(max(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected at some point* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / max(ausPops$Population))`, or one person in every `r comma(round(max(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 0))`. 
+Using an estimated population size of `r comma(max(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected at some point* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / max(ausPops$Population))`, or one person in every `r comma(round(max(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 1))`. 
 
 ## Active Cases (Official)
 
@@ -637,9 +637,9 @@ tbl <- df$states %>%
         footer = comma(df$national$`Daily Fatalities`)
       ),
       `Fatality Rate` = colDef(
-        format = colFormat(percent = TRUE, digits = 1),
+        format = colFormat(percent = TRUE, digits = 2),
         style = function(value) bar_style(width = 3*value),
-        footer = percent(df$national[["Fatality Rate"]], 0.1)
+        footer = percent(df$national[["Fatality Rate"]], 0.01)
       )
     ),
     defaultColDef = colDef(footerStyle = hs, headerStyle = hs, style = list(fontSize = fs))
@@ -1096,10 +1096,10 @@ weekly_df <- data %>%
       ),
       State = factor(State, levels = ausPops$State)
       
-    ) %>% 
-    dplyr::filter(Date > ymd("2021-07-01"))
+    ) 
 plotly::ggplotly(
    weekly_df %>% 
+    dplyr::filter(Date > ymd("2021-07-01")) %>% 
      dplyr::filter(Date <= today()) %>% 
     ggplot(aes(Date, Total, fill = State)) +
     geom_col(
@@ -1128,30 +1128,31 @@ plotly::ggplotly(
 )
 ```
 
-## 2020 Fatalities: Population Scaled
+## Cumulative Fatalities: Population Scaled
 
 ```{r plot-annual, fig.height=8, fig.width=10, fig.cap = "State-level Fatalities scaled by estimated population, starting at 1-July-2021 as an approximate start date for the Australian pandemic. A value of 500 on the y-axis indicates that 1 in every 2000 people has died."}
 ggplotly(
   weekly_df %>% 
-    left_join(ausPops, by = "State") %>% 
-    dplyr::filter(Date > "2021-07-01") %>%
+    dplyr::filter(Total > 0) %>% 
+    left_join(ausPops, by = "State")%>% 
     group_by(State) %>% 
     mutate(
       Total = cumsum(Total),
       Rate = round(1e6 * Total / Population, 2),
+      `People Per Death` = round(Population / Total, 0),
       Total = comma(Total)
     ) %>% 
     ungroup() %>% 
     mutate(State = factor(State, levels = ausPops$State)) %>% 
     ggplot(
-      aes(Date, Rate, colour = State, label = Total)
+      aes(Date, Rate, colour = State, label = Total, key =`People Per Death`)
     ) +
     geom_line() +
     scale_colour_manual(
       values = c(hcl.colors(length(ausPops$State) - 1, "Dark 3"), "black")
     ) +
     labs(x = "Date", y = "Total Deaths / Million"),
-  tooltip = c("State", "Date", "Rate", "Total")
+  tooltip = c("State", "Date", "Rate", "Total", "People Per Death")
 )
 ```
 
