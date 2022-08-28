@@ -132,7 +132,7 @@ Australian State populations were taken from the [ABS Website](https://explore.d
 
 # Latest Australian Data {.tabset}
 
-Using an estimated population size of `r comma(max(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected at some point* currently sits at `r percent_format(accuracy = 0.01)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / max(ausPops$Population))`, or one person in every `r comma(round(max(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 1))`. 
+Using an estimated population size of `r comma(max(ausPops$Population))`, the total percentage of the Australian population *confirmed as having been infected at some point* currently sits at `r percent_format(accuracy = 0.1)(dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT / max(ausPops$Population))`, or one person in every `r round(max(ausPops$Population) / dplyr::filter(data, REPORT_DATE == dt, CODE == "AUS")$CASE_CNT, 1)`. 
 
 ## Active Cases (Official)
 
